@@ -4,20 +4,49 @@ Small, self-contained tools. Each one stands on its own — no shared install, n
 
 ## `cutout.html` — interactive sprite cutout
 
-Single-file browser tool for knocking a background off a sprite sheet by hand.
-No dependencies, no server: open the file in a browser.
+Single-file browser tool. No dependencies, no server, no build: open the file.
 
 ```
 open cutout.html
 ```
 
-Drop a sprite sheet onto the page, then use **Brush** / **Bucket** to erase
-background and **Keep** to paint areas back in. **Show mask** toggles the
-alpha overlay, **Undo** steps back, **Save progress** keeps your work across
-reloads, and **Download PNG** exports the cut result.
+Drop (or paste) an image and it cuts the background straight away — it runs the
+same background model as the pipeline below: the parchment is estimated and
+interpolated across the subject, then keyed both darker and lighter than that
+estimate so unoutlined skin survives, and the paper colour is divided back out
+of the soft edges so nothing keeps a halo. **Tolerance** re-keys live.
 
-Use this when the automatic pass below gets something wrong and you just want
-to fix it directly.
+What it deliberately leaves alone is the furniture — captions, the drawn ground
+line, fence posts and log piles. Those were the fiddliest heuristics in the
+pipeline and they are quicker to handle by hand:
+
+| Tool | Key | Does | Good for |
+|---|---|---|---|
+| **Brush** | `b` | paints pixel by pixel | corrections |
+| **Bucket** | `f` | fills one connected region, drag to sweep | a fence post, a caption word, a hole in a face |
+| **Box** | `x` | drag a rectangle | the bulk — a caption strip, a log pile, a whole fence |
+
+**Erase** (`e`) and **Keep** (`k`) set what the tool does; hold `alt` to invert
+mid-action. **Show mask** tints your overrides, `⌘Z` undoes, **Download PNG**
+exports.
+
+### Leak guard
+
+On these sheets the artist drew a horizon line running *behind* each character,
+so fence, figure and log pile are all one connected region — a naive bucket fill
+on the fence takes the character with it. **Leak guard** (default 1) erodes
+before filling to break hairline joins, and a fill that would swallow more than
+20% of the visible art is refused with a note rather than silently wrecking the
+frame. Where the join is the character's own body rather than a thin bridge, no
+guard can help: use **Box** there.
+
+### Taking a break
+
+**Save progress** (`⌘S`) downloads `<name>-progress.json` — the source image,
+your mask and your settings. Drop that file back on the page to carry on exactly
+where you left off. Work is also auto-saved after every stroke, so if you just
+close the tab a **Resume** button appears next time. Auto-save uses browser
+storage and skips images over ~4 MB (it says so); the button always works.
 
 ## `sprite-cleanup/` — automatic parchment removal
 

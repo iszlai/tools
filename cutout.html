@@ -835,16 +835,17 @@ function bucketAt(sx, sy, val) {
     if (y > y1) y1 = y;
   }
   if (!n) return null;
-  // Leak check. Judge a visible-region fill against how much art is on the
-  // sheet, not against the sheet's area: scenery is welded to the figures by
-  // the drawn horizon line, and when the guard has to degrade past that join
-  // the fill swallows the figure too. One fence post is ~7% of the visible
-  // pixels; a leak through the horizon is over half of them.
+  // Leak check. Scenery is welded to the figures by the drawn horizon line, and
+  // where the guard has to degrade past that join the fill swallows the figure
+  // too. Judging a visible-region fill against the amount of art on the sheet
+  // separates the two: measured on these sheets, wanted fills land at 4-17% of
+  // the visible pixels and leaks at 23%+. The 20% line is empirical, so the
+  // block is advisory — it says why, and Box handles anything genuinely huge.
   let cap, total;
   if (want) {
     total = 0;
     for (let i = 0; i < N; i++) if (effAlpha(i) > 0.45) total++;
-    cap = 0.35 * total;
+    cap = 0.20 * total;
   } else {
     total = N;
     cap = 0.25 * N;
