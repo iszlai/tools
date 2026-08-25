@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Sprite cutout</title>
+<style>
+  :root { --bg:#16181d; --panel:#1e2128; --line:#2c3038; --fg:#e6e8ec; --dim:#8b91a0; --accent:#5aa9e6; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:13px/1.45 ui-sans-serif,system-ui,sans-serif; background:var(--bg); color:var(--fg);
+         height:100vh; display:flex; flex-direction:column; }
+  header { padding:10px 14px; border-bottom:1px solid var(--line); display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  h1 { font-size:14px; margin:0 8px 0 0; font-weight:600; letter-spacing:.02em; }
+  .bar { padding:8px 14px; border-bottom:1px solid var(--line); background:var(--panel);
+         display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  .grp { display:flex; gap:7px; align-items:center; }
+  .grp > label { color:var(--dim); }
+  button { font:inherit; color:var(--fg); background:#272b33; border:1px solid var(--line);
+           border-radius:6px; padding:5px 11px; cursor:pointer; }
+  button:hover:not(:disabled) { border-color:#3d434e; }
+  button:disabled { opacity:.4; cursor:default; }
+  button.on { background:var(--accent); border-color:var(--accent); color:#08121b; font-weight:600; }
+  button.primary { background:#2f7d4f; border-color:#2f7d4f; }
+  input[type=range] { width:110px; accent-color:var(--accent); }
+  input[type=file] { display:none; }
+  .val { color:var(--dim); min-width:34px; font-variant-numeric:tabular-nums; }
+  #stage { padding:18px; overflow:auto; flex:1; min-height:0; }
+  #drop { border:1.5px dashed var(--line); border-radius:10px; padding:56px 20px; text-align:center; color:var(--dim); }
+  #drop.hot { border-color:var(--accent); color:var(--fg); }
+  #wrap { position:relative; display:inline-block; line-height:0;
+          background-image:linear-gradient(45deg,#666 25%,transparent 25%,transparent 75%,#666 75%),
+                           linear-gradient(45deg,#666 25%,transparent 25%,transparent 75%,#666 75%);
+          background-size:16px 16px; background-position:0 0,8px 8px; background-color:#999; }
+  canvas { display:block; image-rendering:pixelated; cursor:crosshair; }
+  #sel { position:absolute; display:none; border:1px solid #fff; outline:1px solid #000;
+         background:rgba(90,169,230,.22); pointer-events:none; }
+  #status { padding:6px 14px; color:var(--dim); border-top:1px solid var(--line);
+            display:flex; gap:18px; justify-content:space-between; flex-wrap:wrap; }
+  kbd { background:#272b33; border:1px solid var(--line); border-radius:4px; padding:1px 5px; font-size:11px; }
+  .hint { color:var(--dim); }
+</style>
+
+<header>
+  <h1>Sprite cutout</h1>
+  <button id="pick">Open image…</button>
+  <input type="file" id="file" accept="image/*,.json,application/json">
+  <span class="hint">or drop / paste one anywhere · a saved <b>.json</b> works too</span>
+  <button id="resume" style="display:none"></button>
+</header>
+
+<div class="bar" id="tools" style="display:none">
+  <div class="grp">
+    <label>Tool</label>
+    <button id="tBrush" class="on">Brush</button>
+    <button id="tFill">Bucket</button>
+    <button id="tBox">Box</button>
+  </div>
+  <div class="grp">
+    <label>Leak guard</label>
+    <input type="range" id="guard" min="0" max="3" value="1">
+    <span class="val" id="guardV">1</span>
+  </div>
+  <div class="grp">
+    <label>Action</label>
+    <button id="mErase" class="on">Erase</button>
+    <button id="mKeep">Keep</button>
+  </div>
+  <div class="grp">
+    <label>Size</label>
+    <input type="range" id="size" min="1" max="80" value="10">
+    <span class="val" id="sizeV">10</span>
+  </div>
+  <div class="grp">
+    <label>Auto cut</label>
+    <input type="checkbox" id="auto" checked>
+    <label>Tolerance</label>
+    <input type="range" id="tol" min="2" max="40" value="10">
+    <span class="val" id="tolV">10</span>
+  </div>
+  <div class="grp">
+    <label>Zoom</label>
+    <button id="zOut">−</button><span class="val" id="zV">1×</span><button id="zIn">+</button>
+  </div>
+  <div class="grp">
+    <button id="undo">Undo</button>
+    <button id="reset">Reset brush</button>
+    <button id="show">Show mask</button>
+    <button id="save">Save progress</button>
+    <button id="dl" class="primary">Download PNG</button>
+  </div>
+</div>
+
+<div id="stage"><div id="drop">Drop a sprite sheet here</div></div>
+<div id="status">
+  <span id="msg">Drop an image to start.</span>
+  <span class="hint">hold <kbd>alt</kbd> to swap brush · <kbd>b</kbd>/<kbd>f</kbd>/<kbd>x</kbd> brush/bucket/box · <kbd>e</kbd>/<kbd>k</kbd> erase/keep · <kbd>[</kbd> <kbd>]</kbd> size · <kbd>⌘Z</kbd> undo · <kbd>⌘S</kbd> save</span>
+</div>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------- small utils
+
+const LUMA = [0.299, 0.587, 0.114];
+
+function median(arr) {                       // destructive, on a copy of a view
+  const a = Float32Array.from(arr);
+  a.sort();
+  const n = a.length;
+  return n % 2 ? a[(n - 1) >> 1] : 0.5 * (a[n / 2 - 1] + a[n / 2]);
+}
+
+function mad(v) {                            // robust scale, subsampled
+  const step = Math.max(1, Math.floor(v.length / 40000));
+  const s = [];
+  for (let i = 0; i < v.length; i += step) s.push(v[i]);
+  const m = median(s);
+  for (let i = 0; i < s.length; i++) s[i] = Math.abs(s[i] - m);
+  return 1.4826 * median(s) + 1e-6;
+}
+
+function percentile(v, p) {
+  const step = Math.max(1, Math.floor(v.length / 40000));
+  const s = [];
+  for (let i = 0; i < v.length; i += step) s.push(v[i]);
+  s.sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.floor(p / 100 * s.length))];
+}
+
+function quickMedian(buf, n) {               // median of buf[0..n), destructive
+  let lo = 0, hi = n - 1, k = n >> 1;
+  while (lo < hi) {
+    const p = buf[(lo + hi) >> 1];
+    let i = lo, j = hi;
+    while (i <= j) {
+      while (buf[i] < p) i++;
+      while (buf[j] > p) j--;
+      if (i <= j) { const t = buf[i]; buf[i] = buf[j]; buf[j] = t; i++; j--; }
+    }
+    if (k <= j) hi = j; else if (k >= i) lo = i; else break;
+  }
+  return buf[k];
+}
+
+// ------------------------------------------------------------------ blur, box
+
+function boxPass(src, dst, W, H, r, vertical) {
+  const n = 2 * r + 1;
+  if (vertical) {
+    for (let x = 0; x < W; x++) {
+      let sum = 0;
+      for (let y = -r; y <= r; y++) sum += src[Math.min(H - 1, Math.max(0, y)) * W + x];
+      for (let y = 0; y < H; y++) {
+        dst[y * W + x] = sum / n;
+        const add = Math.min(H - 1, y + r + 1), sub = Math.max(0, y - r);
+        sum += src[add * W + x] - src[sub * W + x];
+      }
+    }
+  } else {
+    for (let y = 0; y < H; y++) {
+      const row = y * W;
+      let sum = 0;
+      for (let x = -r; x <= r; x++) sum += src[row + Math.min(W - 1, Math.max(0, x))];
+      for (let x = 0; x < W; x++) {
+        dst[row + x] = sum / n;
+        const add = Math.min(W - 1, x + r + 1), sub = Math.max(0, x - r);
+        sum += src[row + add] - src[row + sub];
+      }
+    }
+  }
+}
+
+// three box passes ~ a gaussian of sigma ~= r
+function blur(a, W, H, sigma) {
+  const r = Math.max(1, Math.round(sigma));
+  let src = a, tmp = new Float32Array(a.length), out = new Float32Array(a.length);
+  for (let i = 0; i < 3; i++) {
+    boxPass(src, tmp, W, H, r, false);
+    boxPass(tmp, out, W, H, r, true);
+    src = out;
+    if (i < 2) out = new Float32Array(a.length);
+  }
+  return src;
+}
+
+// ----------------------------------------------------------- morphology, bool
+
+function maxFilter(m, W, H, r, wantMin) {
+  const pass = (src, dst, vert) => {
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      let v = wantMin ? 1 : 0;
+      for (let k = -r; k <= r; k++) {
+        const xx = vert ? x : Math.min(W - 1, Math.max(0, x + k));
+        const yy = vert ? Math.min(H - 1, Math.max(0, y + k)) : y;
+        const s = src[yy * W + xx];
+        v = wantMin ? Math.min(v, s) : Math.max(v, s);
+      }
+      dst[y * W + x] = v;
+    }
+  };
+  const t = new Uint8Array(m.length), o = new Uint8Array(m.length);
+  pass(m, t, false); pass(t, o, true);
+  return o;
+}
+const dilate = (m, W, H, r) => maxFilter(m, W, H, r, false);
+const erode  = (m, W, H, r) => maxFilter(m, W, H, r, true);
+
+function fillHoles(mask, W, H) {
+  const outside = new Uint8Array(mask.length);
+  const stack = [];
+  for (let x = 0; x < W; x++) { stack.push(x); stack.push((H - 1) * W + x); }
+  for (let y = 0; y < H; y++) { stack.push(y * W); stack.push(y * W + W - 1); }
+  while (stack.length) {
+    const i = stack.pop();
+    if (outside[i] || mask[i]) continue;
+    outside[i] = 1;
+    const x = i % W, y = (i - x) / W;
+    if (x > 0) stack.push(i - 1);
+    if (x < W - 1) stack.push(i + 1);
+    if (y > 0) stack.push(i - W);
+    if (y < H - 1) stack.push(i + W);
+  }
+  const out = new Uint8Array(mask.length);
+  for (let i = 0; i < mask.length; i++) out[i] = mask[i] || !outside[i] ? 1 : 0;
+  return out;
+}
+
+// 8-connected labelling
+function label(mask, W, H) {
+  const lab = new Int32Array(mask.length);
+  let n = 0;
+  const stack = [];
+  for (let s = 0; s < mask.length; s++) {
+    if (!mask[s] || lab[s]) continue;
+    n++;
+    stack.push(s);
+    lab[s] = n;
+    while (stack.length) {
+      const i = stack.pop();
+      const x = i % W, y = (i - x) / W;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+        const j = yy * W + xx;
+        if (mask[j] && !lab[j]) { lab[j] = n; stack.push(j); }
+      }
+    }
+  }
+  return { lab, n };
+}
+
+// ------------------------------------------------------------- paper estimate
+
+function polyBasis(W, H, deg) {
+  const terms = [];
+  for (let i = 0; i <= deg; i++) for (let j = 0; j <= deg - i; j++) terms.push([i, j]);
+  const T = terms.length, N = W * H;
+  const basis = new Float32Array(T * N);
+  for (let y = 0; y < H; y++) {
+    const yn = H > 1 ? y / (H - 1) * 2 - 1 : 0;
+    for (let x = 0; x < W; x++) {
+      const xn = W > 1 ? x / (W - 1) * 2 - 1 : 0;
+      const i = y * W + x;
+      for (let t = 0; t < T; t++) basis[t * N + i] = Math.pow(xn, terms[t][0]) * Math.pow(yn, terms[t][1]);
+    }
+  }
+  return { basis, T };
+}
+
+// basis is built once and shared across the three channels
+function fitPoly(chan, lum, W, H, basis, T, iters) {
+  const N = W * H;
+  const cut = percentile(lum, 55);
+  let keep = new Uint8Array(N);
+  for (let i = 0; i < N; i++) keep[i] = lum[i] >= cut ? 1 : 0;
+
+  const fit = new Float32Array(N);
+  const res = new Float32Array(N);
+  const scratch = new Float32Array(N);
+  let coef = new Float64Array(T);
+  for (let it = 0; it < iters; it++) {
+    // normal equations over the kept pixels
+    const A = new Float64Array(T * T), b = new Float64Array(T);
+    for (let i = 0; i < N; i++) {
+      if (!keep[i]) continue;
+      for (let p = 0; p < T; p++) {
+        const bp = basis[p * N + i];
+        b[p] += bp * chan[i];
+        for (let q = p; q < T; q++) A[p * T + q] += bp * basis[q * N + i];
+      }
+    }
+    for (let p = 0; p < T; p++) for (let q = 0; q < p; q++) A[p * T + q] = A[q * T + p];
+    for (let p = 0; p < T; p++) A[p * T + p] += 1e-6;
+    coef = solve(A, b, T) || coef;
+
+    for (let i = 0; i < N; i++) {
+      let v = 0;
+      for (let t = 0; t < T; t++) v += coef[t] * basis[t * N + i];
+      fit[i] = v;
+      res[i] = chan[i] - v;
+    }
+    let m = 0;
+    for (let i = 0; i < N; i++) if (keep[i]) scratch[m++] = res[i];
+    const tol = Math.max(2.5 * mad(scratch.subarray(0, m)), 4);
+    const nk = new Uint8Array(N);
+    let cnt = 0;
+    for (let i = 0; i < N; i++) if (Math.abs(res[i]) < tol) { nk[i] = 1; cnt++; }
+    if (cnt < 0.05 * N) break;
+    keep = nk;
+  }
+  return fit;
+}
+
+function solve(A, b, n) {
+  const M = Float64Array.from(A), v = Float64Array.from(b);
+  for (let c = 0; c < n; c++) {
+    let piv = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(M[r * n + c]) > Math.abs(M[piv * n + c])) piv = r;
+    if (Math.abs(M[piv * n + c]) < 1e-12) return null;
+    if (piv !== c) {
+      for (let k = 0; k < n; k++) { const t = M[c * n + k]; M[c * n + k] = M[piv * n + k]; M[piv * n + k] = t; }
+      const t = v[c]; v[c] = v[piv]; v[piv] = t;
+    }
+    for (let r = c + 1; r < n; r++) {
+      const f = M[r * n + c] / M[c * n + c];
+      if (!f) continue;
+      for (let k = c; k < n; k++) M[r * n + k] -= f * M[c * n + k];
+      v[r] -= f * v[c];
+    }
+  }
+  const out = new Float64Array(n);
+  for (let r = n - 1; r >= 0; r--) {
+    let s = v[r];
+    for (let k = r + 1; k < n; k++) s -= M[r * n + k] * out[k];
+    out[r] = s / M[r * n + r];
+  }
+  return out;
+}
+
+// coarse-to-fine normalised convolution: interpolate paper across the subject
+function inpaintSmooth(chans, mask, W, H) {
+  const N = W * H;
+  const sigmas = [6, 12, 24, 48, 96, 192, 384].filter(s => s <= Math.max(W, H));
+  sigmas.reverse();
+  const m = Float32Array.from(mask);
+  const out = [new Float32Array(N), new Float32Array(N), new Float32Array(N)];
+  let first = true;
+  for (const s of sigmas) {
+    const den = blur(m, W, H, s);
+    for (let c = 0; c < 3; c++) {
+      const num = new Float32Array(N);
+      for (let i = 0; i < N; i++) num[i] = chans[c][i] * m[i];
+      const nb = blur(num, W, H, s);
+      const o = out[c];
+      for (let i = 0; i < N; i++) {
+        const cur = nb[i] / Math.max(den[i], 1e-6);
+        if (first) o[i] = cur;
+        else {
+          const w = Math.min(1, Math.max(0, den[i] / 0.05));
+          o[i] = o[i] * (1 - w) + cur * w;
+        }
+      }
+    }
+    first = false;
+  }
+  return out;
+}
+
+function downsample(chans, W, H, k) {
+  const w = Math.max(1, Math.floor(W / k)), h = Math.max(1, Math.floor(H / k));
+  const out = [0, 1, 2].map(() => new Float32Array(w * h));
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let n = 0, s0 = 0, s1 = 0, s2 = 0;
+    for (let dy = 0; dy < k; dy++) for (let dx = 0; dx < k; dx++) {
+      const sy = y * k + dy, sx = x * k + dx;
+      if (sy >= H || sx >= W) continue;
+      const i = sy * W + sx;
+      s0 += chans[0][i]; s1 += chans[1][i]; s2 += chans[2][i]; n++;
+    }
+    const o = y * w + x;
+    out[0][o] = s0 / n; out[1][o] = s1 / n; out[2][o] = s2 / n;
+  }
+  return { chans: out, w, h };
+}
+
+function upsample(src, w, h, W, H) {
+  const out = new Float32Array(W * H);
+  const sx = w / W, sy = h / H;
+  for (let y = 0; y < H; y++) {
+    const fy = Math.min(h - 1, Math.max(0, (y + 0.5) * sy - 0.5));
+    const y0 = Math.floor(fy), y1 = Math.min(h - 1, y0 + 1), wy = fy - y0;
+    for (let x = 0; x < W; x++) {
+      const fx = Math.min(w - 1, Math.max(0, (x + 0.5) * sx - 0.5));
+      const x0 = Math.floor(fx), x1 = Math.min(w - 1, x0 + 1), wx = fx - x0;
+      const a = src[y0 * w + x0], b = src[y0 * w + x1];
+      const c = src[y1 * w + x0], d = src[y1 * w + x1];
+      out[y * W + x] = (a * (1 - wx) + b * wx) * (1 - wy) + (c * (1 - wx) + d * wx) * wy;
+    }
+  }
+  return out;
+}
+
+// The paper is smooth by construction, so fit it on a reduced copy and scale
+// the result back up. Keeps the cost flat for large images.
+function fitPaper(chans, W, H) {
+  const k = Math.max(1, Math.ceil(Math.max(W, H) / 512));
+  if (k === 1) return fitPaperCore(chans, W, H);
+  const d = downsample(chans, W, H, k);
+  return fitPaperCore(d.chans, d.w, d.h).map(c => upsample(c, d.w, d.h, W, H));
+}
+
+function fitPaperCore(chans, W, H) {
+  const N = W * H;
+  const lum = new Float32Array(N);
+  for (let i = 0; i < N; i++) lum[i] = LUMA[0] * chans[0][i] + LUMA[1] * chans[1][i] + LUMA[2] * chans[2][i];
+
+  const { basis, T } = polyBasis(W, H, 3);
+  let paper = [0, 1, 2].map(c => fitPoly(chans[c], lum, W, H, basis, T, 5));
+  for (let round = 0; round < 2; round++) {
+    const d = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const p = LUMA[0] * paper[0][i] + LUMA[1] * paper[1][i] + LUMA[2] * paper[2][i];
+      d[i] = p - lum[i];
+    }
+    const near = [];
+    for (let i = 0; i < N; i++) if (Math.abs(d[i]) < 20) near.push(d[i]);
+    const t = Math.max(2.5 * mad(Float32Array.from(near)), 5);
+    const fg = new Uint8Array(N);
+    for (let i = 0; i < N; i++) fg[i] = Math.abs(d[i]) > t ? 1 : 0;
+    const grown = dilate(fg, W, H, 4);
+    let bgCount = 0;
+    const bg = new Uint8Array(N);
+    for (let i = 0; i < N; i++) { bg[i] = grown[i] ? 0 : 1; bgCount += bg[i]; }
+    if (bgCount < 0.1 * N) break;
+    paper = inpaintSmooth(chans, bg, W, H);
+  }
+  return paper;
+}
+
+// per-column running median of the residual: cancels the faint vertical
+// divider stripes without deleting art that crosses them
+function flattenColumns(paper, chans, W, H) {
+  const N = W * H;
+  const d = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const p = LUMA[0] * paper[0][i] + LUMA[1] * paper[1][i] + LUMA[2] * paper[2][i];
+    const l = LUMA[0] * chans[0][i] + LUMA[1] * chans[1][i] + LUMA[2] * chans[2][i];
+    d[i] = Math.min(20, Math.max(-20, p - l));   // clip so ink can't drag it
+  }
+
+  // Reduce rows only, never columns: the stripes are vertical, so nothing is
+  // lost, and the running median stays cheap on tall images.
+  const kv = Math.max(1, Math.ceil(H / 256));
+  const rh = Math.ceil(H / kv);
+  const red = new Float32Array(W * rh);
+  for (let ry = 0; ry < rh; ry++) for (let x = 0; x < W; x++) {
+    let s = 0, n = 0;
+    for (let dy = 0; dy < kv; dy++) {
+      const y = ry * kv + dy;
+      if (y < H) { s += d[y * W + x]; n++; }
+    }
+    red[ry * W + x] = s / n;
+  }
+
+  let win = Math.min(31, rh);
+  if (win % 2 === 0) win--;
+  const r = (win - 1) >> 1;
+  const shift = new Float32Array(W * rh);
+  const buf = new Float32Array(win);
+  for (let x = 0; x < W; x++) for (let ry = 0; ry < rh; ry++) {
+    let n = 0;
+    for (let k = -r; k <= r; k++) buf[n++] = red[Math.min(rh - 1, Math.max(0, ry + k)) * W + x];
+    shift[ry * W + x] = Math.min(40, Math.max(0, quickMedian(buf, n)));
+  }
+
+  for (let y = 0; y < H; y++) {
+    const fy = Math.min(rh - 1, Math.max(0, (y + 0.5) / kv - 0.5));
+    const y0 = Math.floor(fy), y1 = Math.min(rh - 1, y0 + 1), wy = fy - y0;
+    for (let x = 0; x < W; x++) {
+      const v = shift[y0 * W + x] * (1 - wy) + shift[y1 * W + x] * wy;
+      const i = y * W + x;
+      paper[0][i] -= v; paper[1][i] -= v; paper[2][i] -= v;
+    }
+  }
+  return paper;
+}
+
+// ------------------------------------------------------------------- the keys
+
+function autoAlpha(chans, paper, W, H, tolFloor) {
+  const N = W * H;
+  const d = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const p = LUMA[0] * paper[0][i] + LUMA[1] * paper[1][i] + LUMA[2] * paper[2][i];
+    const l = LUMA[0] * chans[0][i] + LUMA[1] * chans[1][i] + LUMA[2] * chans[2][i];
+    d[i] = p - l;
+  }
+  const near = [];
+  for (let i = 0; i < N; i++) if (Math.abs(d[i]) < 20) near.push(d[i]);
+  const t0 = Math.max(2.5 * mad(Float32Array.from(near)), tolFloor);
+
+  // dark key: softly ramped "darker than paper" -> clean anti-aliased edges
+  const a = new Float32Array(N);
+  for (let i = 0; i < N; i++) a[i] = Math.min(1, Math.max(0, (d[i] - t0) / 22));
+
+  // light key: lit skin has no drawn contour, so the dark key bites off noses
+  // and mouths. Hard threshold (a partial alpha here gets amplified by unmix),
+  // and only where it touches ink, so bright parchment grain stays out.
+  const ink = new Uint8Array(N);
+  for (let i = 0; i < N; i++) ink[i] = a[i] > 0.45 ? 1 : 0;
+  const cand = new Uint8Array(N);
+  for (let i = 0; i < N; i++) cand[i] = (!ink[i] && -d[i] > 20) ? 1 : 0;
+  const { lab, n } = label(cand, W, H);
+  if (n) {
+    const area = new Int32Array(n + 1), touch = new Uint8Array(n + 1);
+    const nearInk = dilate(ink, W, H, 1);
+    for (let i = 0; i < N; i++) if (lab[i]) {
+      area[lab[i]]++;
+      if (nearInk[i]) touch[lab[i]] = 1;
+    }
+    for (let i = 0; i < N; i++) {
+      const g = lab[i];
+      if (g && touch[g] && area[g] >= 30) a[i] = 1;
+    }
+  }
+
+  // solidify: fill each figure so interiors are fully opaque, then carve back
+  // out the regions that really are parchment showing through (between the
+  // legs, inside the curve of a bow) -- told apart by tone, not by size
+  const ink2 = new Uint8Array(N);
+  for (let i = 0; i < N; i++) ink2[i] = a[i] > 0.45 ? 1 : 0;
+  const closed = erode(dilate(ink2, W, H, 7), W, H, 7);
+  const solid = fillHoles(closed, W, H);
+  const interior = new Uint8Array(N);
+  for (let i = 0; i < N; i++) interior[i] = (solid[i] && a[i] <= 0.45) ? 1 : 0;
+  const gaps = label(interior, W, H);
+  if (gaps.n) {
+    const cnt = new Int32Array(gaps.n + 1), sum = new Float64Array(gaps.n + 1);
+    for (let i = 0; i < N; i++) if (gaps.lab[i]) { cnt[gaps.lab[i]]++; sum[gaps.lab[i]] += d[i]; }
+    const open = new Uint8Array(gaps.n + 1);
+    for (let g = 1; g <= gaps.n; g++)
+      if (cnt[g] >= 25 && Math.abs(sum[g] / cnt[g]) <= 10) open[g] = 1;
+    for (let i = 0; i < N; i++)
+      if (solid[i] && !(gaps.lab[i] && open[gaps.lab[i]])) a[i] = Math.max(a[i], 1);
+  }
+  return { a, d, t0 };
+}
+
+// ------------------------------------------------------------------ app state
+
+const S = {
+  W: 0, H: 0, name: 'cutout',
+  chans: null, paper: null, alpha: null, srcBlob: null,
+  manual: null,                 // 0 auto, 1 force keep, 2 force drop
+  history: [], zoom: 1, tool: 'brush', mode: 'erase', brush: 10, showMask: false, hasAuto: true,
+};
+
+const $ = id => document.getElementById(id);
+const stage = $('stage');
+let cv = null, ctx = null, out = null;
+
+function setStatus(t) { $('msg').textContent = t; }
+
+async function openAny(file) {
+  if (!file) return;
+  const isJson = /\.json$/i.test(file.name || '') || file.type === 'application/json';
+  if (isJson) {
+    try { return await restoreProject(JSON.parse(await file.text())); }
+    catch (err) { return setStatus('Could not read that saved session.'); }
+  }
+  return loadFile(file);
+}
+
+async function loadFile(file, restore) {
+  if (!file) return;
+  S.srcBlob = file;
+  S.name = (file.name || 'cutout').replace(/\.[^.]+$/, '');
+  const bmp = await createImageBitmap(file);
+  const c = document.createElement('canvas');
+  c.width = bmp.width; c.height = bmp.height;
+  c.getContext('2d').drawImage(bmp, 0, 0);
+  const px = c.getContext('2d').getImageData(0, 0, bmp.width, bmp.height).data;
+
+  S.W = bmp.width; S.H = bmp.height;
+  const N = S.W * S.H;
+  if (N > 6e6) { setStatus('That image is very large — expect a slow pass.'); }
+  S.chans = [new Float32Array(N), new Float32Array(N), new Float32Array(N)];
+  for (let i = 0; i < N; i++) {
+    S.chans[0][i] = px[i * 4]; S.chans[1][i] = px[i * 4 + 1]; S.chans[2][i] = px[i * 4 + 2];
+  }
+  S.manual = restore ? decodeRLE(restore.mask || [], N) : new Uint8Array(N);
+  S.history = [];
+  S.paper = null;
+  if (restore?.settings?.brush) {
+    S.brush = restore.settings.brush;
+    $('size').value = S.brush;
+    $('sizeV').textContent = S.brush;
+  }
+
+  stage.innerHTML = '<div id="wrap"></div>';
+  cv = document.createElement('canvas');
+  cv.width = S.W; cv.height = S.H;
+  ctx = cv.getContext('2d');
+  $('wrap').appendChild(cv);
+  const sel = document.createElement('div');
+  sel.id = 'sel';
+  $('wrap').appendChild(sel);
+  out = ctx.createImageData(S.W, S.H);
+  $('tools').style.display = 'flex';
+  bindCanvas();
+  S.zoom = restore?.settings?.zoom || Math.max(1, Math.min(6, Math.floor(900 / S.W) || 1));
+  await runAuto();
+  if (restore) setStatus(`Restored "${restore.name}" — carry on where you left off`);
+}
+
+async function runAuto() {
+  setStatus('Estimating the background…');
+  await new Promise(r => setTimeout(r, 16));
+  const t = performance.now();
+  if (!S.paper) {
+    S.paper = fitPaper(S.chans, S.W, S.H);
+    S.paper = flattenColumns(S.paper, S.chans, S.W, S.H);
+  }
+  if (S.hasAuto) {
+    const r = autoAlpha(S.chans, S.paper, S.W, S.H, +$('tol').value);
+    S.alpha = r.a;
+    setStatus(`Auto cut in ${Math.round(performance.now() - t)} ms · threshold ${r.t0.toFixed(1)} · brush over anything it got wrong`);
+  } else {
+    S.alpha = new Float32Array(S.W * S.H).fill(1);
+    setStatus('Auto cut off — erase by hand');
+  }
+  redraw();
+}
+
+// dirty lets a brush stroke repaint just the pixels it touched; a full pass
+// over a multi-megapixel image on every pointermove would drag
+function effAlpha(i) {
+  if (S.manual[i] === 1) return 1;
+  if (S.manual[i] === 2) return 0;
+  return S.alpha[i];
+}
+
+function redraw(dirty) {
+  const px = out.data;
+  const x0 = dirty ? Math.max(0, dirty.x0) : 0, x1 = dirty ? Math.min(S.W - 1, dirty.x1) : S.W - 1;
+  const y0 = dirty ? Math.max(0, dirty.y0) : 0, y1 = dirty ? Math.min(S.H - 1, dirty.y1) : S.H - 1;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const i = y * S.W + x;
+    let a = effAlpha(i);
+    let r, g, b;
+    if (a > 0.02) {          // unmix: divide the paper back out of soft edges
+      const inv = 1 - a, k = Math.max(a, 0.06);
+      r = (S.chans[0][i] - inv * S.paper[0][i]) / k;
+      g = (S.chans[1][i] - inv * S.paper[1][i]) / k;
+      b = (S.chans[2][i] - inv * S.paper[2][i]) / k;
+    } else { r = S.chans[0][i]; g = S.chans[1][i]; b = S.chans[2][i]; }
+    if (S.showMask && S.manual[i]) {
+      if (S.manual[i] === 1) { r = 0.35 * r; g = 0.35 * g + 165; b = 0.35 * b; }
+      else { r = 0.35 * r + 165; g = 0.35 * g; b = 0.35 * b; }
+      a = Math.max(a, 0.85);
+    }
+    const o = i * 4;
+    px[o] = r < 0 ? 0 : r > 255 ? 255 : r;
+    px[o + 1] = g < 0 ? 0 : g > 255 ? 255 : g;
+    px[o + 2] = b < 0 ? 0 : b > 255 ? 255 : b;
+    px[o + 3] = Math.round(255 * Math.min(1, Math.max(0, a)));
+  }
+  if (dirty) {
+    ctx.putImageData(out, 0, 0, x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+    return;
+  }
+  ctx.putImageData(out, 0, 0);
+  cv.style.width = (S.W * S.zoom) + 'px';
+  cv.style.height = (S.H * S.zoom) + 'px';
+  $('zV').textContent = S.zoom + '×';
+}
+
+// ---------------------------------------------------------------- persistence
+
+const AUTOKEY = 'sprite-cutout/session';
+
+const blobToDataURL = blob => new Promise((res, rej) => {
+  const fr = new FileReader();
+  fr.onload = () => res(fr.result);
+  fr.onerror = rej;
+  fr.readAsDataURL(blob);
+});
+
+// the mask is mostly one long run of zeros, so run-length encoding keeps a
+// saved session small enough to also fit in localStorage
+function encodeRLE(u8) {
+  const out = [];
+  if (!u8.length) return out;
+  let v = u8[0], n = 1;
+  for (let i = 1; i < u8.length; i++) {
+    if (u8[i] === v) n++;
+    else { out.push(v, n); v = u8[i]; n = 1; }
+  }
+  out.push(v, n);
+  return out;
+}
+
+function decodeRLE(arr, len) {
+  const u8 = new Uint8Array(len);
+  let p = 0;
+  for (let i = 0; i + 1 < arr.length; i += 2) {
+    const v = arr[i], n = arr[i + 1];
+    if (v) u8.fill(v, p, Math.min(len, p + n));
+    p += n;
+  }
+  return u8;
+}
+
+async function buildProject() {
+  return {
+    format: 'sprite-cutout/1',
+    name: S.name, w: S.W, h: S.H,
+    image: await blobToDataURL(S.srcBlob),
+    mask: encodeRLE(S.manual),
+    settings: { tol: +$('tol').value, auto: S.hasAuto, brush: S.brush, zoom: S.zoom },
+    saved: new Date().toISOString(),
+  };
+}
+
+async function saveProgress() {
+  if (!S.chans) return;
+  const json = JSON.stringify(await buildProject());
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  a.download = S.name + '-progress.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  setStatus(`Saved ${S.name}-progress.json (${(json.length / 1048576).toFixed(1)} MB) — drop it back in to carry on`);
+}
+
+let autoTimer = null, autoWarned = false;
+
+function scheduleAutosave() {
+  if (!S.chans) return;
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(async () => {
+    try {
+      const json = JSON.stringify(await buildProject());
+      if (json.length > 4.2e6) {
+        if (!autoWarned) {
+          autoWarned = true;
+          setStatus('Image too big to auto-save — use Save progress to keep your work');
+        }
+        return;
+      }
+      localStorage.setItem(AUTOKEY, json);
+    } catch (err) {
+      if (!autoWarned) {
+        autoWarned = true;
+        setStatus('Auto-save unavailable in this browser — use Save progress');
+      }
+    }
+  }, 1200);
+}
+
+async function restoreProject(proj) {
+  if (!proj || proj.format !== 'sprite-cutout/1') {
+    setStatus('That JSON is not a saved cutout session.');
+    return;
+  }
+  const blob = await (await fetch(proj.image)).blob();
+  const st = proj.settings || {};
+  $('tol').value = st.tol ?? 10;
+  $('tolV').textContent = $('tol').value;
+  S.hasAuto = st.auto !== false;
+  $('auto').checked = S.hasAuto;
+  await loadFile(new File([blob], proj.name + '.png'), proj);
+}
+
+function offerResume() {
+  let raw = null;
+  try { raw = localStorage.getItem(AUTOKEY); } catch (err) { return; }
+  if (!raw) return;
+  let proj;
+  try { proj = JSON.parse(raw); } catch (err) { return; }
+  const when = new Date(proj.saved);
+  const btn = $('resume');
+  btn.textContent = `Resume "${proj.name}" (${when.toLocaleString()})`;
+  btn.style.display = '';
+  btn.onclick = () => { btn.style.display = 'none'; restoreProject(proj); };
+}
+
+// --------------------------------------------------------------------- bucket
+
+// Flood over the region that shares the clicked pixel's state: click a visible
+// blob in Erase mode to drop it whole (log pile, caption, horizon line), or a
+// transparent hole in Keep mode to fill it back in.
+function bucketAt(sx, sy, val) {
+  const W = S.W, H = S.H, N = W * H;
+  const seed = sy * W + sx;
+  const want = effAlpha(seed) > 0.45 ? 1 : 0;
+
+  const field = new Uint8Array(N);
+  for (let i = 0; i < N; i++) field[i] = ((effAlpha(i) > 0.45 ? 1 : 0) === want) ? 1 : 0;
+
+  // Leak guard: scenery is joined to a figure by a pixel or two of
+  // anti-aliasing, and an un-eroded fill escapes straight through it. Select on
+  // the eroded field, then grow back so the soft edge still comes along.
+  //
+  // Step the radius down until the clicked pixel survives. Falling straight
+  // back to the un-eroded field would switch the guard off precisely when it
+  // is needed, and the fill would swallow the whole sheet.
+  let r = +$('guard').value, base = null;
+  for (; r > 0; r--) {
+    const e = erode(field, W, H, r);
+    if (e[seed]) { base = e; break; }
+  }
+  if (!base) { base = field; r = 0; }
+
+  const sel = new Uint8Array(N);
+  const stack = [seed];
+  sel[seed] = 1;
+  while (stack.length) {
+    const i = stack.pop();
+    const x = i % W, y = (i - x) / W;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const xx = x + dx, yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+      const j = yy * W + xx;
+      if (base[j] && !sel[j]) { sel[j] = 1; stack.push(j); }
+    }
+  }
+  const grown = dilate(sel, W, H, r + 1);
+
+  let n = 0, x0 = W, y0 = H, x1 = 0, y1 = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    if (!(grown[i] && field[i])) continue;
+    n++;
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (y < y0) y0 = y;
+    if (y > y1) y1 = y;
+  }
+  if (!n) return null;
+  // Leak check. Judge a visible-region fill against how much art is on the
+  // sheet, not against the sheet's area: scenery is welded to the figures by
+  // the drawn horizon line, and when the guard has to degrade past that join
+  // the fill swallows the figure too. One fence post is ~7% of the visible
+  // pixels; a leak through the horizon is over half of them.
+  let cap, total;
+  if (want) {
+    total = 0;
+    for (let i = 0; i < N; i++) if (effAlpha(i) > 0.45) total++;
+    cap = 0.35 * total;
+  } else {
+    total = N;
+    cap = 0.25 * N;
+  }
+  if (n > cap) return { blocked: true, n, pct: Math.round(100 * n / total),
+                        of: want ? 'the visible art' : 'the image' };
+
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const i = y * W + x;
+    if (grown[i] && field[i]) S.manual[i] = val;
+  }
+  return { x0, y0, x1, y1, n, want };
+}
+
+function boxFill(bx0, by0, bx1, by1, val) {
+  const x0 = Math.max(0, Math.min(bx0, bx1)), x1 = Math.min(S.W - 1, Math.max(bx0, bx1));
+  const y0 = Math.max(0, Math.min(by0, by1)), y1 = Math.min(S.H - 1, Math.max(by0, by1));
+  let n = 0;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { S.manual[y * S.W + x] = val; n++; }
+  return { x0, y0, x1, y1, n };
+}
+
+// ------------------------------------------------------------------- painting
+
+let painting = false, lastPt = null, boxing = null, filling = null;
+
+function showSel(x0, y0, x1, y1) {
+  const el = $('sel');
+  const lx = Math.min(x0, x1) * S.zoom, ly = Math.min(y0, y1) * S.zoom;
+  el.style.display = 'block';
+  el.style.left = lx + 'px';
+  el.style.top = ly + 'px';
+  el.style.width = (Math.abs(x1 - x0) + 1) * S.zoom + 'px';
+  el.style.height = (Math.abs(y1 - y0) + 1) * S.zoom + 'px';
+}
+
+function pushHistory() {
+  S.history.push(Uint8Array.from(S.manual));
+  if (S.history.length > 24) S.history.shift();
+}
+
+let dirty = null;
+function mark(x0, y0, x1, y1) {
+  if (!dirty) dirty = { x0, y0, x1, y1 };
+  else {
+    dirty.x0 = Math.min(dirty.x0, x0); dirty.y0 = Math.min(dirty.y0, y0);
+    dirty.x1 = Math.max(dirty.x1, x1); dirty.y1 = Math.max(dirty.y1, y1);
+  }
+}
+
+function stamp(cx, cy, val) {
+  const r = S.brush / 2;
+  const x0 = Math.max(0, Math.floor(cx - r)), x1 = Math.min(S.W - 1, Math.ceil(cx + r));
+  const y0 = Math.max(0, Math.floor(cy - r)), y1 = Math.min(S.H - 1, Math.ceil(cy + r));
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const dx = x - cx, dy = y - cy;
+    if (dx * dx + dy * dy <= r * r) S.manual[y * S.W + x] = val;
+  }
+  mark(x0, y0, x1, y1);
+}
+
+function strokeTo(cx, cy, val) {
+  if (lastPt) {
+    const dx = cx - lastPt[0], dy = cy - lastPt[1];
+    const steps = Math.ceil(Math.hypot(dx, dy));
+    for (let s = 1; s <= steps; s++) stamp(lastPt[0] + dx * s / steps, lastPt[1] + dy * s / steps, val);
+  } else stamp(cx, cy, val);
+  lastPt = [cx, cy];
+}
+
+function bindCanvas() {
+  const pos = e => {
+    const b = cv.getBoundingClientRect();
+    return [(e.clientX - b.left) / S.zoom, (e.clientY - b.top) / S.zoom];
+  };
+  const valFor = e => {
+    const erase = (S.mode === 'erase') !== !!e.altKey;
+    return erase ? 2 : 1;
+  };
+  cv.addEventListener('pointerdown', e => {
+    const [fx, fy] = pos(e);
+    const px = Math.min(S.W - 1, Math.max(0, Math.floor(fx)));
+    const py = Math.min(S.H - 1, Math.max(0, Math.floor(fy)));
+    pushHistory();
+    if (S.tool === 'fill') {
+      const r = bucketAt(px, py, valFor(e));
+      if (r && r.blocked) {
+        S.history.pop();
+        setStatus(`Blocked: that fill would take ${r.pct}% of ${r.of} — it has leaked `
+                  + `through a join. Use Box, or brush the join first.`);
+      } else if (r) {
+        redraw(r);
+        setStatus(`${valFor(e) === 2 ? 'Removed' : 'Filled'} ${r.n.toLocaleString()} px `
+                  + `(${r.want ? 'visible' : 'transparent'} region)`);
+      } else {
+        S.history.pop();
+        setStatus('Nothing to fill there.');
+      }
+      filling = valFor(e);
+      cv.setPointerCapture(e.pointerId);
+      scheduleAutosave();
+      return;
+    }
+    if (S.tool === 'box') {
+      boxing = [px, py];
+      cv.setPointerCapture(e.pointerId);
+      showSel(px, py, px, py);
+      return;
+    }
+    painting = true; lastPt = null;
+    cv.setPointerCapture(e.pointerId);
+    dirty = null; strokeTo(fx, fy, valFor(e)); redraw(dirty);
+  });
+
+  cv.addEventListener('pointermove', e => {
+    const [fx, fy] = pos(e);
+    const px = Math.min(S.W - 1, Math.max(0, Math.floor(fx)));
+    const py = Math.min(S.H - 1, Math.max(0, Math.floor(fy)));
+    if (boxing) { showSel(boxing[0], boxing[1], px, py); return; }
+    if (filling) {                       // drag the bucket to sweep several blobs
+      const r = bucketAt(px, py, filling);
+      if (r && r.blocked) setStatus(`Skipped a leaking fill (${r.pct}% of ${r.of})`);
+      else if (r) redraw(r);
+      return;
+    }
+    if (!painting) return;
+    dirty = null; strokeTo(fx, fy, valFor(e)); redraw(dirty);
+  });
+
+  cv.addEventListener('pointerup', e => {
+    if (boxing) {
+      const [fx, fy] = pos(e);
+      const px = Math.min(S.W - 1, Math.max(0, Math.floor(fx)));
+      const py = Math.min(S.H - 1, Math.max(0, Math.floor(fy)));
+      const r = boxFill(boxing[0], boxing[1], px, py, valFor(e));
+      boxing = null;
+      $('sel').style.display = 'none';
+      redraw(r);
+      setStatus(`${valFor(e) === 2 ? 'Removed' : 'Kept'} a ${r.x1 - r.x0 + 1}x${r.y1 - r.y0 + 1} box`);
+    }
+    painting = false; filling = null; lastPt = null;
+    scheduleAutosave();
+  });
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+}
+
+// --------------------------------------------------------------------- wiring
+
+$('pick').onclick = () => $('file').click();
+$('file').onchange = e => openAny(e.target.files[0]);
+
+document.addEventListener('dragover', e => { e.preventDefault(); $('drop')?.classList.add('hot'); });
+document.addEventListener('dragleave', () => $('drop')?.classList.remove('hot'));
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = [...e.dataTransfer.files].find(
+    f => f.type.startsWith('image/') || /\.json$/i.test(f.name || ''));
+  if (f) openAny(f);
+});
+document.addEventListener('paste', e => {
+  const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+  if (it) openAny(it.getAsFile());
+});
+
+const pickTool = t => {
+  S.tool = t;
+  $('tBrush').classList.toggle('on', t === 'brush');
+  $('tFill').classList.toggle('on', t === 'fill');
+  $('tBox').classList.toggle('on', t === 'box');
+  cv && (cv.style.cursor = t === 'fill' ? 'copy' : 'crosshair');
+};
+$('tBrush').onclick = () => pickTool('brush');
+$('tFill').onclick = () => pickTool('fill');
+$('tBox').onclick = () => pickTool('box');
+$('guard').oninput = e => { $('guardV').textContent = e.target.value; };
+$('mErase').onclick = () => { S.mode = 'erase'; $('mErase').classList.add('on'); $('mKeep').classList.remove('on'); };
+$('mKeep').onclick = () => { S.mode = 'keep'; $('mKeep').classList.add('on'); $('mErase').classList.remove('on'); };
+$('size').oninput = e => { S.brush = +e.target.value; $('sizeV').textContent = S.brush; };
+$('tol').oninput = e => { $('tolV').textContent = e.target.value; };
+$('tol').onchange = () => { if (S.chans) runAuto(); };
+$('auto').onchange = e => { S.hasAuto = e.target.checked; if (S.chans) runAuto(); };
+$('zIn').onclick = () => { S.zoom = Math.min(12, S.zoom + 1); redraw(); };
+$('zOut').onclick = () => { S.zoom = Math.max(1, S.zoom - 1); redraw(); };
+$('show').onclick = () => { S.showMask = !S.showMask; $('show').classList.toggle('on', S.showMask); redraw(); };
+$('undo').onclick = () => { const p = S.history.pop(); if (p) { S.manual = p; redraw(); } };
+$('save').onclick = saveProgress;
+$('reset').onclick = () => { if (!S.manual) return; pushHistory(); S.manual.fill(0); redraw(); };
+
+$('dl').onclick = () => {
+  const wasMask = S.showMask;
+  if (wasMask) { S.showMask = false; redraw(); }
+  cv.toBlob(b => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = S.name + '-cut.png';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    if (wasMask) { S.showMask = true; redraw(); }
+  }, 'image/png');
+};
+
+document.addEventListener('keydown', e => {
+  if (!S.chans) return;
+  if (e.key === '[') { S.brush = Math.max(1, S.brush - 2); $('size').value = S.brush; $('sizeV').textContent = S.brush; }
+  if (e.key === ']') { S.brush = Math.min(80, S.brush + 2); $('size').value = S.brush; $('sizeV').textContent = S.brush; }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); $('undo').click(); }
+  if (e.key === 'e') $('mErase').click();
+  if (e.key === 'k') $('mKeep').click();
+  if (e.key === 'b') pickTool('brush');
+  if (e.key === 'f') pickTool('fill');
+  if (e.key === 'x') pickTool('box');
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveProgress(); }
+});
+
+offerResume();
+</script>
