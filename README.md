@@ -48,6 +48,60 @@ where you left off. Work is also auto-saved after every stroke, so if you just
 close the tab a **Resume** button appears next time. Auto-save uses browser
 storage and skips images over ~4 MB (it says so); the button always works.
 
+## `diagme/` — quick local diagramming
+
+Excalidraw-shaped sketchpad for the diagrams you draw once and throw away. Vanilla
+JS drawing into a single SVG element: no dependencies, no build step — nginx just
+serves the folder.
+
+```bash
+cd diagme
+docker compose up -d --build
+```
+
+Open http://localhost:8080 (change the port in `docker-compose.yml` if 8080 is
+taken). `app/` is bind-mounted into the container, so edit a file, refresh the
+browser, done — no rebuild. Without Docker, `app/index.html` opens straight from
+disk.
+
+| Tool | Key | Does |
+|---|---|---|
+| **Select / move** | `v` | drag a shape to move it, corner handles resize; drag empty canvas to marquee-select, `shift` adds to the selection |
+| **Box** | `r` | drag to size, click for a default |
+| **Arrow** | `a` | once selected, drag the start/end handles — or the middle one to bend it |
+| **Line** | `l` | same handles, no head |
+| **Freehand** | `p` | stays active across strokes |
+| **Text** | `t` | click and type, double-click to re-edit, corner resize scales the font |
+| **Text doc** | `d` | markdown box — `#` headings, `**bold**`, `` `code` ``, lists, fences |
+
+A multi-selection moves, deletes and recolours as one. The 6-colour palette sets the
+colour for new shapes and recolours whatever is selected. `⌘/ctrl + scroll` or pinch
+zooms (click `%` to reset), two-finger scroll / `space + drag` / middle-drag pans,
+`delete` clears the selection, `⌘Z` undoes and `⌘⇧Z` redoes. Everything autosaves to
+localStorage, so a refresh or a container restart loses nothing.
+
+Bends are the only real geometry in it: dragging an arrow's middle handle stores a
+pass-through point, and the curve is a quadratic Bézier whose control point is solved
+so the line goes *through* that handle rather than near it. Markdown docs render via a
+~40-line renderer inside an SVG `foreignObject` — no CDN, works offline.
+
+### Smoke test
+
+Focus, blur and event ordering can't be verified by reading the code, so
+`tests/smoke.js` drives the running app in headless Chromium and asserts on text
+entry, markdown rendering, marquee count, group move, group delete and arrow bend.
+
+```bash
+cd diagme
+npm install playwright-core
+PLAYWRIGHT_BROWSERS_PATH=./pw-browsers npx playwright-core install chromium-headless-shell
+PLAYWRIGHT_BROWSERS_PATH=./pw-browsers node tests/smoke.js
+```
+
+It needs Playwright's own chromium — corporate-managed Chrome refuses to be automated
+("remote debugging is disallowed by the system admin"). `tasks/lessons.md` has the
+write-up of the focus race that made the test necessary.
+
 ## `sprite-cleanup/` — automatic parchment removal
 
 Python pipeline that removes the parchment background from sepia sprite sheets

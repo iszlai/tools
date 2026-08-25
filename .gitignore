@@ -2,3 +2,5 @@ __pycache__/
 *.py[cod]
 .DS_Store
 .claude/
+node_modules/
+pw-browsers/

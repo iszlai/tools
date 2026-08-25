@@ -1,0 +1,9 @@
+services:
+  diagme:
+    build: .
+    container_name: diagme
+    ports:
+      - "8080:80"
+    volumes:
+      - ./app:/usr/share/nginx/html:ro
+    restart: unless-stopped
