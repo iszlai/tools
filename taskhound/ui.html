@@ -63,7 +63,16 @@
     box-shadow: -18px 0 40px rgba(0,0,0,.45);
   }
   #drawer.open { display: block; }
-  #drawer h2 { margin: 0 0 12px; font-size: 13px; color: var(--dim); font-family: ui-monospace, monospace; }
+  #drawer h2 { margin: 0; font-size: 13px; color: var(--dim); font-family: ui-monospace, monospace; }
+  .drawer-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; margin-bottom: 12px;
+  }
+  button.icon {
+    border: none; background: none; color: var(--dim);
+    font-size: 22px; line-height: 1; padding: 0 6px 3px;
+  }
+  button.icon:hover { color: var(--text); background: var(--panel-2); }
   label { display: block; margin: 12px 0 4px; font-size: 11px; text-transform: uppercase;
           letter-spacing: .07em; color: var(--dim); }
   input, textarea, select {
@@ -119,7 +128,10 @@
 <div id="board"></div>
 
 <div id="drawer">
-  <h2 id="d-id">New issue</h2>
+  <div class="drawer-head">
+    <h2 id="d-id">New issue</h2>
+    <button class="icon" id="close" title="Close (esc)" aria-label="Close">&times;</button>
+  </div>
   <label for="d-title">Title</label>
   <input id="d-title" autocomplete="off">
   <label for="d-desc">Description <span class="derived">(markdown — click to edit)</span></label>
@@ -300,6 +312,7 @@ async function addComment() {
   } catch (err) { $('err').textContent = err.message; }
 }
 
+$('close').onclick = closeDrawer;
 $('d-desc-view').onclick = showSource;
 $('d-desc').onblur = showRendered;
 $('new').onclick = () => openDrawer(null);

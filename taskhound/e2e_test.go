@@ -547,6 +547,9 @@ func TestUIServesTheMarkdownRenderer(t *testing.T) {
 	if !bytes.Contains(page, []byte(`src="/md.js"`)) {
 		t.Error("ui.html does not load /md.js")
 	}
+	if !bytes.Contains(page, []byte(`id="close"`)) {
+		t.Error("the drawer has no close control")
+	}
 }
 
 // TestEmbeddedRendererMatchesMdlite catches the copy going stale. taskhound
