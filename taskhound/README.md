@@ -32,29 +32,63 @@ git clone https://github.com/iszlai/tools.git && cd tools/taskhound
 ./install.sh                 # ~/.local/bin/th + ~/.claude/skills/taskhound/
 ```
 
-**Updating.** `./install.sh --update` rebuilds from the checkout when there is
-one and Go is present, and otherwise pulls the latest published build; either
-way it prints what changed:
-
-```
-$ ./install.sh --update
-downloading latest for darwin/arm64...
-updated ~/.local/bin/th: v0.1.0 -> v0.2.0
-```
-
-Without a checkout at all, `./install.sh --from-release` does the same from a
-copy of this script alone, and `--from-release taskhound-v0.1.0` pins a version.
-It says so and changes nothing when you are already current.
-
-`./install.sh --help` lists every mode plus `--prefix`, `--skill-dir`,
-`--no-skill` and `--uninstall`. `make help` lists the build, test and vendor
-targets.
-
 Then, in the repo you want to track:
 
 ```bash
 th init          # writes ./.taskhound.yaml — commit it
 ```
+
+## Upgrading
+
+Whichever way you installed, `th version` says what you have, and the upgrade is
+the same command you used the first time.
+
+**If you installed the prebuilt binary**, re-run the same curl: it always
+resolves to the latest release and overwrites in place.
+
+```bash
+os=$(uname -s | tr A-Z a-z); arch=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+curl -fsSL "https://github.com/iszlai/tools/releases/latest/download/th_${os}_${arch}" -o ~/.local/bin/th
+chmod +x ~/.local/bin/th
+```
+
+**If you have the repo**, `./install.sh --update` rebuilds from the checkout
+when Go is present and otherwise pulls the latest published build. Either way it
+prints what changed, and refreshes the agent skill while it is there:
+
+```
+$ ./install.sh --update
+downloading latest for darwin/arm64...
+updated ~/.local/bin/th: v0.2.0 -> v0.3.0
+```
+
+**If you have neither** — no checkout, no Go, and you would rather not hand-roll
+the curl — fetch the installer alone and let it do the work. It is the only
+piece you need:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/iszlai/tools/main/taskhound/install.sh -o /tmp/th-install.sh
+bash /tmp/th-install.sh --from-release
+```
+
+`--from-release taskhound-v0.2.0` pins a version instead of taking the latest,
+and any of these say so and change nothing when you are already current:
+
+```
+$ ./install.sh --update
+already on the latest release (v0.3.0) — nothing to do
+```
+
+`./install.sh --help` lists every mode plus `--prefix`, `--skill-dir`,
+`--no-skill` and `--uninstall`. `make help` lists the build, test and vendor
+targets.
+
+**Keep everyone on the same version.** A newer `th` reads an older board
+without trouble, but the reverse loses data: an older binary that *writes* a
+board silently drops the fields it does not know about. v0.2.0 writing a board
+made by v0.3.0 removes every priority on it, without an error. `th version` says
+which one you have; if several people or agents share a board, upgrade them
+together.
 
 ## Model
 

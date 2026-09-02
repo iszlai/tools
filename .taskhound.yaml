@@ -1,6 +1,6 @@
 version: 1
 prefix: TH
-next_id: 6
+next_id: 7
 issues:
     - id: TH-1
       title: Smoke-test the taskhound kanban UI in a real browser
@@ -111,3 +111,28 @@ issues:
         - at: 2026-09-02T11:10:59Z
           author: lehel
           body: 'Done. The renderer moved to mdlite/ as a shared tool; diagme and taskhound each hold a byte-identical copy because neither can reach outside its own directory (go:embed refuses .. and will not follow symlinks; nginx serves only diagme/app). Drift fails make -C mdlite check and a Go test. Rendering a real description turned up a bug the unit tests missed: hard-wrapped prose became one paragraph per line. Fixed with paragraph continuation, 11 tests now.'
+    - id: TH-6
+      title: An older th silently drops fields it does not know when it writes
+      description: |-
+        Reproduced against the published binaries: on a board written by v0.3.0,
+        running `th comment` from v0.2.0 removed `priority: must` from the file. No
+        error, no warning — the field is simply not in the older binary's struct, so it
+        is dropped on the next save.
+
+        That makes mixed versions unsafe on a shared board, which is exactly the
+        situation taskhound is built for: several agents and a human on one file. The
+        locking protects against interleaved writes, and then an old binary quietly
+        throws away what a new one wrote.
+
+        The fix is to stop round-tripping through a struct that can only hold the fields
+        this build knows about — decode into a yaml.Node (or a map) alongside the typed
+        struct and merge on save, so unknown keys survive. Worth a schema `version`
+        check too: refuse to write a board whose version is newer than the binary.
+
+        - [ ] an old binary writing a new board preserves fields it does not understand
+        - [ ] a test round-trips a board containing an unknown key and asserts it survives
+        - [ ] writing a board with a newer schema version than the binary is refused
+      status: todo
+      priority: high
+      created_at: 2026-09-02T11:35:10Z
+      updated_at: 2026-09-02T11:35:10Z
