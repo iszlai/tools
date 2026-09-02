@@ -14,12 +14,22 @@ th ui --open                # kanban board
 
 ## Install
 
-**Prebuilt binary** (no Go needed):
+**Prebuilt binary** (no Go needed). This repo is private, so the download needs
+an authenticated `gh`:
 
 ```bash
 os=$(uname -s | tr A-Z a-z); arch=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-curl -fsSL "https://github.com/iszlai/tools/releases/latest/download/th_${os}_${arch}" -o /tmp/th
-install -m 0755 /tmp/th ~/.local/bin/th
+mkdir -p ~/.local/bin
+gh release download --repo iszlai/tools --pattern "th_${os}_${arch}" --output ~/.local/bin/th --clobber
+chmod +x ~/.local/bin/th
+```
+
+Omitting the tag takes the latest release. Builds are published for
+darwin/linux on amd64/arm64. If the repo is ever made public, plain `curl` works
+too:
+
+```bash
+curl -fsSL "https://github.com/iszlai/tools/releases/latest/download/th_${os}_${arch}" -o ~/.local/bin/th
 ```
 
 **From source** (also installs the agent skill):
@@ -162,6 +172,9 @@ taskhound-specific except the last two steps.
 command -v th >/dev/null || (cd /path/to/tools/taskhound && ./install.sh)
 th list >/dev/null 2>&1 || th init
 ```
+
+If you do not have the repo checked out, grab the binary with the `gh` line
+under **Install** instead.
 
 **2. Read the source list.** Each `- [ ]` / `- [x]` line, heading or numbered
 step becomes one issue. Keep the wording; do not summarise it away.

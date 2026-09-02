@@ -29,6 +29,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: taskhound/go.mod
+          cache-dependency-path: taskhound/go.sum
 
       - name: Test
         run: make check
