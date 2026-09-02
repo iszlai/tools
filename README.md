@@ -204,7 +204,7 @@ this unlock".
 
 ```bash
 cd taskhound && ./install.sh    # ~/.local/bin/th + the agent skill
-# or, without a checkout: curl the binary from the latest release (see taskhound/README.md)
+./install.sh --update           # later: rebuild, or pull the latest release
 
 cd ~/your-repo && th init
 th add "Extract the rate limiter"

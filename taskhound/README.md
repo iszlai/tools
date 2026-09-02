@@ -32,8 +32,23 @@ git clone https://github.com/iszlai/tools.git && cd tools/taskhound
 ./install.sh                 # ~/.local/bin/th + ~/.claude/skills/taskhound/
 ```
 
-`./install.sh --help` lists `--prefix`, `--skill-dir`, `--no-skill` and
-`--uninstall`. `make help` lists the build, test and vendor targets.
+**Updating.** `./install.sh --update` rebuilds from the checkout when there is
+one and Go is present, and otherwise pulls the latest published build; either
+way it prints what changed:
+
+```
+$ ./install.sh --update
+downloading latest for darwin/arm64...
+updated ~/.local/bin/th: v0.1.0 -> v0.2.0
+```
+
+Without a checkout at all, `./install.sh --from-release` does the same from a
+copy of this script alone, and `--from-release taskhound-v0.1.0` pins a version.
+It says so and changes nothing when you are already current.
+
+`./install.sh --help` lists every mode plus `--prefix`, `--skill-dir`,
+`--no-skill` and `--uninstall`. `make help` lists the build, test and vendor
+targets.
 
 Then, in the repo you want to track:
 

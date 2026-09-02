@@ -35,7 +35,9 @@ jobs:
         run: make check
 
       - name: Build every target
-        run: make release VERSION=${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          tag='${{ github.event.inputs.tag || github.ref_name }}'
+          make release VERSION="${tag#taskhound-}"
 
       - name: Publish
         env:

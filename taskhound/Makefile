@@ -29,6 +29,9 @@ vet: ## go vet
 install: ## build and install th + the agent skill
 	./install.sh --prefix $(PREFIX)
 
+update: ## rebuild and reinstall over an existing install
+	./install.sh --update --prefix $(PREFIX)
+
 uninstall: ## remove th and the agent skill
 	./install.sh --prefix $(PREFIX) --uninstall
 
@@ -51,4 +54,4 @@ vendor: ## refresh the vendored dependencies (needs network)
 clean: ## remove build output
 	rm -f bin/th dist/th_*
 
-.PHONY: help build test check fmt vet install uninstall ui release vendor clean
+.PHONY: help build test check fmt vet install update uninstall ui release vendor clean
