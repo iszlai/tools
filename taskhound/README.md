@@ -141,9 +141,9 @@ on the next sync, because the board is what is authoritative.
 your files.
 
 Descriptions are markdown. The drawer shows them rendered — headings, code,
-and the `- [ ]` acceptance criteria every ticket is made of — and clicking the
-rendered block swaps it for the plain text, which re-renders when you click
-away. The textarea is always the value; the rendered block is only ever a view
+and the `- [ ]` acceptance criteria every ticket is made of — and the ✎ beside
+the Description label swaps it for the plain text, which re-renders when you
+click away. The textarea is always the value; the rendered block is only ever a view
 of it, so saving does not care which one you are looking at. Rendering is
 `mdlite`, copied in from `mdlite/md.js` and served out of the binary at
 `/md.js`; it escapes before it renders, so a description that arrives over the

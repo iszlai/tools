@@ -73,6 +73,9 @@
     font-size: 22px; line-height: 1; padding: 0 6px 3px;
   }
   button.icon:hover { color: var(--text); background: var(--panel-2); }
+  button.icon.tiny { font-size: 12px; padding: 2px 6px; }
+  .field-head { display: flex; align-items: center; justify-content: space-between; }
+  .field-head label { margin-bottom: 4px; }
   label { display: block; margin: 12px 0 4px; font-size: 11px; text-transform: uppercase;
           letter-spacing: .07em; color: var(--dim); }
   input, textarea, select {
@@ -84,9 +87,8 @@
   /* Rendered description. Click it to get the plain text back. */
   .md {
     border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px;
-    min-height: 110px; cursor: text; background: var(--bg);
+    min-height: 110px; background: var(--bg);
   }
-  .md:hover { border-color: var(--accent); }
   .md > *:first-child { margin-top: 0; }
   .md > *:last-child { margin-bottom: 0; }
   .md h1, .md h2, .md h3 { font-size: 14px; margin: 12px 0 6px; }
@@ -134,7 +136,10 @@
   </div>
   <label for="d-title">Title</label>
   <input id="d-title" autocomplete="off">
-  <label for="d-desc">Description <span class="derived">(markdown — click to edit)</span></label>
+  <div class="field-head">
+    <label for="d-desc">Description <span class="derived">(markdown)</span></label>
+    <button class="icon tiny" id="edit-desc" title="Edit as plain text" aria-label="Edit description">&#9998;</button>
+  </div>
   <div class="md" id="d-desc-view"></div>
   <textarea id="d-desc" hidden></textarea>
   <label for="d-status">Status</label>
@@ -313,7 +318,7 @@ async function addComment() {
 }
 
 $('close').onclick = closeDrawer;
-$('d-desc-view').onclick = showSource;
+$('edit-desc').onclick = showSource;
 $('d-desc').onblur = showRendered;
 $('new').onclick = () => openDrawer(null);
 $('save').onclick = save;

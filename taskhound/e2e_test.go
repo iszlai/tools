@@ -550,6 +550,9 @@ func TestUIServesTheMarkdownRenderer(t *testing.T) {
 	if !bytes.Contains(page, []byte(`id="close"`)) {
 		t.Error("the drawer has no close control")
 	}
+	if !bytes.Contains(page, []byte(`id="edit-desc"`)) {
+		t.Error("the drawer has no control to edit the description")
+	}
 }
 
 // TestEmbeddedRendererMatchesMdlite catches the copy going stale. taskhound
