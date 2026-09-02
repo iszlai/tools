@@ -1,0 +1,51 @@
+version: 1
+prefix: TH
+next_id: 4
+issues:
+    - id: TH-1
+      title: Smoke-test the taskhound kanban UI in a real browser
+      description: |-
+        The board is covered through its HTTP API and a JS syntax check, but nothing
+        has ever rendered it. Drag-and-drop, the edit drawer and the 2s poll are exactly
+        the kind of thing that only breaks in a browser — diagme hit a focus race that
+        no amount of reading the code would have caught, which is why tests/smoke.js
+        exists there.
+
+        Do the same for taskhound: drive `th ui` in headless Chromium and assert on
+        - a card appears in the right column for each of blocked / ready / doing / done
+        - dragging a card to another column changes its status and it stays there
+        - the drawer saves a title, a description and a blocker edit
+        - adding a comment shows up on the card
+        - the poll picks up an issue filed by the CLI while the page is open
+
+        Needs Playwright's own chromium, as diagme/README.md notes: corporate-managed
+        Chrome refuses to be automated.
+      status: todo
+      created_at: 2026-09-02T08:33:18Z
+      updated_at: 2026-09-02T08:33:18Z
+    - id: TH-2
+      title: Stop the release workflow warning about Node 20
+      description: |-
+        The taskhound-v0.1.0 run annotated: "Node.js 20 is deprecated. The following
+        actions target Node.js 20 but are being forced to run on Node.js 24:
+        actions/checkout@v4, actions/setup-go@v5."
+
+        It is only a warning today, but the forcing is temporary. Bump both actions to
+        whatever majors run on Node 24 natively and confirm a tagged build still
+        publishes all four binaries.
+      status: todo
+      created_at: 2026-09-02T08:33:18Z
+      updated_at: 2026-09-02T08:33:18Z
+    - id: TH-3
+      title: diagme/.claude/settings.local.json is tracked despite .claude/ being gitignored
+      description: |-
+        .gitignore ignores .claude/, but diagme/.claude/settings.local.json was
+        committed before that rule existed, so git keeps tracking it. It holds only tool
+        permissions — nothing sensitive — but the repo is public now and the state is
+        inconsistent: the file is ignored everywhere except where it already exists.
+
+        Decide one way or the other: `git rm --cached` it, or un-ignore it deliberately
+        if the permissions are worth sharing.
+      status: todo
+      created_at: 2026-09-02T08:33:18Z
+      updated_at: 2026-09-02T08:33:18Z

@@ -2,6 +2,9 @@
 
 Small, self-contained tools. Each one stands on its own — no shared install, no build step.
 
+This repo tracks its own open work with one of them: `.taskhound.yaml` is the
+board, and `th next` says what is startable. See `taskhound/` below.
+
 ## `cutout.html` — interactive sprite cutout
 
 Single-file browser tool. No dependencies, no server, no build: open the file.
