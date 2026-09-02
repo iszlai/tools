@@ -177,7 +177,7 @@ this unlock".
 
 ```bash
 cd taskhound && ./install.sh    # ~/.local/bin/th + the agent skill
-# or, without a checkout: gh release download --repo iszlai/tools --pattern 'th_darwin_arm64'
+# or, without a checkout: curl the binary from the latest release (see taskhound/README.md)
 
 cd ~/your-repo && th init
 th add "Extract the rate limiter"
