@@ -1,0 +1,47 @@
+# Cut a taskhound release: tag it `taskhound-vX.Y.Z` and push the tag.
+#
+#   git tag taskhound-v0.1.0 && git push origin taskhound-v0.1.0
+#
+# Assets are named th_<os>_<arch> so the install line in taskhound/README.md
+# resolves them from .../releases/latest/download/.
+name: taskhound release
+
+on:
+  push:
+    tags: ['taskhound-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'tag to build and release, e.g. taskhound-v0.1.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: taskhound
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: taskhound/go.mod
+
+      - name: Test
+        run: make check
+
+      - name: Build every target
+        run: make release VERSION=${{ github.event.inputs.tag || github.ref_name }}
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag='${{ github.event.inputs.tag || github.ref_name }}'
+          gh release create "$tag" dist/* \
+            --title "taskhound $tag" \
+            --generate-notes \
+            || gh release upload "$tag" dist/* --clobber

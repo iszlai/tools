@@ -166,3 +166,37 @@ sheet. See `masks/README.txt` for the full notes.
 7. **solidify** — figure interiors made opaque, genuine see-through gaps carved back out
 8. **unmix** — paper colour divided out of partial-alpha pixels, so no halo
 9. **paint** — manual keep/drop overrides from `mask_tool.py`
+
+## `taskhound/` — issues in a file you can commit
+
+A CLI (`th`) over a single `.taskhound.yaml` at the root of a repo, plus a
+kanban board on localhost that can do everything the CLI can. Built for working
+a plan with agents: every issue declares what blocks it, so `th next` answers
+"what can I start right now" and `th dependents` answers "what does finishing
+this unlock".
+
+```bash
+cd taskhound && ./install.sh    # ~/.local/bin/th + the agent skill
+cd ~/your-repo && th init
+th add "Extract the rate limiter"
+th add "Rate-limit the public API" --blocked-by TH-1
+th next
+th ui --open
+```
+
+Only `blocked_by` is stored; `blocks` is derived on read, so the two directions
+can never disagree, and cycles are refused at write time. There is no `blocked`
+status — an issue is blocked when a blocker of it isn't `done`, which is
+computed rather than remembered.
+
+Several agents and a human can drive one board at once: every write is a
+read-modify-write under an exclusive `flock` on a sidecar lock file, landing via
+temp-file-and-rename so a reader never sees half a file. The test suite runs 24
+concurrent `th add` processes against one board and asserts nothing is lost.
+
+`install.sh` also drops a skill in `~/.claude/skills/taskhound/`, so Claude Code
+picks the tool up on its own; `th agent-guide` prints the same document for
+anything else. `taskhound/README.md` has the full command table, the HTTP API,
+and a recipe for migrating an existing `tasks/todo.md` onto a board.
+
+Go, one vendored dependency — `make build` and `make test` need no network.

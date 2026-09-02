@@ -4,3 +4,6 @@ __pycache__/
 .claude/
 node_modules/
 pw-browsers/
+bin/
+.taskhound.yaml.lock
+dist/
