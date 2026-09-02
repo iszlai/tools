@@ -1,6 +1,6 @@
 version: 1
 prefix: TH
-next_id: 7
+next_id: 8
 issues:
     - id: TH-1
       title: Smoke-test the taskhound kanban UI in a real browser
@@ -155,3 +155,32 @@ issues:
         - at: 2026-09-02T11:40:39Z
           author: lehel
           body: 'Fixed in compat.go: reads keep the raw yaml document, and saving re-attaches every key the running build has no struct field for. Known fields can still be removed, because the merge reads the struct tags rather than the file. A board with a higher schema version than the binary is refused on write and still readable. Verified through the CLI: assignee, estimate and a board-level key all survived two writes by a build that models none of them.'
+    - id: TH-7
+      title: th next should detect a deadlocked board and force a pick
+      description: |-
+        `th next` can come back with nothing while open work remains, and then it just
+        shrugs. Two ways that happens:
+
+        - A blocker pointing at an id that no longer exists. `OpenBlockers` counts a
+          missing blocker as open, so the issue is blocked forever by nothing.
+        - A cycle. `SetBlockedBy` refuses to create one, but `.taskhound.yaml` is a
+          file people and older binaries edit, so the graph on disk is not guaranteed
+          to be the graph the API would have allowed.
+
+        Either way the board is stuck and the tool should say so rather than report an
+        empty queue, and it should still hand back something to work on.
+
+        - [ ] a cycle in the stored graph is detected and its members named
+        - [ ] a blocker naming an issue that does not exist is detected and named
+        - [ ] when nothing is ready but open work remains, next picks one anyway and
+              says why it is forced
+        - [ ] a cycle is reported even when something else is ready
+        - [ ] --json carries the diagnosis, not just the picked issue
+      status: done
+      priority: must
+      created_at: 2026-09-02T11:46:56Z
+      updated_at: 2026-09-02T11:49:41Z
+      comments:
+        - at: 2026-09-02T11:49:41Z
+          author: lehel
+          body: 'Done in diagnose.go. Cycles found with a coloured DFS that records the path, so the loop is reported by name; dangling blockers found separately. next reports both on stderr and, when nothing is startable, forces the highest-priority open issue and says why. Kept th next --json a bare array so the documented jq ''.[0].id'' recipe keeps working — on a jammed board that array holds the forced pick with forced: true, so it now returns something actionable in every state.'

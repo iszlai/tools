@@ -78,6 +78,13 @@ th ui --port 8787 --open                  # kanban board on localhost
 `th next` ranks by priority first, then work already `doing`, then whatever
 unblocks the most other issues — so the top row is the thing to pick up.
 
+**A jammed board still gives you a pick.** If the graph holds a loop, or a
+blocker naming an issue that is not on the board, `th next` says so on stderr and
+puts a forced pick in the array with `"forced": true` and a `"forced_reason"`.
+So `th next --json | jq -r '.[0].id'` returns something to start whatever state
+the board is in — check `.[0].forced` before treating it as ordinary work, and
+tell the user what is wrong rather than silently working a jammed board.
+
 ## The done log
 
 `th archive` moves issues finished before a cutoff (default 14 days) into

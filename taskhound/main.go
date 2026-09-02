@@ -192,6 +192,10 @@ type issueView struct {
 	Blocks       []string `json:"blocks"`
 	OpenBlockers []string `json:"open_blockers"`
 	Ready        bool     `json:"ready"`
+	// Set only when this issue is being offered on a board where nothing is
+	// genuinely startable, so a caller can tell a pick from a free choice.
+	Forced       bool   `json:"forced,omitempty"`
+	ForcedReason string `json:"forced_reason,omitempty"`
 }
 
 func view(b *Board, is *Issue) issueView {
@@ -417,12 +421,34 @@ func cmdNext(args []string) error {
 	if *limit > 0 && len(ready) > *limit {
 		ready = ready[:*limit]
 	}
-	if *asJSON {
-		return printJSON(views(b, ready))
+	diag := b.Diagnose(len(ready) > 0)
+
+	// The diagnosis goes to stderr in both modes: it keeps stdout a clean array
+	// for `jq`, and it is the kind of thing a human needs to see even when a
+	// script is reading the output.
+	if diag != nil {
+		diag.report(os.Stderr)
 	}
+
+	if *asJSON {
+		// Still a bare array, so `th next --json | jq -r '.[0].id'` keeps
+		// working. A forced pick takes the place of the empty queue and says so
+		// on the issue, which makes .[0].id give you something to start even on
+		// a jammed board.
+		out := views(b, ready)
+		if len(out) == 0 && diag != nil && diag.Forced != nil {
+			forced := view(b, diag.Forced)
+			forced.Forced = true
+			forced.ForcedReason = diag.Reason
+			out = []issueView{forced}
+		}
+		return printJSON(out)
+	}
+
 	if len(ready) == 0 {
-		// Two very different situations, and telling a finished board it is
-		// deadlocked is the kind of thing that makes a tool feel broken.
+		// A finished board and a jammed one look identical from an empty queue,
+		// and telling a finished board it is deadlocked makes the tool feel
+		// broken. Say which it is, and if it is jammed, break the tie.
 		open := 0
 		for _, is := range b.Issues {
 			if is.Status != StatusDone {
@@ -435,7 +461,7 @@ func cmdNext(args []string) error {
 		case open == 0:
 			fmt.Println("everything on the board is done")
 		default:
-			fmt.Printf("nothing is ready — all %d open issue(s) are waiting on a blocker\n", open)
+			diag.forcedPick(os.Stdout)
 		}
 		return nil
 	}

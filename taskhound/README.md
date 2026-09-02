@@ -155,6 +155,40 @@ th list --priority high
 The default is stored as nothing at all, so an unprioritised board keeps exactly
 the file it always had, and a diff only ever shows a priority somebody chose.
 
+## When the board jams
+
+`SetBlockedBy` refuses to create a cycle, so a board built entirely through `th`
+cannot deadlock: follow the blockers back from any open issue and a DAG has to
+end at something with none, which is ready by definition.
+
+The file is not built entirely through `th`, though. People edit it, merges
+resolve it, and before v0.4.0 an older binary could rewrite it. So the graph on
+disk can hold a loop the API would have rejected, or a blocker naming an issue
+that is not there — which blocks forever, because a blocker that cannot be found
+is never done.
+
+`th next` checks for both, and an empty queue never passes silently as a
+finished board:
+
+```
+$ th next
+loop: TH-1 → TH-2 → TH-1
+missing: TH-3 is blocked by TH-42, which is not on the board
+nothing is startable: every open issue is waiting on another, in a loop (TH-1 → TH-2)
+forced pick: TH-2  Expose the API
+start it anyway, or cut the edge: th update TH-2 --remove-blocked-by TH-1
+```
+
+The forced pick is the highest-priority open issue, then whatever unblocks the
+most — because finishing that is what breaks the loop. A loop is reported even
+when other work is ready, since a corrupt graph will bite later, and a loop made
+entirely of `done` issues is history rather than a problem, so it is ignored.
+
+The diagnosis goes to **stderr**, so `th next --json` stays a clean array for
+`jq`. On a jammed board that array holds the forced pick, carrying
+`"forced": true` and `"forced_reason"`, which means `.[0].id` gives you
+something to start whatever state the board is in.
+
 ## The done log
 
 A board that keeps every issue you ever closed stops being a board. `th archive`
