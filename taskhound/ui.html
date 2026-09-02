@@ -71,6 +71,32 @@
     border-radius: 6px; padding: 7px 9px; font: inherit;
   }
   textarea { min-height: 110px; resize: vertical; font-family: ui-monospace, monospace; font-size: 13px; }
+
+  /* Rendered description. Click it to get the plain text back. */
+  .md {
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px;
+    min-height: 110px; cursor: text; background: var(--bg);
+  }
+  .md:hover { border-color: var(--accent); }
+  .md > *:first-child { margin-top: 0; }
+  .md > *:last-child { margin-bottom: 0; }
+  .md h1, .md h2, .md h3 { font-size: 14px; margin: 12px 0 6px; }
+  .md h1 { font-size: 15px; }
+  .md p { margin: 6px 0; }
+  .md ul, .md ol { margin: 6px 0; padding-left: 20px; }
+  .md li { margin: 2px 0; }
+  .md li.task { list-style: none; margin-left: -18px; }
+  .md li.task input { width: auto; margin-right: 6px; vertical-align: -1px; }
+  .md li.task.done { color: var(--dim); text-decoration: line-through; }
+  .md code {
+    background: #2b3040; border-radius: 3px; padding: 1px 4px;
+    font-family: ui-monospace, monospace; font-size: 12px;
+  }
+  .md pre {
+    background: #2b3040; border-radius: 5px; padding: 8px 10px; overflow-x: auto;
+    font-family: ui-monospace, monospace; font-size: 12px; margin: 6px 0;
+  }
+  .md .placeholder { color: var(--dim); font-style: italic; }
   input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
   .row { display: flex; gap: 8px; margin-top: 16px; }
   .row > * { flex: 1; }
@@ -96,8 +122,9 @@
   <h2 id="d-id">New issue</h2>
   <label for="d-title">Title</label>
   <input id="d-title" autocomplete="off">
-  <label for="d-desc">Description</label>
-  <textarea id="d-desc"></textarea>
+  <label for="d-desc">Description <span class="derived">(markdown — click to edit)</span></label>
+  <div class="md" id="d-desc-view"></div>
+  <textarea id="d-desc" hidden></textarea>
   <label for="d-status">Status</label>
   <select id="d-status"></select>
   <label for="d-blocked">Blocked by <span class="derived">(ids, comma separated)</span></label>
@@ -119,6 +146,7 @@
   </div>
 </div>
 
+<script src="/md.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const COLUMNS = [
@@ -138,6 +166,24 @@ function column(is) {
   if (is.status === 'done') return 'done';
   if (is.status === 'doing') return 'doing';
   return is.open_blockers.length ? 'blocked' : 'ready';
+}
+
+// The textarea holds the value; the rendered block is only ever a view of it,
+// so saving does not care which one you are looking at. md() comes from
+// mdlite/md.js, which escapes before it renders.
+function showRendered() {
+  const src = $('d-desc').value;
+  $('d-desc-view').innerHTML = src.trim()
+    ? md(src)
+    : '<p class="placeholder">click to add a description\u2026</p>';
+  $('d-desc-view').hidden = false;
+  $('d-desc').hidden = true;
+}
+
+function showSource() {
+  $('d-desc-view').hidden = true;
+  $('d-desc').hidden = false;
+  $('d-desc').focus();
 }
 
 async function api(method, path, body) {
@@ -207,6 +253,7 @@ function openDrawer(id) {
   $('d-id').textContent = is ? is.id : 'New issue';
   $('d-title').value = is ? is.title : '';
   $('d-desc').value = is ? (is.description || '') : '';
+  showRendered();
   $('d-status').innerHTML = board.statuses
     .map(s => `<option ${is && is.status === s ? 'selected' : ''}>${s}</option>`).join('');
   $('d-blocked').value = is ? is.blocked_by.join(', ') : '';
@@ -253,6 +300,8 @@ async function addComment() {
   } catch (err) { $('err').textContent = err.message; }
 }
 
+$('d-desc-view').onclick = showSource;
+$('d-desc').onblur = showRendered;
 $('new').onclick = () => openDrawer(null);
 $('save').onclick = save;
 $('cancel').onclick = closeDrawer;

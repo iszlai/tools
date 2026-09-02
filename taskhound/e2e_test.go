@@ -512,3 +512,58 @@ func TestParseAge(t *testing.T) {
 		t.Error("parseAge should reject nonsense")
 	}
 }
+
+// TestUIServesTheMarkdownRenderer guards the wiring between the embedded copy
+// of mdlite and the page that needs it: a 404 here would leave the description
+// silently unrendered, which nothing else in the suite would notice.
+func TestUIServesTheMarkdownRenderer(t *testing.T) {
+	c := newCLI(t)
+	srv := startUI(t, c)
+	defer srv.stop()
+
+	res, err := http.Get(srv.url + "/md.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("GET /md.js = %d", res.StatusCode)
+	}
+	if ct := res.Header.Get("Content-Type"); !strings.Contains(ct, "javascript") {
+		t.Errorf("Content-Type = %q, want javascript", ct)
+	}
+	if !bytes.Contains(body, []byte("function md(")) {
+		t.Error("what is served is not the renderer")
+	}
+
+	// ...and the page actually asks for it.
+	res, err = http.Get(srv.url + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !bytes.Contains(page, []byte(`src="/md.js"`)) {
+		t.Error("ui.html does not load /md.js")
+	}
+}
+
+// TestEmbeddedRendererMatchesMdlite catches the copy going stale. taskhound
+// ships md.js inside the binary, so drift here is drift in a release.
+func TestEmbeddedRendererMatchesMdlite(t *testing.T) {
+	source, err := os.ReadFile(filepath.Join("..", "mdlite", "md.js"))
+	if os.IsNotExist(err) {
+		t.Skip("mdlite is not checked out beside taskhound")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	local, err := os.ReadFile("md.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(source, local) {
+		t.Error("taskhound/md.js has drifted from mdlite/md.js -- run: make -C ../mdlite install")
+	}
+}

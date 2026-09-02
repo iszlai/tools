@@ -140,6 +140,15 @@ on the next sync, because the board is what is authoritative.
 `th ui` serves a kanban on `127.0.0.1` — loopback only, since the API writes to
 your files.
 
+Descriptions are markdown. The drawer shows them rendered — headings, code,
+and the `- [ ]` acceptance criteria every ticket is made of — and clicking the
+rendered block swaps it for the plain text, which re-renders when you click
+away. The textarea is always the value; the rendered block is only ever a view
+of it, so saving does not care which one you are looking at. Rendering is
+`mdlite`, copied in from `mdlite/md.js` and served out of the binary at
+`/md.js`; it escapes before it renders, so a description that arrives over the
+API cannot inject markup.
+
 Four columns: **Blocked**, **Ready**, **Doing**, **Done**. The first is derived
 from the dependency edges; the other three are the issue's own status, so
 dragging a card between them is what sets it. Click a card to edit its title,
@@ -262,6 +271,7 @@ taskhound/
 ├── store.go             model, dependency graph, locking, atomic save
 ├── web.go               HTTP server and JSON API
 ├── ui.html              the kanban board, embedded into the binary
+├── md.js                a copy of mdlite/md.js, also embedded
 ├── skill/taskhound/     the agent skill, also embedded for `th agent-guide`
 ├── store_test.go        graph and persistence
 ├── e2e_test.go          the real binary: CLI, HTTP, concurrency

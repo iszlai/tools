@@ -51,6 +51,30 @@ where you left off. Work is also auto-saved after every stroke, so if you just
 close the tab a **Resume** button appears next time. Auto-save uses browser
 storage and skips images over ~4 MB (it says so); the button always works.
 
+## `mdlite/` — markdown small enough to read in one sitting
+
+~90 lines, no dependencies, no build step, no CDN. It exists because `diagme`
+and `taskhound` both wanted the same small renderer, and neither could justify a
+real one.
+
+```bash
+cd mdlite
+make test      # 9 tests, node only
+make install   # push md.js into every consumer
+make check     # test, then fail if a consumer's copy has drifted
+```
+
+Headings, bold, italic, inline code, fenced code, ordered and unordered lists,
+and `- [ ]` / `- [x]` task lists. No links, images, tables or nested lists —
+none has been needed yet. Every path escapes before it emits, which matters
+because taskhound renders descriptions that arrived over HTTP.
+
+The consumers hold **copies** rather than referencing it, because neither can
+reach outside its own directory: Go's `embed` refuses `..` and will not follow a
+symlink, and nginx serves only `diagme/app`. The copies are byte-identical,
+`make check` fails on drift, and taskhound asserts it in a Go test too, since
+its copy is compiled into released binaries. Edit `mdlite/md.js`, never a copy.
+
 ## `diagme/` — quick local diagramming
 
 Excalidraw-shaped sketchpad for the diagrams you draw once and throw away. Vanilla
@@ -85,8 +109,8 @@ localStorage, so a refresh or a container restart loses nothing.
 
 Bends are the only real geometry in it: dragging an arrow's middle handle stores a
 pass-through point, and the curve is a quadratic Bézier whose control point is solved
-so the line goes *through* that handle rather than near it. Markdown docs render via a
-~40-line renderer inside an SVG `foreignObject` — no CDN, works offline.
+so the line goes *through* that handle rather than near it. Markdown docs render inside an SVG
+`foreignObject` via `mdlite` — no CDN, works offline.
 
 ### Smoke test
 

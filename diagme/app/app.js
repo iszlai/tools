@@ -122,42 +122,7 @@ function rectsIntersect(a, b) {
   return a.x <= b.x + b.w && a.x + a.w >= b.x && a.y <= b.y + b.h && a.y + a.h >= b.y;
 }
 
-/* ========================= mini markdown ============================ */
-
-function md(src) {
-  const inline = t => esc(t)
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>');
-
-  let out = '', list = null, inCode = false, codeBuf = [];
-  const closeList = () => { if (list) { out += `</${list}>`; list = null; } };
-
-  for (const line of src.split('\n')) {
-    if (line.trim().startsWith('```')) {
-      if (inCode) { out += '<pre>' + esc(codeBuf.join('\n')) + '</pre>'; codeBuf = []; inCode = false; }
-      else { closeList(); inCode = true; }
-      continue;
-    }
-    if (inCode) { codeBuf.push(line); continue; }
-
-    const h = line.match(/^(#{1,3})\s+(.*)/);
-    if (h) { closeList(); const n = h[1].length; out += `<h${n}>${inline(h[2])}</h${n}>`; continue; }
-
-    const ul = line.match(/^\s*[-*]\s+(.*)/);
-    if (ul) { if (list !== 'ul') { closeList(); out += '<ul>'; list = 'ul'; } out += `<li>${inline(ul[1])}</li>`; continue; }
-
-    const ol = line.match(/^\s*\d+[.)]\s+(.*)/);
-    if (ol) { if (list !== 'ol') { closeList(); out += '<ol>'; list = 'ol'; } out += `<li>${inline(ol[1])}</li>`; continue; }
-
-    closeList();
-    if (line.trim() === '') continue;
-    out += `<p>${inline(line)}</p>`;
-  }
-  if (inCode) out += '<pre>' + esc(codeBuf.join('\n')) + '</pre>';
-  closeList();
-  return out;
-}
+/* mini markdown lives in mdlite/md.js, loaded before this file */
 
 /* ============================ rendering ============================= */
 

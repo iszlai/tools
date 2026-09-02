@@ -24,6 +24,10 @@ Without Docker: open `app/index.html` directly, or `python3 -m http.server -d ap
 | Text | `T` | click to place, type; double-click to re-edit; corner resize scales font |
 | Text doc | `D` | markdown box (`#` headings, `**bold**`, `` `code` ``, lists, code fences) |
 
+Markdown rendering is `mdlite`: `app/md.js` is a copy of `../mdlite/md.js`.
+Edit it there and run `make -C ../mdlite install` — `make -C ../mdlite check`
+fails if the copy has drifted. It also handles `- [ ]` task lists.
+
 - 6-color palette — sets color for new shapes; recolors the selected shape.
 - Zoom: `⌘/ctrl + scroll` or pinch, plus the `− / %` `/ +` buttons (click `%` to reset).
 - Pan: two-finger scroll, `space + drag`, or middle-mouse drag.

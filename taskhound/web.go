@@ -15,6 +15,12 @@ import (
 //go:embed ui.html
 var uiHTML []byte
 
+// mdJS is mdlite, copied in from mdlite/md.js. embed cannot reach outside this
+// directory, so the copy is checked in; `make -C mdlite check` catches drift.
+//
+//go:embed md.js
+var mdJS []byte
+
 // cmdUI serves the kanban board. It binds the loopback interface only: the
 // board is a local file and the API can write to it, so it has no business
 // being reachable from the network.
@@ -68,6 +74,11 @@ func routes(s *Store) http.Handler {
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(uiHTML)
+	})
+
+	mux.HandleFunc("GET /md.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Write(mdJS)
 	})
 
 	mux.HandleFunc("GET /api/board", func(w http.ResponseWriter, r *http.Request) {
