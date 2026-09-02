@@ -88,10 +88,11 @@ func routes(s *Store) http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"prefix":   b.Prefix,
-			"statuses": Statuses,
-			"file":     s.Path,
-			"issues":   views(b, b.Issues),
+			"prefix":     b.Prefix,
+			"statuses":   Statuses,
+			"priorities": Priorities,
+			"file":       s.Path,
+			"issues":     views(b, b.Issues),
 		})
 	})
 
@@ -100,6 +101,7 @@ func routes(s *Store) http.Handler {
 			Title       string   `json:"title"`
 			Description string   `json:"description"`
 			Status      string   `json:"status"`
+			Priority    string   `json:"priority"`
 			BlockedBy   []string `json:"blocked_by"`
 			Labels      []string `json:"labels"`
 		}
@@ -118,9 +120,16 @@ func routes(s *Store) http.Handler {
 			httpError(w, http.StatusBadRequest, fmt.Errorf("bad status %q", in.Status))
 			return
 		}
+		if in.Priority == "" {
+			in.Priority = PriorityNormal
+		}
+		if !validPriority(in.Priority) {
+			httpError(w, http.StatusBadRequest, fmt.Errorf("bad priority %q", in.Priority))
+			return
+		}
 		var out issueView
 		err := s.Update(func(b *Board) error {
-			is := b.Add(in.Title, in.Description, in.Status, in.Labels)
+			is := b.Add(in.Title, in.Description, in.Status, in.Priority, in.Labels)
 			if err := b.SetBlockedBy(is, in.BlockedBy); err != nil {
 				return err
 			}
@@ -141,6 +150,7 @@ func routes(s *Store) http.Handler {
 			Title       *string   `json:"title"`
 			Description *string   `json:"description"`
 			Status      *string   `json:"status"`
+			Priority    *string   `json:"priority"`
 			BlockedBy   *[]string `json:"blocked_by"`
 			Labels      *[]string `json:"labels"`
 		}
@@ -150,6 +160,10 @@ func routes(s *Store) http.Handler {
 		}
 		if in.Status != nil && !validStatus(*in.Status) {
 			httpError(w, http.StatusBadRequest, fmt.Errorf("bad status %q", *in.Status))
+			return
+		}
+		if in.Priority != nil && !validPriority(*in.Priority) {
+			httpError(w, http.StatusBadRequest, fmt.Errorf("bad priority %q", *in.Priority))
 			return
 		}
 		var out issueView
@@ -169,6 +183,9 @@ func routes(s *Store) http.Handler {
 			}
 			if in.Status != nil {
 				is.Status = *in.Status
+			}
+			if in.Priority != nil {
+				is.Priority = storedPriority(*in.Priority)
 			}
 			if in.Labels != nil {
 				is.Labels = *in.Labels

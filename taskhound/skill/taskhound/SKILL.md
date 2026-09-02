@@ -24,6 +24,11 @@ th list >/dev/null 2>&1 || echo "no board here — run: th init"
 - **Store one direction of each edge.** Only `blocked_by` is stored; `blocks`
   is derived. `--blocks X` is sugar that writes the edge onto X. Cycles are
   refused.
+- **Priorities are `must`, `high`, `normal`, `low`**, defaulting to `normal`.
+  `must` outranks everything in `th next`, including work in flight; `low` sorts
+  last but is still offered when nothing else is ready. Reserve `must` for
+  drop-everything work — if you mark several issues `must`, you have not
+  prioritised anything.
 - **Statuses are `todo`, `doing`, `done`.** There is no `blocked` status — an
   issue is blocked when a blocker of it is not yet `done`, and that is computed.
 - **Create blockers before the issues that depend on them**, so the ids exist.
@@ -40,12 +45,14 @@ multi-line body
 EOF
 th add "Title" --blocked-by TH-1,TH-2     # declare blocking edges up front
 th add "Title" --blocks TH-9              # make TH-9 wait on the new issue
+th add "Title" --priority must             # must|high|normal|low, default normal
 th add "Title" --label ready-for-agent --json
 
 th list --json                            # everything
 th list --status doing --json
 th list --ready --json                    # nothing open blocking them
 th list --label ready-for-agent --json
+th list --priority must --json
 
 th next --json                            # startable now, best leverage first
 th show TH-3 --json                       # one issue, full detail
@@ -53,6 +60,7 @@ th deps TH-3 --json                       # all TH-3 transitively waits on
 th dependents TH-3 --json                 # all that transitively wait on TH-3
 
 th update TH-3 --status doing
+th update TH-3 --priority high
 th update TH-3 --title "New title" -d "New body"
 th update TH-3 --add-blocked-by TH-1 --remove-blocked-by TH-2
 th update TH-3 --blocked-by TH-1,TH-4     # replace the whole blocker list
@@ -67,8 +75,8 @@ th sync --repo owner/name                 # push the board to GitHub Issues
 th ui --port 8787 --open                  # kanban board on localhost
 ```
 
-`th next` ranks work already `doing` first, then whatever unblocks the most
-other issues — so the top row is the highest-leverage thing to pick up.
+`th next` ranks by priority first, then work already `doing`, then whatever
+unblocks the most other issues — so the top row is the thing to pick up.
 
 ## The done log
 

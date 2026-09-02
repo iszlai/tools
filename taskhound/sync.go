@@ -267,11 +267,15 @@ func blockerRefs(b *Board, is *Issue) string {
 
 // githubLabels carries the board's own labels, plus "doing" — without it the
 // open/closed mapping would lose the distinction between work not started and
-// work in flight.
+// work in flight — plus the priority, when it is not the default. "normal" is
+// left off: labelling every issue with the default says nothing.
 func githubLabels(is *Issue) []string {
 	labels := append([]string{}, is.Labels...)
 	if is.Status == StatusDoing && !hasString(labels, StatusDoing) {
 		labels = append(labels, StatusDoing)
+	}
+	if p := effectivePriority(is.Priority); p != PriorityNormal && !hasString(labels, p) {
+		labels = append(labels, p)
 	}
 	return labels
 }

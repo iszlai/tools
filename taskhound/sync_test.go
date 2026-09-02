@@ -75,8 +75,8 @@ func syncFixture(t *testing.T) (*Store, *fakeGH) {
 		t.Fatal(err)
 	}
 	if err := s.Update(func(b *Board) error {
-		schema := b.Add("Add the ledger schema", "Tables and indexes.", StatusTodo, []string{"backend"})
-		api := b.Add("Expose the ledger API", "", StatusTodo, nil)
+		schema := b.Add("Add the ledger schema", "Tables and indexes.", StatusTodo, PriorityNormal, []string{"backend"})
+		api := b.Add("Expose the ledger API", "", StatusTodo, PriorityNormal, nil)
 		return b.SetBlockedBy(api, []string{schema.ID})
 	}); err != nil {
 		t.Fatal(err)

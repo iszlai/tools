@@ -186,6 +186,9 @@ func readText(v string) (string, error) {
 // consumers never have to recompute them.
 type issueView struct {
 	*Issue
+	// Shadows Issue.Priority so JSON consumers always see a concrete value,
+	// even though the file leaves the default unwritten.
+	Priority     string   `json:"priority"`
 	Blocks       []string `json:"blocks"`
 	OpenBlockers []string `json:"open_blockers"`
 	Ready        bool     `json:"ready"`
@@ -194,6 +197,7 @@ type issueView struct {
 func view(b *Board, is *Issue) issueView {
 	v := issueView{
 		Issue:        is,
+		Priority:     effectivePriority(is.Priority),
 		Blocks:       b.Blocks(is.ID),
 		OpenBlockers: b.OpenBlockers(is),
 		Ready:        b.Ready(is),
@@ -230,13 +234,13 @@ func printTable(b *Board, issues []*Issue) {
 		return
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tSTATUS\tBLOCKED BY\tTITLE")
+	fmt.Fprintln(w, "ID\tPRI\tSTATUS\tBLOCKED BY\tTITLE")
 	for _, is := range issues {
 		blockers := strings.Join(b.OpenBlockers(is), ",")
 		if blockers == "" {
 			blockers = "-"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", is.ID, is.Status, blockers, is.Title)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", is.ID, effectivePriority(is.Priority), is.Status, blockers, is.Title)
 	}
 	w.Flush()
 }
@@ -274,6 +278,7 @@ func cmdAdd(args []string) error {
 	fs, file := newFS("add")
 	desc := fs.String("d", "", "description (use - to read stdin)")
 	status := fs.String("status", StatusTodo, "todo|doing|done")
+	priority := fs.String("priority", PriorityNormal, "must|high|normal|low")
 	var blockedBy, blocks, labels stringList
 	fs.Var(&blockedBy, "blocked-by", "ids this issue waits on (repeatable, comma ok)")
 	fs.Var(&blocks, "blocks", "ids that should wait on this issue")
@@ -285,6 +290,9 @@ func cmdAdd(args []string) error {
 	}
 	if !validStatus(*status) {
 		return fmt.Errorf("bad status %q (want %s)", *status, strings.Join(Statuses, "|"))
+	}
+	if !validPriority(*priority) {
+		return fmt.Errorf("bad priority %q (want %s)", *priority, strings.Join(Priorities, "|"))
 	}
 	body, err := readText(*desc)
 	if err != nil {
@@ -298,7 +306,7 @@ func cmdAdd(args []string) error {
 	var created *Issue
 	var board *Board
 	err = s.Update(func(b *Board) error {
-		is := b.Add(title, body, *status, labels.vals)
+		is := b.Add(title, body, *status, *priority, labels.vals)
 		if err := b.SetBlockedBy(is, blockedBy.vals); err != nil {
 			return err
 		}
@@ -329,6 +337,7 @@ func cmdList(args []string) error {
 	fs, file := newFS("list")
 	status := fs.String("status", "", "only this status")
 	label := fs.String("label", "", "only issues carrying this label")
+	priority := fs.String("priority", "", "only this priority")
 	ready := fs.Bool("ready", false, "only issues with no open blockers")
 	blocked := fs.Bool("blocked", false, "only issues with open blockers")
 	asJSON := fs.Bool("json", false, "print JSON")
@@ -349,6 +358,9 @@ func cmdList(args []string) error {
 			continue
 		}
 		if *label != "" && !hasString(is.Labels, *label) {
+			continue
+		}
+		if *priority != "" && effectivePriority(is.Priority) != *priority {
 			continue
 		}
 		open := len(b.OpenBlockers(is)) > 0
@@ -388,9 +400,15 @@ func cmdNext(args []string) error {
 			ready = append(ready, is)
 		}
 	}
-	// Work already in flight first, then whatever unblocks the most.
+	// Priority first, and it is absolute: a "must" outranks work already in
+	// flight, and a "low" is only ever reached once nothing else is ready.
+	// Within one priority, work in flight comes first, then whatever unblocks
+	// the most other issues.
 	sort.SliceStable(ready, func(i, j int) bool {
 		a, c := ready[i], ready[j]
+		if ra, rc := priorityRank(a.Priority), priorityRank(c.Priority); ra != rc {
+			return ra < rc
+		}
 		if (a.Status == StatusDoing) != (c.Status == StatusDoing) {
 			return a.Status == StatusDoing
 		}
@@ -407,9 +425,9 @@ func cmdNext(args []string) error {
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tSTATUS\tUNBLOCKS\tTITLE")
+	fmt.Fprintln(w, "ID\tPRI\tSTATUS\tUNBLOCKS\tTITLE")
 	for _, is := range ready {
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", is.ID, is.Status, len(b.Dependents(is.ID)), is.Title)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\n", is.ID, effectivePriority(is.Priority), is.Status, len(b.Dependents(is.ID)), is.Title)
 	}
 	w.Flush()
 	return nil
@@ -459,6 +477,7 @@ func cmdShow(args []string) error {
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "status:\t%s\n", state)
+	fmt.Fprintf(w, "priority:\t%s\n", effectivePriority(is.Priority))
 	fmt.Fprintf(w, "blocked by:\t%s\n", withStatus(b, is.BlockedBy))
 	fmt.Fprintf(w, "blocks:\t%s\n", withStatus(b, b.Blocks(is.ID)))
 	if len(is.Labels) > 0 {
@@ -639,6 +658,7 @@ func cmdUpdate(args []string) error {
 	title := fs.String("title", "", "new title")
 	desc := fs.String("d", "", "new description (use - to read stdin)")
 	status := fs.String("status", "", "todo|doing|done")
+	priority := fs.String("priority", "", "must|high|normal|low")
 	var blockedBy, addBlockedBy, rmBlockedBy, blocks, labels, unlabels stringList
 	fs.Var(&blockedBy, "blocked-by", "replace the blocker list")
 	fs.Var(&addBlockedBy, "add-blocked-by", "add a blocker")
@@ -654,6 +674,9 @@ func cmdUpdate(args []string) error {
 	}
 	if *status != "" && !validStatus(*status) {
 		return fmt.Errorf("bad status %q (want %s)", *status, strings.Join(Statuses, "|"))
+	}
+	if *priority != "" && !validPriority(*priority) {
+		return fmt.Errorf("bad priority %q (want %s)", *priority, strings.Join(Priorities, "|"))
 	}
 	body, err := readText(*desc)
 	if err != nil {
@@ -679,6 +702,9 @@ func cmdUpdate(args []string) error {
 		}
 		if *status != "" {
 			is.Status = *status
+		}
+		if *priority != "" {
+			is.Priority = storedPriority(*priority)
 		}
 
 		next := append([]string{}, is.BlockedBy...)

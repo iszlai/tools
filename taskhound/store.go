@@ -29,6 +29,57 @@ const (
 
 var Statuses = []string{StatusTodo, StatusDoing, StatusDone}
 
+// Priority orders the ready queue. "must" comes before everything else whatever
+// else is true of it, "low" comes after everything else, and "normal" is what
+// an issue is unless somebody says otherwise -- so an unprioritised board
+// behaves exactly as it did before priorities existed.
+const (
+	PriorityMust   = "must"
+	PriorityHigh   = "high"
+	PriorityNormal = "normal"
+	PriorityLow    = "low"
+)
+
+// Ordered most urgent first; the index is the rank.
+var Priorities = []string{PriorityMust, PriorityHigh, PriorityNormal, PriorityLow}
+
+func validPriority(p string) bool {
+	for _, v := range Priorities {
+		if v == p {
+			return true
+		}
+	}
+	return false
+}
+
+// effectivePriority reads an unset priority as normal, so nothing has to be
+// written into the file to get the default.
+func effectivePriority(p string) string {
+	if p == "" {
+		return PriorityNormal
+	}
+	return p
+}
+
+// storedPriority is the inverse of effectivePriority: the default is stored as
+// nothing at all, so an unprioritised board keeps the file it always had and a
+// diff only ever shows a priority somebody actually chose.
+func storedPriority(p string) string {
+	if p == PriorityNormal {
+		return ""
+	}
+	return p
+}
+
+func priorityRank(p string) int {
+	for i, v := range Priorities {
+		if v == effectivePriority(p) {
+			return i
+		}
+	}
+	return len(Priorities)
+}
+
 func validStatus(s string) bool {
 	for _, v := range Statuses {
 		if v == s {
@@ -49,6 +100,7 @@ type Issue struct {
 	Title       string      `yaml:"title" json:"title"`
 	Description string      `yaml:"description,omitempty" json:"description,omitempty"`
 	Status      string      `yaml:"status" json:"status"`
+	Priority    string      `yaml:"priority,omitempty" json:"priority"`
 	BlockedBy   []string    `yaml:"blocked_by,omitempty" json:"blocked_by"`
 	Labels      []string    `yaml:"labels,omitempty" json:"labels,omitempty"`
 	CreatedAt   time.Time   `yaml:"created_at" json:"created_at"`
@@ -98,13 +150,14 @@ func (b *Board) Get(ref string) (*Issue, error) {
 	return nil, fmt.Errorf("no such issue: %s", id)
 }
 
-func (b *Board) Add(title, description, status string, labels []string) *Issue {
+func (b *Board) Add(title, description, status, priority string, labels []string) *Issue {
 	stamp := now()
 	is := &Issue{
 		ID:          fmt.Sprintf("%s-%d", b.Prefix, b.NextID),
 		Title:       title,
 		Description: description,
 		Status:      status,
+		Priority:    storedPriority(priority),
 		Labels:      labels,
 		CreatedAt:   stamp,
 		UpdatedAt:   stamp,

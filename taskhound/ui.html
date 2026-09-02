@@ -55,6 +55,10 @@
   }
   .chip.stop { color: var(--stop); border-color: #4a2f2f; }
   .chip.label { font-family: inherit; color: var(--accent); border-color: #2c3b57; }
+  .chip.pri { font-family: inherit; text-transform: uppercase; letter-spacing: .05em; font-size: 10px; }
+  .chip.pri.must { color: #ff8b8b; border-color: #6b2f2f; background: #3a2323; }
+  .chip.pri.high { color: var(--warn); border-color: #5a4526; }
+  .chip.pri.low  { color: var(--dim); opacity: .7; }
 
   #drawer {
     position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100%);
@@ -144,6 +148,8 @@
   <textarea id="d-desc" hidden></textarea>
   <label for="d-status">Status</label>
   <select id="d-status"></select>
+  <label for="d-priority">Priority</label>
+  <select id="d-priority"></select>
   <label for="d-blocked">Blocked by <span class="derived">(ids, comma separated)</span></label>
   <input id="d-blocked" autocomplete="off" placeholder="TH-1, TH-2">
   <label for="d-labels">Labels <span class="derived">(comma separated)</span></label>
@@ -173,7 +179,7 @@ const COLUMNS = [
   { key: 'done',    name: 'Done',    status: 'done' },
 ];
 
-let board = { issues: [], statuses: ['todo', 'doing', 'done'] };
+let board = { issues: [], statuses: ['todo', 'doing', 'done'], priorities: ['must', 'high', 'normal', 'low'] };
 let editing = null;            // issue id, or '' while creating
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 
@@ -257,10 +263,12 @@ function card(is) {
   const blocks = is.blocks.length ? `<span class="chip">unblocks ${is.blocks.length}</span>` : '';
   const notes = is.comments?.length ? `<span class="chip">💬 ${is.comments.length}</span>` : '';
   const labels = (is.labels || []).map(l => `<span class="chip label">${esc(l)}</span>`).join('');
+  const pri = is.priority && is.priority !== 'normal'
+    ? `<span class="chip pri ${esc(is.priority)}">${esc(is.priority)}</span>` : '';
   return `<article class="card ${column(is)}" draggable="true" data-id="${esc(is.id)}">
       <div class="id">${esc(is.id)}</div>
       <div class="title">${esc(is.title)}</div>
-      <div class="meta">${blockers}${blocks}${notes}${labels}</div>
+      <div class="meta">${pri}${blockers}${blocks}${notes}${labels}</div>
     </article>`;
 }
 
@@ -273,6 +281,8 @@ function openDrawer(id) {
   showRendered();
   $('d-status').innerHTML = board.statuses
     .map(s => `<option ${is && is.status === s ? 'selected' : ''}>${s}</option>`).join('');
+  $('d-priority').innerHTML = board.priorities
+    .map(p => `<option ${(is ? is.priority : 'normal') === p ? 'selected' : ''}>${p}</option>`).join('');
   $('d-blocked').value = is ? is.blocked_by.join(', ') : '';
   $('d-labels').value = is ? (is.labels || []).join(', ') : '';
   $('d-blocks').textContent = is && is.blocks.length ? is.blocks.join(', ') : '-';
@@ -294,6 +304,7 @@ async function save() {
     title: $('d-title').value.trim(),
     description: $('d-desc').value,
     status: $('d-status').value,
+    priority: $('d-priority').value,
     blocked_by: list($('d-blocked').value),
     labels: list($('d-labels').value),
   };

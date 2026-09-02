@@ -573,3 +573,73 @@ func TestEmbeddedRendererMatchesMdlite(t *testing.T) {
 		t.Error("taskhound/md.js has drifted from mdlite/md.js -- run: make -C ../mdlite install")
 	}
 }
+
+// TestPriorityOrdersTheReadyQueue pins the two rules that make priority worth
+// having: must jumps everything, low waits for everything.
+func TestPriorityOrdersTheReadyQueue(t *testing.T) {
+	c := newCLI(t)
+	low := c.add("Tidy the logs", "--priority", "low")
+	normal := c.add("Normal work")
+	high := c.add("High work", "--priority", "high")
+	inFlight := c.add("Already started")
+	c.run("update", inFlight, "--status", "doing")
+
+	// Work in flight beats other normal work, but not a higher priority.
+	if got := ids(c.json("next", "--json")); strings.Join(got, ",") != strings.Join([]string{high, inFlight, normal, low}, ",") {
+		t.Fatalf("next = %v, want [%s %s %s %s]", got, high, inFlight, normal, low)
+	}
+
+	// "must" disregards everything else, including work already in flight.
+	must := c.add("Production is down", "--priority", "must")
+	if got := ids(c.json("next", "--json")); got[0] != must {
+		t.Fatalf("a must did not come first: %v", got)
+	}
+
+	// ...and low is still last of everything.
+	if got := ids(c.json("next", "--json")); got[len(got)-1] != low {
+		t.Fatalf("low is not last: %v", got)
+	}
+
+	// A low that is the only thing ready is still offered — "low" means last,
+	// not never.
+	for _, id := range []string{must, high, normal, inFlight} {
+		c.run("update", id, "--status", "done")
+	}
+	if got := ids(c.json("next", "--json")); strings.Join(got, ",") != low {
+		t.Fatalf("with only a low issue left, next = %v, want [%s]", got, low)
+	}
+}
+
+func TestPriorityDefaultsToNormalAndIsValidated(t *testing.T) {
+	c := newCLI(t)
+	id := c.add("No priority given")
+
+	var shown issueView
+	if err := json.Unmarshal([]byte(c.run("show", id, "--json")), &shown); err != nil {
+		t.Fatal(err)
+	}
+	if shown.Priority != "normal" {
+		t.Errorf("priority = %q, want normal", shown.Priority)
+	}
+	// The default is not written to the file, so an unprioritised board stays
+	// exactly as clean as it was before priorities existed.
+	raw, err := os.ReadFile(filepath.Join(c.dir, StoreName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "priority:") {
+		t.Errorf("the default priority was written to the file:\n%s", raw)
+	}
+
+	if _, err := c.try("add", "Bad", "--priority", "urgent"); err == nil {
+		t.Error("an unknown priority should be refused")
+	}
+	if _, err := c.try("update", id, "--priority", "urgent"); err == nil {
+		t.Error("an unknown priority should be refused on update")
+	}
+
+	c.run("update", id, "--priority", "must")
+	if got := ids(c.json("list", "--priority", "must", "--json")); strings.Join(got, ",") != id {
+		t.Errorf("list --priority must = %v", got)
+	}
+}

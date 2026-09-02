@@ -65,6 +65,7 @@ th init          # writes ./.taskhound.yaml — commit it
 | **Blocked** | not a status. An issue is blocked when a blocker of it is not `done`, computed on read |
 | **Edge** | only `blocked_by` is stored; `blocks` is derived, so the two directions cannot disagree |
 | **Ready** | not `done`, and every blocker is `done` — this is what `th next` lists |
+| **Priority** | `must`, `high`, `normal`, `low`. `normal` unless you say otherwise |
 
 Cycles are refused at write time, so the graph is always a DAG and `next` can
 never come back empty while open work exists.
@@ -74,13 +75,13 @@ never come back empty while open work exists.
 | Command | Does |
 |---|---|
 | `th init [--prefix TH]` | create `.taskhound.yaml` here |
-| `th add <title>` | `-d BODY` (or `-d -` for stdin), `--blocked-by`, `--blocks`, `--label`, `--status` |
-| `th list` | `--status`, `--label`, `--ready`, `--blocked` |
-| `th next` | startable now, work in flight first, then whatever unblocks the most |
+| `th add <title>` | `-d BODY` (or `-d -` for stdin), `--blocked-by`, `--blocks`, `--label`, `--status`, `--priority` |
+| `th list` | `--status`, `--priority`, `--label`, `--ready`, `--blocked` |
+| `th next` | startable now, in priority order |
 | `th show <id>` | one issue in full, with both edge directions and comments |
 | `th deps <id>` | everything `<id>` transitively waits on |
 | `th dependents <id>` | everything that transitively waits on `<id>` |
-| `th update <id>` | `--title`, `-d`, `--status`, `--blocked-by`, `--add-blocked-by`, `--remove-blocked-by`, `--blocks`, `--label`, `--unlabel` |
+| `th update <id>` | `--title`, `-d`, `--status`, `--priority`, `--blocked-by`, `--add-blocked-by`, `--remove-blocked-by`, `--blocks`, `--label`, `--unlabel` |
 | `th comment <id> <body>` | append a comment |
 | `th archive` | move long-finished issues into the done log; `--older-than`, `--dry-run`, `--list` |
 | `th sync` | push the board to GitHub Issues; `--repo`, `--dry-run` |
@@ -89,6 +90,28 @@ never come back empty while open work exists.
 
 Every command takes `-f <file>`, and every query takes `--json`. Ids are
 case-insensitive and the prefix is optional: `th show 3` is `th show TH-3`.
+
+## Priority
+
+Every issue is `must`, `high`, `normal` or `low`, and `normal` unless you say
+otherwise. It is the first thing `th next` considers:
+
+```bash
+th add "Production is down" --priority must
+th update TH-3 --priority low
+th list --priority high
+```
+
+- **must** outranks everything, including work already in flight. It is for the
+  thing you drop everything for, so use it sparingly — a board where everything
+  is a must is a board with no priorities.
+- **low** sorts after everything else, but it is still offered when nothing else
+  is ready. Last, not never.
+- Within one priority, work already in flight comes first, then whatever
+  unblocks the most other issues.
+
+The default is stored as nothing at all, so an unprioritised board keeps exactly
+the file it always had, and a diff only ever shows a priority somebody chose.
 
 ## The done log
 

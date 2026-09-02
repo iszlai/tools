@@ -11,7 +11,7 @@ func board(t *testing.T) *Board {
 	t.Helper()
 	b := NewBoard("TH")
 	for _, title := range []string{"schema", "api", "ui", "docs"} {
-		b.Add(title, "", StatusTodo, nil)
+		b.Add(title, "", StatusTodo, PriorityNormal, nil)
 	}
 	return b
 }
@@ -104,7 +104,7 @@ func TestSaveRoundTripsAndKeepsDescriptionsReadable(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.Update(func(b *Board) error {
-		b.Add("multi", "first line\nsecond line", StatusTodo, []string{"x"})
+		b.Add("multi", "first line\nsecond line", StatusTodo, PriorityNormal, []string{"x"})
 		return nil
 	}); err != nil {
 		t.Fatal(err)

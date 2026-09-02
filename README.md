@@ -213,6 +213,10 @@ th next
 th ui --open
 ```
 
+Issues carry a priority — `must`, `high`, `normal`, `low` — and `th next` reads
+it first: a `must` outranks even work already in flight, a `low` is only offered
+once nothing else is ready.
+
 Only `blocked_by` is stored; `blocks` is derived on read, so the two directions
 can never disagree, and cycles are refused at write time. There is no `blocked`
 status — an issue is blocked when a blocker of it isn't `done`, which is

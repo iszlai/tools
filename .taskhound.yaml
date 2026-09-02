@@ -21,8 +21,9 @@ issues:
         Needs Playwright's own chromium, as diagme/README.md notes: corporate-managed
         Chrome refuses to be automated.
       status: todo
+      priority: high
       created_at: 2026-09-02T08:33:18Z
-      updated_at: 2026-09-02T08:33:18Z
+      updated_at: 2026-09-02T11:24:45Z
     - id: TH-2
       title: Stop the release workflow warning about Node 20
       description: |-
@@ -47,8 +48,9 @@ issues:
         Decide one way or the other: `git rm --cached` it, or un-ignore it deliberately
         if the permissions are worth sharing.
       status: todo
+      priority: low
       created_at: 2026-09-02T08:33:18Z
-      updated_at: 2026-09-02T08:33:18Z
+      updated_at: 2026-09-02T11:24:45Z
     - id: TH-4
       title: Push taskhound issues to GitHub Issues via the gh CLI
       description: |-
