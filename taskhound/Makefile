@@ -38,6 +38,9 @@ uninstall: ## remove th and the agent skill
 ui: build ## serve the kanban board for the board in this directory
 	$(BIN) ui --port $(PORT) --open
 
+smoke: build ## drive the board in headless Chromium (needs playwright, see tests/smoke.js)
+	PLAYWRIGHT_BROWSERS_PATH=./pw-browsers node tests/smoke.js
+
 release: ## cross-compile every target into dist/
 	mkdir -p dist && rm -f dist/th_*
 	for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do \
@@ -54,4 +57,4 @@ vendor: ## refresh the vendored dependencies (needs network)
 clean: ## remove build output
 	rm -f bin/th dist/th_*
 
-.PHONY: help build test check fmt vet install update uninstall ui release vendor clean
+.PHONY: help build test check fmt vet install update uninstall ui smoke release vendor clean

@@ -83,12 +83,20 @@ already on the latest release (v0.3.0) — nothing to do
 `--no-skill` and `--uninstall`. `make help` lists the build, test and vendor
 targets.
 
-**Keep everyone on the same version.** A newer `th` reads an older board
-without trouble, but the reverse loses data: an older binary that *writes* a
-board silently drops the fields it does not know about. v0.2.0 writing a board
-made by v0.3.0 removes every priority on it, without an error. `th version` says
-which one you have; if several people or agents share a board, upgrade them
-together.
+**Mixing versions.** From v0.4.0 on, a board survives being written by a build
+older than the one that wrote it: saving re-attaches every key the running
+binary has no field for, so a v0.4.0 `th` editing a board full of fields added
+in v0.9.0 keeps them. A board whose `version` is higher than the binary
+understands is refused outright rather than rewritten into something lossy.
+
+Fields the binary *does* know can still be removed, which is the point — the
+merge is decided from the struct, not from what happens to be in the file, so
+clearing a description or dropping a label still sticks.
+
+**v0.3.0 and earlier do not do this.** They drop unknown keys silently: v0.2.0
+writing a board made by v0.3.0 removes every priority on it, with no error. If
+anything on your board still runs one of those, upgrade it — `th version` says
+which it has.
 
 ## Model
 
@@ -335,18 +343,39 @@ If the source list was long and mostly ticked, file the finished items anyway
 and then run `th archive --older-than 0` — the history lands in the done log
 and the board opens on the work that is actually left.
 
+## Smoke test
+
+Which column a card lands in, whether a drag actually moves it, whether the
+drawer writes back, whether the poll notices the CLI — none of that is visible
+to a Go test. `tests/smoke.js` drives the real board in headless Chromium and
+checks 25 of them, including that a refused write leaves both the board and the
+open drawer alone.
+
+```bash
+npm install playwright-core
+PLAYWRIGHT_BROWSERS_PATH=./pw-browsers npx playwright-core install chromium-headless-shell
+make smoke
+```
+
+It needs Playwright's own chromium — corporate-managed Chrome refuses to be
+automated. It is not part of `make check`, so CI stays free of a browser
+download; run it before touching `ui.html`.
+
 ## Layout
 
 ```
 taskhound/
 ├── main.go              CLI: commands, flags, output
 ├── store.go             model, dependency graph, locking, atomic save
+├── compat.go            keeps unknown fields across versions
 ├── web.go               HTTP server and JSON API
 ├── ui.html              the kanban board, embedded into the binary
 ├── md.js                a copy of mdlite/md.js, also embedded
 ├── skill/taskhound/     the agent skill, also embedded for `th agent-guide`
 ├── store_test.go        graph and persistence
 ├── e2e_test.go          the real binary: CLI, HTTP, concurrency
+├── compat_test.go       fields written by a newer th survive an older one
+├── tests/smoke.js       the board in a real browser
 ├── Makefile             build, test, install, vendor
 └── install.sh
 ```

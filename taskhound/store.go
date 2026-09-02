@@ -117,6 +117,10 @@ type Board struct {
 	Prefix  string   `yaml:"prefix" json:"prefix"`
 	NextID  int      `yaml:"next_id" json:"next_id"`
 	Issues  []*Issue `yaml:"issues" json:"issues"`
+
+	// The document this board was parsed from, kept so that saving can carry
+	// over keys written by a newer th. Unexported, so yaml ignores it.
+	raw *yaml.Node
 }
 
 func NewBoard(prefix string) *Board {
@@ -367,6 +371,12 @@ func (s *Store) readUnlocked() (*Board, error) {
 	if err := yaml.Unmarshal(data, &b); err != nil {
 		return nil, fmt.Errorf("%s is not valid taskhound YAML: %w", s.Path, err)
 	}
+	// Parsed a second time as a plain document: this is the only record of any
+	// field a newer th wrote that this build has no struct field for.
+	var raw yaml.Node
+	if err := yaml.Unmarshal(data, &raw); err == nil && raw.Kind != 0 {
+		b.raw = &raw
+	}
 	if b.Prefix == "" {
 		b.Prefix = "TH"
 	}
@@ -407,7 +417,11 @@ func (s *Store) Update(fn func(*Board) error) error {
 }
 
 func (s *Store) saveUnlocked(b *Board) error {
-	return writeAtomic(s.Path, b)
+	data, err := marshalBoard(b)
+	if err != nil {
+		return err
+	}
+	return writeBytes(s.Path, data)
 }
 
 // writeAtomic renders v as YAML and swings it into place with a rename, so a
@@ -417,6 +431,10 @@ func writeAtomic(path string, v any) error {
 	if err != nil {
 		return err
 	}
+	return writeBytes(path, data)
+}
+
+func writeBytes(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".taskhound-*.tmp")
 	if err != nil {

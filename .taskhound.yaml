@@ -20,10 +20,17 @@ issues:
 
         Needs Playwright's own chromium, as diagme/README.md notes: corporate-managed
         Chrome refuses to be automated.
-      status: todo
+      status: done
       priority: high
       created_at: 2026-09-02T08:33:18Z
-      updated_at: 2026-09-02T11:24:45Z
+      updated_at: 2026-09-02T11:43:50Z
+      comments:
+        - at: 2026-09-02T11:38:49Z
+          author: lehel
+          body: 'Reset to todo: this was flipped to done by a stray drag on the board at 11:37, but no smoke test exists in the repo yet.'
+        - at: 2026-09-02T11:43:50Z
+          author: lehel
+          body: 'Done: tests/smoke.js drives the real board in headless Chromium, 25 checks — columns, drag between columns writing through to the file, closing a blocker freeing what it blocked, the drawer saving title/description/blockers, markdown rendering and the pencil, comments, the close button, the 2s poll picking up a CLI-filed issue, filing from the board, and a refused write leaving both board and drawer alone. Playwright dragAndDrop drives the HTML5 events natively, no synthetic-event workaround needed. make smoke; kept out of make check so CI needs no browser.'
     - id: TH-2
       title: Stop the release workflow warning about Node 20
       description: |-
@@ -34,9 +41,13 @@ issues:
         It is only a warning today, but the forcing is temporary. Bump both actions to
         whatever majors run on Node 24 natively and confirm a tagged build still
         publishes all four binaries.
-      status: todo
+      status: done
       created_at: 2026-09-02T08:33:18Z
-      updated_at: 2026-09-02T08:33:18Z
+      updated_at: 2026-09-02T11:43:50Z
+      comments:
+        - at: 2026-09-02T11:43:50Z
+          author: lehel
+          body: actions/checkout@v4 -> v5 and actions/setup-go@v5 -> v6, both of which run on Node 24 natively. Verified by the release build for v0.4.0.
     - id: TH-3
       title: diagme/.claude/settings.local.json is tracked despite .claude/ being gitignored
       description: |-
@@ -47,10 +58,14 @@ issues:
 
         Decide one way or the other: `git rm --cached` it, or un-ignore it deliberately
         if the permissions are worth sharing.
-      status: todo
+      status: done
       priority: low
       created_at: 2026-09-02T08:33:18Z
-      updated_at: 2026-09-02T11:24:45Z
+      updated_at: 2026-09-02T11:43:50Z
+      comments:
+        - at: 2026-09-02T11:43:50Z
+          author: lehel
+          body: git rm --cached diagme/.claude/settings.local.json. It stays on disk and .gitignore:4 (.claude/) now actually covers it; it only held tool permissions, nothing sensitive.
     - id: TH-4
       title: Push taskhound issues to GitHub Issues via the gh CLI
       description: |-
@@ -132,7 +147,11 @@ issues:
         - [ ] an old binary writing a new board preserves fields it does not understand
         - [ ] a test round-trips a board containing an unknown key and asserts it survives
         - [ ] writing a board with a newer schema version than the binary is refused
-      status: todo
+      status: done
       priority: high
       created_at: 2026-09-02T11:35:10Z
-      updated_at: 2026-09-02T11:35:10Z
+      updated_at: 2026-09-02T11:40:39Z
+      comments:
+        - at: 2026-09-02T11:40:39Z
+          author: lehel
+          body: 'Fixed in compat.go: reads keep the raw yaml document, and saving re-attaches every key the running build has no struct field for. Known fields can still be removed, because the merge reads the struct tags rather than the file. A board with a higher schema version than the binary is refused on write and still readable. Verified through the CLI: assignee, estimate and a board-level key all survived two writes by a build that models none of them.'

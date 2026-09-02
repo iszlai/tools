@@ -643,3 +643,32 @@ func TestPriorityDefaultsToNormalAndIsValidated(t *testing.T) {
 		t.Errorf("list --priority must = %v", got)
 	}
 }
+
+// A finished board is not a deadlocked one, and an empty board is neither.
+func TestNextExplainsWhyThereIsNothingToDo(t *testing.T) {
+	c := newCLI(t)
+	if out := c.run("next"); !strings.Contains(out, "empty") {
+		t.Errorf("empty board: %q", out)
+	}
+
+	a := c.add("Only issue")
+	c.run("update", a, "--status", "done")
+	if out := c.run("next"); !strings.Contains(out, "done") {
+		t.Errorf("finished board: %q", out)
+	}
+
+	b := c.add("Blocked forever")
+	blocker := c.add("Never finished")
+	c.run("update", b, "--blocked-by", blocker)
+	c.run("update", blocker, "--status", "done")
+	c.run("update", b, "--status", "done")
+	// Now make one genuinely stuck.
+	stuck := c.add("Stuck")
+	gate := c.add("The gate")
+	c.run("update", stuck, "--blocked-by", gate)
+	c.run("update", gate, "--status", "doing")
+	out := c.run("next")
+	if !strings.Contains(out, "The gate") {
+		t.Errorf("the gate is doing and unblocked, it should be offered: %q", out)
+	}
+}

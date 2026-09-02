@@ -421,7 +421,22 @@ func cmdNext(args []string) error {
 		return printJSON(views(b, ready))
 	}
 	if len(ready) == 0 {
-		fmt.Println("nothing is ready — every open issue still has an open blocker")
+		// Two very different situations, and telling a finished board it is
+		// deadlocked is the kind of thing that makes a tool feel broken.
+		open := 0
+		for _, is := range b.Issues {
+			if is.Status != StatusDone {
+				open++
+			}
+		}
+		switch {
+		case len(b.Issues) == 0:
+			fmt.Println("the board is empty")
+		case open == 0:
+			fmt.Println("everything on the board is done")
+		default:
+			fmt.Printf("nothing is ready — all %d open issue(s) are waiting on a blocker\n", open)
+		}
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
