@@ -10,6 +10,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -34,6 +35,7 @@ usage: th <command> [flags]
   dependents <id>          everything that transitively waits on <id>
   update <id>              change title, description, status, blockers, labels
   comment <id> <body>      append a comment
+  archive                  move long-finished issues into the done log
   ui                       serve the kanban board on localhost
   agent-guide              print the usage guide written for LLM agents
   version                  print the version
@@ -72,6 +74,8 @@ func main() {
 		err = cmdUpdate(args)
 	case "comment":
 		err = cmdComment(args)
+	case "archive":
+		err = cmdArchive(args)
 	case "ui":
 		err = cmdUI(args)
 	case "agent-guide":
@@ -425,7 +429,21 @@ func cmdShow(args []string) error {
 	}
 	is, err := b.Get(rest[0])
 	if err != nil {
-		return err
+		// An id that has left the board is not a typo — look in the done log
+		// before telling the user it does not exist.
+		a, aerr := s.ReadArchive()
+		if aerr != nil {
+			return err
+		}
+		for _, old := range a.Issues {
+			if old.ID == b.NormalizeID(rest[0]) {
+				is = old
+				break
+			}
+		}
+		if is == nil {
+			return fmt.Errorf("%w (not in the done log either)", err)
+		}
 	}
 	if *asJSON {
 		return printJSON(view(b, is))
@@ -445,6 +463,9 @@ func cmdShow(args []string) error {
 	}
 	fmt.Fprintf(w, "created:\t%s\n", is.CreatedAt.Format(time.RFC3339))
 	fmt.Fprintf(w, "updated:\t%s\n", is.UpdatedAt.Format(time.RFC3339))
+	if !is.ArchivedAt.IsZero() {
+		fmt.Fprintf(w, "archived:\t%s (in the done log, not on the board)\n", is.ArchivedAt.Format(time.RFC3339))
+	}
 	w.Flush()
 
 	if is.Description != "" {
@@ -528,6 +549,88 @@ func cmdEdges(args []string, dir string) error {
 	return nil
 }
 
+// parseAge understands 30d and 2w as well as everything time.ParseDuration
+// takes, because a done log is measured in days, not hours.
+func parseAge(v string) (time.Duration, error) {
+	v = strings.TrimSpace(v)
+	if v == "" || v == "0" {
+		return 0, nil
+	}
+	units := map[byte]time.Duration{'d': 24 * time.Hour, 'w': 7 * 24 * time.Hour}
+	if unit, ok := units[v[len(v)-1]]; ok {
+		n, err := strconv.Atoi(v[:len(v)-1])
+		if err != nil {
+			return 0, fmt.Errorf("bad age %q", v)
+		}
+		return time.Duration(n) * unit, nil
+	}
+	return time.ParseDuration(v)
+}
+
+// cmdArchive keeps the board about the work that is left. Issues finished a
+// while ago move to .taskhound-done.yaml, which stays committed beside it.
+func cmdArchive(args []string) error {
+	fs, file := newFS("archive")
+	age := fs.String("older-than", "14d", "archive issues done at least this long ago (30d, 2w, 48h, 0 for all)")
+	dryRun := fs.Bool("dry-run", false, "report what would move, change nothing")
+	showLog := fs.Bool("list", false, "print the done log instead of archiving")
+	asJSON := fs.Bool("json", false, "print JSON")
+	parse(fs, args)
+
+	s, err := openStore(*file)
+	if err != nil {
+		return err
+	}
+
+	if *showLog {
+		a, err := s.ReadArchive()
+		if err != nil {
+			return err
+		}
+		if *asJSON {
+			return printJSON(a.Issues)
+		}
+		if len(a.Issues) == 0 {
+			fmt.Printf("the done log is empty (%s)\n", s.ArchivePath())
+			return nil
+		}
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "ID\tARCHIVED\tTITLE")
+		for _, is := range a.Issues {
+			fmt.Fprintf(w, "%s\t%s\t%s\n", is.ID, is.ArchivedAt.Format("2006-01-02"), is.Title)
+		}
+		return w.Flush()
+	}
+
+	d, err := parseAge(*age)
+	if err != nil {
+		return err
+	}
+	res, err := s.ArchiveDone(time.Now().UTC().Add(-d), *dryRun)
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		return printJSON(res.Moved)
+	}
+	if len(res.Moved) == 0 {
+		fmt.Printf("nothing done longer than %s ago\n", *age)
+		return nil
+	}
+	verb := "archived"
+	if *dryRun {
+		verb = "would archive"
+	}
+	for _, is := range res.Moved {
+		fmt.Printf("%s  %s\n", is.ID, is.Title)
+	}
+	fmt.Printf("%s %d issue(s) to %s\n", verb, len(res.Moved), s.ArchivePath())
+	if res.Dropped > 0 {
+		fmt.Printf("dropped %d reference(s) to them from issues still on the board\n", res.Dropped)
+	}
+	return nil
+}
+
 func cmdUpdate(args []string) error {
 	fs, file := newFS("update")
 	title := fs.String("title", "", "new title")
@@ -594,7 +697,7 @@ func cmdUpdate(args []string) error {
 			if err := b.SetBlockedBy(other, append(append([]string{}, other.BlockedBy...), is.ID)); err != nil {
 				return err
 			}
-			other.UpdatedAt = time.Now().UTC().Truncate(time.Second)
+			other.UpdatedAt = now()
 		}
 
 		for _, l := range labels.vals {
@@ -606,7 +709,7 @@ func cmdUpdate(args []string) error {
 			is.Labels = removeString(is.Labels, l)
 		}
 
-		is.UpdatedAt = time.Now().UTC().Truncate(time.Second)
+		is.UpdatedAt = now()
 		updated, board = is, b
 		return nil
 	})
@@ -647,7 +750,7 @@ func cmdComment(args []string) error {
 		if err != nil {
 			return err
 		}
-		now := time.Now().UTC().Truncate(time.Second)
+		now := now()
 		is.Comments = append(is.Comments, Comment{At: now, Author: who, Body: body})
 		is.UpdatedAt = now
 		fmt.Printf("commented on %s\n", is.ID)

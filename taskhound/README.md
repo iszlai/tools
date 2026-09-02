@@ -64,11 +64,37 @@ never come back empty while open work exists.
 | `th dependents <id>` | everything that transitively waits on `<id>` |
 | `th update <id>` | `--title`, `-d`, `--status`, `--blocked-by`, `--add-blocked-by`, `--remove-blocked-by`, `--blocks`, `--label`, `--unlabel` |
 | `th comment <id> <body>` | append a comment |
+| `th archive` | move long-finished issues into the done log; `--older-than`, `--dry-run`, `--list` |
 | `th ui` | `--port` (default 8787), `--open` |
 | `th agent-guide` | print the usage guide written for agents |
 
 Every command takes `-f <file>`, and every query takes `--json`. Ids are
 case-insensitive and the prefix is optional: `th show 3` is `th show TH-3`.
+
+## The done log
+
+A board that keeps every issue you ever closed stops being a board. `th archive`
+lifts the long-finished ones off it into `.taskhound-done.yaml`, which sits
+beside the board and gets committed with it.
+
+```bash
+th archive --dry-run                 # what would move, changes nothing
+th archive                           # done at least 14 days ago
+th archive --older-than 30d          # or 2w, or 48h, or 0 for everything done
+th archive --list                    # read the done log
+th show TH-1                         # still resolves after TH-1 is archived
+```
+
+Only `done` issues move, and moving them cannot change the board: references to
+an archived issue are dropped from whatever stayed behind, which is safe exactly
+because a done blocker already contributed nothing to whether anything was
+ready. Dropping the reference — rather than leaving a dangling id — keeps every
+`blocked_by` on the board resolvable. Ids are never reused, so nothing that has
+been archived can come back as new work.
+
+The log is only ever appended to, and it is written before the board is
+rewritten: interrupted between the two, an issue is duplicated rather than lost,
+and a duplicate is something you can see.
 
 ## The board
 
@@ -121,6 +147,7 @@ and `ready` already computed.
 th next --json | jq -r '.[0].id'                  # what to pick up
 th dependents TH-3 --json | jq -r '.[].id'        # what closing it unlocks
 th list --blocked --json | jq -r '.[] | "\(.id) waits on \(.open_blockers|join(","))"'
+th archive --older-than 30d          # keep the board about the work that is left
 ```
 
 ### Migrating an existing todo list
@@ -179,6 +206,10 @@ git rm tasks/todo.md && git add .taskhound.yaml
 If `th next` is empty you have written a cycle or made everything depend on
 something unfinished; if it lists nearly everything, you have not written the
 edges that matter.
+
+If the source list was long and mostly ticked, file the finished items anyway
+and then run `th archive --older-than 0` — the history lands in the done log
+and the board opens on the work that is actually left.
 
 ## Layout
 

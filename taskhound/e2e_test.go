@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // thBin is the compiled CLI. The end-to-end tests drive the real binary as a
@@ -414,5 +415,100 @@ func TestNoBoardIsAClearError(t *testing.T) {
 	}
 	if !strings.Contains(errb.String(), "th init") {
 		t.Errorf("error should point at `th init`, got %q", errb.String())
+	}
+}
+
+// TestArchiveCompactsTheBoard checks the done log: long-finished work leaves
+// the board without changing what is startable, and stays readable afterwards.
+func TestArchiveCompactsTheBoard(t *testing.T) {
+	c := newCLI(t)
+	a := c.add("Prefactor the limiter")
+	b := c.add("Rate-limit the API", "--blocked-by", a)
+	c.add("Document the limits", "--blocked-by", b)
+	c.run("update", a, "--status", "done")
+
+	// The default cutoff is two weeks, so freshly finished work stays put.
+	if out := c.run("archive"); !strings.Contains(out, "nothing done") {
+		t.Fatalf("archive with the default cutoff moved something: %q", out)
+	}
+	if len(c.json("list", "--json")) != 3 {
+		t.Fatal("the board should still hold all three issues")
+	}
+
+	// A dry run reports without touching anything.
+	if out := c.run("archive", "--older-than", "0", "--dry-run"); !strings.Contains(out, "would archive 1") {
+		t.Fatalf("dry run said: %q", out)
+	}
+	if len(c.json("list", "--json")) != 3 {
+		t.Fatal("--dry-run must not write")
+	}
+
+	before := ids(c.json("next", "--json"))
+	if out := c.run("archive", "--older-than", "0"); !strings.Contains(out, "archived 1") {
+		t.Fatalf("archive said: %q", out)
+	}
+
+	// The board shrank, and every blocked_by left on it still resolves.
+	left := c.json("list", "--json")
+	if len(left) != 2 {
+		t.Fatalf("board has %d issues, want 2", len(left))
+	}
+	for _, v := range left {
+		for _, dep := range v.BlockedBy {
+			if dep == a {
+				t.Errorf("%s still points at archived %s", v.ID, a)
+			}
+		}
+	}
+	// Archiving a done issue cannot change what is ready.
+	if after := ids(c.json("next", "--json")); strings.Join(after, ",") != strings.Join(before, ",") {
+		t.Errorf("next changed across an archive: %v then %v", before, after)
+	}
+
+	// The log is readable, and the id still resolves.
+	if out := c.run("archive", "--list"); !strings.Contains(out, a) {
+		t.Errorf("done log does not mention %s: %q", a, out)
+	}
+	if out := c.run("show", a); !strings.Contains(out, "done log") {
+		t.Errorf("show %s should say it is archived: %q", a, out)
+	}
+
+	// Ids are never reused, so an archived id cannot come back as new work.
+	if next := c.add("Something new"); next == a {
+		t.Errorf("id %s was handed out twice", next)
+	}
+
+	// A second pass appends rather than replacing.
+	c.run("update", b, "--status", "done")
+	c.run("archive", "--older-than", "0")
+	var logged []Issue
+	if err := json.Unmarshal([]byte(c.run("archive", "--list", "--json")), &logged); err != nil {
+		t.Fatal(err)
+	}
+	if len(logged) != 2 {
+		t.Fatalf("done log holds %d issues, want 2", len(logged))
+	}
+	for _, is := range logged {
+		if is.ArchivedAt.IsZero() {
+			t.Errorf("%s has no archived_at", is.ID)
+		}
+	}
+}
+
+func TestParseAge(t *testing.T) {
+	for in, want := range map[string]time.Duration{
+		"":    0,
+		"0":   0,
+		"14d": 14 * 24 * time.Hour,
+		"2w":  14 * 24 * time.Hour,
+		"48h": 48 * time.Hour,
+	} {
+		got, err := parseAge(in)
+		if err != nil || got != want {
+			t.Errorf("parseAge(%q) = %v, %v; want %v", in, got, err, want)
+		}
+	}
+	if _, err := parseAge("soon"); err == nil {
+		t.Error("parseAge should reject nonsense")
 	}
 }

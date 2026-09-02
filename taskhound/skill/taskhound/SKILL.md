@@ -59,11 +59,24 @@ th update TH-3 --blocked-by TH-1,TH-4     # replace the whole blocker list
 th update TH-3 --label needs-review --unlabel ready-for-agent
 th comment TH-3 "Ran the migration on staging, green."
 
+th archive --dry-run                      # what would leave the board
+th archive --older-than 30d               # move long-finished work to the done log
+th archive --list --json                  # read the done log
 th ui --port 8787 --open                  # kanban board on localhost
 ```
 
 `th next` ranks work already `doing` first, then whatever unblocks the most
 other issues — so the top row is the highest-leverage thing to pick up.
+
+## The done log
+
+`th archive` moves issues finished before a cutoff (default 14 days) into
+`.taskhound-done.yaml`, so `th list` stays about the work that is left. Only
+`done` issues move; references to them are dropped from the issues that stay,
+which cannot change what is ready. `th show <id>` still resolves an archived id.
+Ids are never reused.
+
+Run it when a board has accumulated closed work, not after every ticket.
 
 ## Recipes
 
@@ -84,6 +97,13 @@ th dependents TH-3 --json | jq -r '.[].id'
 ```bash
 th update TH-3 --status done
 th next --json | jq -r '.[] | "\(.id)  \(.title)"'
+```
+
+**Compact a board after finishing a batch.**
+
+```bash
+th archive --older-than 0 --dry-run   # confirm the list first
+th archive --older-than 0
 ```
 
 **Check nothing is stuck.** An open issue with a blocker that will never be

@@ -167,7 +167,7 @@ func routes(s *Store) http.Handler {
 					return err
 				}
 			}
-			is.UpdatedAt = time.Now().UTC().Truncate(time.Second)
+			is.UpdatedAt = now()
 			out = view(b, is)
 			return nil
 		})
@@ -200,7 +200,7 @@ func routes(s *Store) http.Handler {
 			if err != nil {
 				return err
 			}
-			now := time.Now().UTC().Truncate(time.Second)
+			now := now()
 			is.Comments = append(is.Comments, Comment{At: now, Author: in.Author, Body: in.Body})
 			is.UpdatedAt = now
 			out = view(b, is)

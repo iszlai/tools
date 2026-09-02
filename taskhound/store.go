@@ -53,6 +53,7 @@ type Issue struct {
 	Labels      []string  `yaml:"labels,omitempty" json:"labels,omitempty"`
 	CreatedAt   time.Time `yaml:"created_at" json:"created_at"`
 	UpdatedAt   time.Time `yaml:"updated_at" json:"updated_at"`
+	ArchivedAt  time.Time `yaml:"archived_at,omitempty" json:"archived_at,omitempty"`
 	Comments    []Comment `yaml:"comments,omitempty" json:"comments,omitempty"`
 }
 
@@ -97,15 +98,15 @@ func (b *Board) Get(ref string) (*Issue, error) {
 }
 
 func (b *Board) Add(title, description, status string, labels []string) *Issue {
-	now := time.Now().UTC().Truncate(time.Second)
+	stamp := now()
 	is := &Issue{
 		ID:          fmt.Sprintf("%s-%d", b.Prefix, b.NextID),
 		Title:       title,
 		Description: description,
 		Status:      status,
 		Labels:      labels,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		CreatedAt:   stamp,
+		UpdatedAt:   stamp,
 	}
 	b.NextID++
 	b.Issues = append(b.Issues, is)
@@ -352,11 +353,17 @@ func (s *Store) Update(fn func(*Board) error) error {
 }
 
 func (s *Store) saveUnlocked(b *Board) error {
-	data, err := yaml.Marshal(b)
+	return writeAtomic(s.Path, b)
+}
+
+// writeAtomic renders v as YAML and swings it into place with a rename, so a
+// concurrent reader sees either the whole old file or the whole new one.
+func writeAtomic(path string, v any) error {
+	data, err := yaml.Marshal(v)
 	if err != nil {
 		return err
 	}
-	dir := filepath.Dir(s.Path)
+	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".taskhound-*.tmp")
 	if err != nil {
 		return err
@@ -378,7 +385,7 @@ func (s *Store) saveUnlocked(b *Board) error {
 	if err := os.Chmod(tmpName, 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, s.Path)
+	return os.Rename(tmpName, path)
 }
 
 // Create writes a fresh board, refusing to clobber an existing one.
@@ -394,4 +401,127 @@ func (s *Store) Create(prefix string) error {
 	}
 	defer unlock()
 	return s.saveUnlocked(NewBoard(prefix))
+}
+
+// now is the stamp every write uses: UTC, whole seconds, so the YAML stays
+// readable and two edits in the same second sort stably.
+func now() time.Time {
+	return time.Now().UTC().Truncate(time.Second)
+}
+
+// ---------------------------------------------------------------------------
+// The done log
+// ---------------------------------------------------------------------------
+
+// Archive is the done log: issues lifted off the board once they had been
+// finished long enough to stop being interesting. It lives beside the board so
+// the two are committed together, and it is only ever appended to.
+type Archive struct {
+	Version int      `yaml:"version" json:"version"`
+	Issues  []*Issue `yaml:"issues" json:"issues"`
+}
+
+// ArchivePath turns .taskhound.yaml into .taskhound-done.yaml.
+func (s *Store) ArchivePath() string {
+	ext := filepath.Ext(s.Path)
+	return strings.TrimSuffix(s.Path, ext) + "-done" + ext
+}
+
+func (s *Store) readArchiveUnlocked() (*Archive, error) {
+	data, err := os.ReadFile(s.ArchivePath())
+	if errors.Is(err, os.ErrNotExist) {
+		return &Archive{Version: 1}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var a Archive
+	if err := yaml.Unmarshal(data, &a); err != nil {
+		return nil, fmt.Errorf("%s is not a valid done log: %w", s.ArchivePath(), err)
+	}
+	if a.Version == 0 {
+		a.Version = 1
+	}
+	return &a, nil
+}
+
+// ReadArchive returns the done log under a shared lock. The board's lock covers
+// the log too: nothing touches one without the other.
+func (s *Store) ReadArchive() (*Archive, error) {
+	unlock, err := s.lock(false)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	return s.readArchiveUnlocked()
+}
+
+// ArchiveResult reports what a compaction did, or would do.
+type ArchiveResult struct {
+	Moved   []*Issue
+	Dropped int // references to moved issues removed from the issues that stayed
+}
+
+// ArchiveDone moves every issue finished before the cutoff into the done log.
+//
+// References to a moved issue are dropped from the issues that stay behind.
+// That is safe precisely because only done issues move: a done blocker already
+// contributes nothing to whether anything is ready, so removing the edge cannot
+// change the state of the board -- and it keeps every blocked_by on the board
+// resolvable, which a dangling id would not.
+func (s *Store) ArchiveDone(before time.Time, dryRun bool) (*ArchiveResult, error) {
+	unlock, err := s.lock(true)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+
+	b, err := s.readUnlocked()
+	if err != nil {
+		return nil, err
+	}
+
+	stamp := now()
+	res := &ArchiveResult{}
+	gone := map[string]bool{}
+	var keep []*Issue
+	for _, is := range b.Issues {
+		if is.Status == StatusDone && is.UpdatedAt.Before(before) {
+			is.ArchivedAt = stamp
+			res.Moved = append(res.Moved, is)
+			gone[is.ID] = true
+			continue
+		}
+		keep = append(keep, is)
+	}
+	if len(res.Moved) == 0 {
+		return res, nil
+	}
+	for _, is := range keep {
+		var next []string
+		for _, dep := range is.BlockedBy {
+			if gone[dep] {
+				res.Dropped++
+				continue
+			}
+			next = append(next, dep)
+		}
+		is.BlockedBy = next
+	}
+	if dryRun {
+		return res, nil
+	}
+
+	// Write the log first: interrupted between the two writes, an issue is
+	// duplicated rather than lost, and a duplicate is something you can see.
+	a, err := s.readArchiveUnlocked()
+	if err != nil {
+		return nil, err
+	}
+	a.Issues = append(a.Issues, res.Moved...)
+	if err := writeAtomic(s.ArchivePath(), a); err != nil {
+		return nil, err
+	}
+	b.Issues = keep
+	return res, s.saveUnlocked(b)
 }

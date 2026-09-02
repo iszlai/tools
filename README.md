@@ -194,6 +194,11 @@ read-modify-write under an exclusive `flock` on a sidecar lock file, landing via
 temp-file-and-rename so a reader never sees half a file. The test suite runs 24
 concurrent `th add` processes against one board and asserts nothing is lost.
 
+`th archive` moves long-finished issues into a `.taskhound-done.yaml` beside the
+board, so the board stays about the work that is left. Only `done` issues move,
+and references to them are dropped from whatever stayed behind — safe exactly
+because a done blocker already contributed nothing to readiness.
+
 `install.sh` also drops a skill in `~/.claude/skills/taskhound/`, so Claude Code
 picks the tool up on its own; `th agent-guide` prints the same document for
 anything else. `taskhound/README.md` has the full command table, the HTTP API,
