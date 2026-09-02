@@ -15,6 +15,7 @@ can, and a skill so agents can drive it.
 - [x] Tests: graph unit tests + end-to-end CLI/HTTP/concurrency test
 - [x] `th archive` — a done log beside the board, so the board stays about what is left
 - [x] Release: `make release` cross-compiles, a `taskhound-v*` tag publishes binaries
+- [x] `th sync` — one-way, idempotent push to GitHub Issues via the gh CLI
 - [x] README section in the repo root README
 
 ## Review
@@ -37,6 +38,14 @@ dropped from the issues that stay: safe exactly because a done blocker already
 contributed nothing to readiness, and it keeps every `blocked_by` on the board
 resolvable rather than dangling. The log is written before the board is
 rewritten, so an interruption duplicates an issue rather than losing it.
+
+**GitHub sync.** `th sync` is one way on purpose. Two-way needs conflict rules
+for "both sides changed" and a last-synced stamp per issue; one way needs
+neither, and the board is where the graph lives anyway. Idempotence comes from
+writing the issue number back onto the card the moment it is filed, so an
+interrupted run costs a half-populated issue rather than a duplicate. gh is
+injected as a function, so the tests drive the whole flow without a network, a
+token, or a repository to scribble on.
 
 **Deliberately left out.** No delete (nothing asked for it; `status: done` and
 git history cover it), no auth on the UI (it binds `127.0.0.1` only), no

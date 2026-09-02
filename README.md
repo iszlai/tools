@@ -204,6 +204,11 @@ board, so the board stays about the work that is left. Only `done` issues move,
 and references to them are dropped from whatever stayed behind — safe exactly
 because a done blocker already contributed nothing to readiness.
 
+`th sync` pushes the board to GitHub Issues through the `gh` CLI, one way and
+safe to re-run: the issue number is recorded on each card, blockers go up first
+and are cited as `#N` in the body, `done` closes the issue. The board stays the
+source of truth — nothing is pulled back down.
+
 `install.sh` also drops a skill in `~/.claude/skills/taskhound/`, so Claude Code
 picks the tool up on its own; `th agent-guide` prints the same document for
 anything else. `taskhound/README.md` has the full command table, the HTTP API,

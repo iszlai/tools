@@ -1,6 +1,6 @@
 version: 1
 prefix: TH
-next_id: 4
+next_id: 5
 issues:
     - id: TH-1
       title: Smoke-test the taskhound kanban UI in a real browser
@@ -49,3 +49,36 @@ issues:
       status: todo
       created_at: 2026-09-02T08:33:18Z
       updated_at: 2026-09-02T08:33:18Z
+    - id: TH-4
+      title: Push taskhound issues to GitHub Issues via the gh CLI
+      description: |-
+        A board is the right shape for planning work; GitHub Issues is where other
+        people can see it. `th sync` should carry issues from the board to GitHub
+        without turning into a second source of truth.
+
+        What has to be decided, because none of it is free:
+
+        - Identity. Re-running must update, not duplicate, so the GitHub number has to
+          be remembered on the issue (a `github:` field).
+        - Edges. GitHub has no native "blocked by" in the REST API, so edges become
+          text in the body ("Blocked by #12"). That means filing in dependency order,
+          blockers first, so the numbers exist to reference.
+        - Status. todo/doing map to open, done to closed; `doing` probably wants a
+          label so the distinction survives.
+        - Comments. Fine to carry on create; carrying them on every update duplicates
+          them unless each one is fingerprinted.
+        - Preconditions. gh installed, authenticated, and a repo to target (from
+          `gh repo view`, overridable with --repo).
+
+        Acceptance criteria:
+        - [ ] `th sync --dry-run` prints what it would create and update, touching nothing
+        - [ ] running it twice creates no duplicates
+        - [ ] a blocked issue's GitHub body references its blockers by number
+        - [ ] closing an issue in taskhound closes it on GitHub on the next sync
+      status: done
+      created_at: 2026-09-02T08:34:04Z
+      updated_at: 2026-09-02T08:39:24Z
+      comments:
+        - at: 2026-09-02T08:39:24Z
+          author: lehel
+          body: 'Built: one-way, idempotent via the gh CLI. All four acceptance criteria are covered by tests in sync_test.go, driving a fake gh so no network or token is needed.'

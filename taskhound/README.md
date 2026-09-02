@@ -68,6 +68,7 @@ never come back empty while open work exists.
 | `th update <id>` | `--title`, `-d`, `--status`, `--blocked-by`, `--add-blocked-by`, `--remove-blocked-by`, `--blocks`, `--label`, `--unlabel` |
 | `th comment <id> <body>` | append a comment |
 | `th archive` | move long-finished issues into the done log; `--older-than`, `--dry-run`, `--list` |
+| `th sync` | push the board to GitHub Issues; `--repo`, `--dry-run` |
 | `th ui` | `--port` (default 8787), `--open` |
 | `th agent-guide` | print the usage guide written for agents |
 
@@ -98,6 +99,41 @@ been archived can come back as new work.
 The log is only ever appended to, and it is written before the board is
 rewritten: interrupted between the two, an issue is duplicated rather than lost,
 and a duplicate is something you can see.
+
+## GitHub Issues
+
+`th sync` pushes the board to GitHub Issues through the `gh` CLI. It goes one
+way. The board stays the source of truth; GitHub gets a readable shadow of it,
+which is where other people can see the work.
+
+```bash
+th sync --dry-run                    # what it would create and update
+th sync                              # the repo gh infers here
+th sync --repo owner/name
+```
+
+It is safe to run again. The GitHub number is written back onto each issue as
+soon as it is filed, so a second run edits what is already there instead of
+filing it twice — and a crash mid-run costs a half-populated issue rather than a
+duplicate.
+
+| taskhound | GitHub |
+|---|---|
+| title, description | title, body |
+| `blocked_by` | **Blocked by:** #12, #15 in the body |
+| id | a `taskhound: TH-4` backlink in the body |
+| labels | labels, created on the fly if missing |
+| `status: doing` | still open, plus a `doing` label |
+| `status: done` | closed |
+| comments | comments, each posted exactly once |
+
+Issues go up blockers-first, because a body cannot cite a number that does not
+exist yet. GitHub has no native blocking relation in its API, which is why the
+edge is text there and stays real here — `th next` and `th dependents` keep
+working off the graph regardless of what GitHub thinks.
+
+Nothing comes back down. Close an issue on GitHub and the board will reopen it
+on the next sync, because the board is what is authoritative.
 
 ## The board
 
@@ -151,6 +187,7 @@ th next --json | jq -r '.[0].id'                  # what to pick up
 th dependents TH-3 --json | jq -r '.[].id'        # what closing it unlocks
 th list --blocked --json | jq -r '.[] | "\(.id) waits on \(.open_blockers|join(","))"'
 th archive --older-than 30d          # keep the board about the work that is left
+th sync --dry-run                    # what would go up to GitHub Issues
 ```
 
 ### Migrating an existing todo list

@@ -62,6 +62,8 @@ th comment TH-3 "Ran the migration on staging, green."
 th archive --dry-run                      # what would leave the board
 th archive --older-than 30d               # move long-finished work to the done log
 th archive --list --json                  # read the done log
+th sync --dry-run                         # what would go to GitHub Issues
+th sync --repo owner/name                 # push the board to GitHub Issues
 th ui --port 8787 --open                  # kanban board on localhost
 ```
 
@@ -112,6 +114,20 @@ done is a stalled board:
 ```bash
 th list --blocked --json | jq -r '.[] | "\(.id) waits on \(.open_blockers | join(","))"'
 ```
+
+## Pushing to GitHub Issues
+
+`th sync` pushes the board to GitHub Issues via `gh`, one way. It records the
+issue number on each card, so it is safe to run again — a second run edits
+rather than duplicates. Blockers go up first and are cited as `#N` in the body,
+since GitHub has no blocking relation in its API. `done` closes the issue,
+`doing` adds a `doing` label, labels are created on the fly, and comments are
+posted exactly once.
+
+Always show the user `th sync --dry-run` before running it for real: it files
+public issues on their repository.
+
+Nothing is pulled back down. The board stays authoritative.
 
 ## Using taskhound as the tracker for `to-tickets`
 

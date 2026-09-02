@@ -45,16 +45,17 @@ type Comment struct {
 }
 
 type Issue struct {
-	ID          string    `yaml:"id" json:"id"`
-	Title       string    `yaml:"title" json:"title"`
-	Description string    `yaml:"description,omitempty" json:"description,omitempty"`
-	Status      string    `yaml:"status" json:"status"`
-	BlockedBy   []string  `yaml:"blocked_by,omitempty" json:"blocked_by"`
-	Labels      []string  `yaml:"labels,omitempty" json:"labels,omitempty"`
-	CreatedAt   time.Time `yaml:"created_at" json:"created_at"`
-	UpdatedAt   time.Time `yaml:"updated_at" json:"updated_at"`
-	ArchivedAt  time.Time `yaml:"archived_at,omitempty" json:"archived_at,omitempty"`
-	Comments    []Comment `yaml:"comments,omitempty" json:"comments,omitempty"`
+	ID          string      `yaml:"id" json:"id"`
+	Title       string      `yaml:"title" json:"title"`
+	Description string      `yaml:"description,omitempty" json:"description,omitempty"`
+	Status      string      `yaml:"status" json:"status"`
+	BlockedBy   []string    `yaml:"blocked_by,omitempty" json:"blocked_by"`
+	Labels      []string    `yaml:"labels,omitempty" json:"labels,omitempty"`
+	CreatedAt   time.Time   `yaml:"created_at" json:"created_at"`
+	UpdatedAt   time.Time   `yaml:"updated_at" json:"updated_at"`
+	ArchivedAt  time.Time   `yaml:"archived_at,omitempty" json:"archived_at,omitempty"`
+	GitHub      *GitHubLink `yaml:"github,omitempty" json:"github,omitempty"`
+	Comments    []Comment   `yaml:"comments,omitempty" json:"comments,omitempty"`
 }
 
 // Board is the whole file. Edges live in exactly one place — each issue's
