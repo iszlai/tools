@@ -62,6 +62,11 @@ downloading latest for darwin/arm64...
 updated ~/.local/bin/th: v0.2.0 -> v0.3.0
 ```
 
+A build from a checkout is stamped from the tag it is standing on, so `v0.6.0`
+means exactly that release and `v0.6.0-3-g1a2b3c4-dirty` means three commits
+past it with uncommitted changes on top. Only a checkout with no tag in sight
+reports `dev`.
+
 **If you have neither** — no checkout, no Go, and you would rather not hand-roll
 the curl — fetch the installer alone and let it do the work. It is the only
 piece you need:

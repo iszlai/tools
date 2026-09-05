@@ -65,11 +65,22 @@ install_skill() {
   echo "installed $skill_dir/taskhound/SKILL.md"
 }
 
+# What a build from this checkout calls itself. Same rule as the Makefile: the
+# release this checkout is standing on and how far past it we are, so an update
+# from source reports a version you can compare against a release instead of
+# saying "dev" whatever it is.
+source_version() {
+  local v
+  v=$(cd "$here" && git describe --tags --match 'taskhound-v*' --dirty 2>/dev/null) || v=""
+  v="${v#taskhound-}"
+  echo "${v:-dev}"
+}
+
 build_from_source() {
   command -v go >/dev/null || { echo "install.sh: go is not installed" >&2; return 1; }
   # Progress goes to stderr: the caller captures stdout as the path.
   echo "building..." >&2
-  (cd "$here" && go build -trimpath -o "$here/bin/th" .)
+  (cd "$here" && go build -trimpath -ldflags "-X main.version=$(source_version)" -o "$here/bin/th" .)
   echo "$here/bin/th"
 }
 

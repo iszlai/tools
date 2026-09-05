@@ -1,7 +1,15 @@
 BIN     := bin/th
 PREFIX  ?= $(HOME)/.local/bin
 PORT    ?= 8787
-VERSION ?= dev
+
+# What a build calls itself. A release passes the tag in; anything else asks
+# git, so a build from a checkout reports the release it is standing on and how
+# far past it you are, rather than claiming to be "dev" forever. Only a checkout
+# with no tag in sight is dev.
+VERSION ?= $(shell git describe --tags --match 'taskhound-v*' --dirty 2>/dev/null | sed 's/^taskhound-//')
+ifeq ($(strip $(VERSION)),)
+VERSION := dev
+endif
 
 # Dependencies are vendored, so build and test never need the network or a
 # working module proxy.
@@ -13,7 +21,7 @@ help: ## show this help
 	@grep -hE '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | expand -t22
 
 build: ## build bin/th
-	go build -trimpath -o $(BIN) .
+	go build -trimpath -ldflags "-X main.version=$(VERSION)" -o $(BIN) .
 
 test: ## run the unit and end-to-end tests
 	go test ./...
