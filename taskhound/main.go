@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -192,6 +191,15 @@ type issueView struct {
 	Blocks       []string `json:"blocks"`
 	OpenBlockers []string `json:"open_blockers"`
 	Ready        bool     `json:"ready"`
+	// Leverage: open issues transitively waiting on this one, and how many of
+	// those are must or high. This is what orders `th next`.
+	Unblocks       int `json:"unblocks"`
+	UnblocksUrgent int `json:"unblocks_urgent"`
+	// Urgency is the priority the issue actually has: its own, or that of the
+	// most urgent open issue waiting on it, whichever is higher. Read this
+	// rather than Priority when you want to know how urgent something is.
+	Urgency     string `json:"urgency"`
+	UrgencyFrom string `json:"urgency_from,omitempty"`
 	// Set only when this issue is being offered on a board where nothing is
 	// genuinely startable, so a caller can tell a pick from a free choice.
 	Forced       bool   `json:"forced,omitempty"`
@@ -199,12 +207,18 @@ type issueView struct {
 }
 
 func view(b *Board, is *Issue) issueView {
+	total, urgent := b.Unblocks(is.ID)
+	urgency, raisedBy := b.Urgency(is.ID)
 	v := issueView{
-		Issue:        is,
-		Priority:     effectivePriority(is.Priority),
-		Blocks:       b.Blocks(is.ID),
-		OpenBlockers: b.OpenBlockers(is),
-		Ready:        b.Ready(is),
+		Issue:          is,
+		Priority:       effectivePriority(is.Priority),
+		Blocks:         b.Blocks(is.ID),
+		OpenBlockers:   b.OpenBlockers(is),
+		Ready:          b.Ready(is),
+		Unblocks:       total,
+		UnblocksUrgent: urgent,
+		Urgency:        urgency,
+		UrgencyFrom:    raisedBy,
 	}
 	if v.Blocks == nil {
 		v.Blocks = []string{}
@@ -226,6 +240,17 @@ func views(b *Board, issues []*Issue) []issueView {
 	return out
 }
 
+// priCell is the PRI column. It shows the urgency rather than the stored
+// priority, because the urgency is what actually orders the board, with an
+// arrow when it was inherited from something waiting on the issue.
+func priCell(b *Board, is *Issue) string {
+	urgency, from := b.Urgency(is.ID)
+	if from != "" {
+		return urgency + "\u2191"
+	}
+	return urgency
+}
+
 func printJSON(v any) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
@@ -244,7 +269,7 @@ func printTable(b *Board, issues []*Issue) {
 		if blockers == "" {
 			blockers = "-"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", is.ID, effectivePriority(is.Priority), is.Status, blockers, is.Title)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", is.ID, priCell(b, is), is.Status, blockers, is.Title)
 	}
 	w.Flush()
 }
@@ -364,8 +389,10 @@ func cmdList(args []string) error {
 		if *label != "" && !hasString(is.Labels, *label) {
 			continue
 		}
-		if *priority != "" && effectivePriority(is.Priority) != *priority {
-			continue
+		if *priority != "" {
+			if urgency, _ := b.Urgency(is.ID); urgency != *priority {
+				continue
+			}
 		}
 		open := len(b.OpenBlockers(is)) > 0
 		if *ready && (open || is.Status == StatusDone) {
@@ -404,20 +431,7 @@ func cmdNext(args []string) error {
 			ready = append(ready, is)
 		}
 	}
-	// Priority first, and it is absolute: a "must" outranks work already in
-	// flight, and a "low" is only ever reached once nothing else is ready.
-	// Within one priority, work in flight comes first, then whatever unblocks
-	// the most other issues.
-	sort.SliceStable(ready, func(i, j int) bool {
-		a, c := ready[i], ready[j]
-		if ra, rc := priorityRank(a.Priority), priorityRank(c.Priority); ra != rc {
-			return ra < rc
-		}
-		if (a.Status == StatusDoing) != (c.Status == StatusDoing) {
-			return a.Status == StatusDoing
-		}
-		return len(b.Dependents(a.ID)) > len(b.Dependents(c.ID))
-	})
+	b.sortNext(ready)
 	if *limit > 0 && len(ready) > *limit {
 		ready = ready[:*limit]
 	}
@@ -468,7 +482,14 @@ func cmdNext(args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tPRI\tSTATUS\tUNBLOCKS\tTITLE")
 	for _, is := range ready {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\n", is.ID, effectivePriority(is.Priority), is.Status, len(b.Dependents(is.ID)), is.Title)
+		total, urgent := b.Unblocks(is.ID)
+		// The urgent count is why the row is where it is, so show it rather than
+		// leaving the order looking arbitrary.
+		leverage := strconv.Itoa(total)
+		if urgent > 0 {
+			leverage += fmt.Sprintf(" (%d urgent)", urgent)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", is.ID, priCell(b, is), is.Status, leverage, is.Title)
 	}
 	w.Flush()
 	return nil
@@ -518,7 +539,11 @@ func cmdShow(args []string) error {
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "status:\t%s\n", state)
-	fmt.Fprintf(w, "priority:\t%s\n", effectivePriority(is.Priority))
+	priority := effectivePriority(is.Priority)
+	if urgency, from := b.Urgency(is.ID); from != "" {
+		priority = fmt.Sprintf("%s (raised to %s by %s, which waits on this)", priority, urgency, from)
+	}
+	fmt.Fprintf(w, "priority:\t%s\n", priority)
 	fmt.Fprintf(w, "blocked by:\t%s\n", withStatus(b, is.BlockedBy))
 	fmt.Fprintf(w, "blocks:\t%s\n", withStatus(b, b.Blocks(is.ID)))
 	if len(is.Labels) > 0 {

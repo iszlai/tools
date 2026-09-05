@@ -672,3 +672,147 @@ func TestNextExplainsWhyThereIsNothingToDo(t *testing.T) {
 		t.Errorf("the gate is doing and unblocked, it should be offered: %q", out)
 	}
 }
+
+// TestNextRanksByLeverageThenPriority pins what th next means by "next": a must
+// first, then whatever frees the most urgent work, then whatever frees the most
+// work at all, and only then the issue's own priority. The headline consequence
+// is the one worth pinning — a low chore a high issue is stuck behind outranks a
+// high issue nobody is waiting on.
+func TestNextRanksByLeverageThenPriority(t *testing.T) {
+	c := newCLI(t)
+	lonely := c.add("High, but nothing waits on it", "--priority", "high")
+	chore := c.add("Low chore", "--priority", "low")
+	c.add("Stuck behind the chore", "--priority", "high", "--blocked-by", chore)
+	hub := c.add("Normal, two things wait on it")
+	c.add("Waits on the hub", "--blocked-by", hub)
+	c.add("Also waits on the hub", "--blocked-by", hub)
+
+	want := strings.Join([]string{chore, hub, lonely}, ",")
+	if got := strings.Join(ids(c.json("next", "--json")), ","); got != want {
+		t.Fatalf("next = %s, want %s", got, want)
+	}
+
+	// A must is still absolute, leverage or no leverage.
+	must := c.add("Production is down", "--priority", "must")
+	if got := ids(c.json("next", "--json")); got[0] != must {
+		t.Fatalf("a must with no dependents did not come first: %v", got)
+	}
+
+	// The counts the order is built from travel with the issue.
+	var seen bool
+	for _, v := range c.json("next", "--json") {
+		if v.ID != chore {
+			continue
+		}
+		seen = true
+		if v.Unblocks != 1 || v.UnblocksUrgent != 1 {
+			t.Errorf("%s unblocks = %d (%d urgent), want 1 (1 urgent)", v.ID, v.Unblocks, v.UnblocksUrgent)
+		}
+	}
+	if !seen {
+		t.Errorf("%s fell out of the queue", chore)
+	}
+}
+
+// A dependent that is already done is not work you are freeing, so it must not
+// count towards the leverage that orders the queue.
+func TestUnblocksIgnoresFinishedDependents(t *testing.T) {
+	c := newCLI(t)
+	hub := c.add("The blocker")
+	c.add("Waits on it", "--blocked-by", hub)
+	closed := c.add("Also waited on it", "--blocked-by", hub)
+	c.run("update", closed, "--status", "done")
+
+	var shown issueView
+	if err := json.Unmarshal([]byte(c.run("show", hub, "--json")), &shown); err != nil {
+		t.Fatal(err)
+	}
+	if shown.Unblocks != 1 {
+		t.Errorf("%s unblocks %d, want 1 -- %s is already done", hub, shown.Unblocks, closed)
+	}
+	// The raw edge list is unchanged: the edge is still there, it is just no
+	// longer work anybody is waiting to start.
+	if len(shown.Blocks) != 2 {
+		t.Errorf("blocks should still name both edges: %v", shown.Blocks)
+	}
+}
+
+// TestUrgencyIsInheritedFromWhatWaitsOnIt pins the rule that nothing can be less
+// urgent than the work standing behind it: the priority you set is a floor, and
+// the graph raises it.
+func TestUrgencyIsInheritedFromWhatWaitsOnIt(t *testing.T) {
+	c := newCLI(t)
+	chore := c.add("Rotate the credentials", "--priority", "low")
+	launch := c.add("Launch", "--priority", "must", "--blocked-by", chore)
+
+	shown := func(id string) issueView {
+		t.Helper()
+		var v issueView
+		if err := json.Unmarshal([]byte(c.run("show", id, "--json")), &v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+
+	v := shown(chore)
+	if v.Priority != "low" {
+		t.Errorf("the stored priority should be untouched: %s", v.Priority)
+	}
+	if v.Urgency != "must" || v.UrgencyFrom != launch {
+		t.Errorf("urgency = %s (from %q), want must (from %s)", v.Urgency, v.UrgencyFrom, launch)
+	}
+
+	// It travels the whole chain, not just one edge.
+	deep := c.add("The thing under the chore", "--priority", "low", "--blocks", chore)
+	if v := shown(deep); v.Urgency != "must" {
+		t.Errorf("urgency did not travel two edges: %s", v.Urgency)
+	}
+
+	// An inherited must is a must in the queue.
+	c.add("Genuinely high", "--priority", "high")
+	if got := ids(c.json("next", "--json")); got[0] != deep {
+		t.Fatalf("next = %v, want the inherited must (%s) first", got, deep)
+	}
+	// ...and --priority searches for the priority the issue actually has.
+	if out := c.run("list", "--priority", "must"); !strings.Contains(out, deep) {
+		t.Errorf("list --priority must missed the issue that inherited one:\n%s", out)
+	}
+
+	// Finishing the work above it hands the priority back.
+	for _, id := range []string{deep, chore} {
+		c.run("update", id, "--status", "done")
+	}
+	c.run("update", launch, "--status", "done")
+	c.run("update", chore, "--status", "todo")
+	if v := shown(chore); v.Urgency != "low" || v.UrgencyFrom != "" {
+		t.Errorf("a done dependent still raised the urgency: %s (from %q)", v.Urgency, v.UrgencyFrom)
+	}
+}
+
+// TestLeverageCountsTheWholeChainNotTheEdge pins that leverage is measured over
+// the transitive fan-out. Both roots below have exactly one direct edge, so
+// counting edges would call them equal; what separates them is how much work is
+// stacked up behind that edge.
+func TestLeverageCountsTheWholeChainNotTheEdge(t *testing.T) {
+	c := newCLI(t)
+	wide := c.add("Root of the wide tree")
+	fork := c.add("Forks four ways", "--blocked-by", wide)
+	for i := 0; i < 4; i++ {
+		c.add(fmt.Sprintf("Leaf %d", i), "--blocked-by", fork)
+	}
+	chain := c.add("Root of the short chain")
+	link := c.add("Middle of the chain", "--blocked-by", chain)
+	c.add("End of the chain", "--blocked-by", link)
+
+	queue := c.json("next", "--json")
+	if got := ids(queue); strings.Join(got, ",") != strings.Join([]string{wide, chain}, ",") {
+		t.Fatalf("next = %v, want [%s %s] — the wider tree first", got, wide, chain)
+	}
+	if queue[0].Unblocks != 5 || queue[1].Unblocks != 2 {
+		t.Errorf("unblocks = %d and %d, want 5 and 2", queue[0].Unblocks, queue[1].Unblocks)
+	}
+	// Both have a single direct edge: counting those would have called it a tie.
+	if len(queue[0].Blocks) != 1 || len(queue[1].Blocks) != 1 {
+		t.Errorf("the direct edge counts should be equal: %v vs %v", queue[0].Blocks, queue[1].Blocks)
+	}
+}

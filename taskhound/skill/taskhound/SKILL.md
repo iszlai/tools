@@ -20,15 +20,22 @@ th list >/dev/null 2>&1 || echo "no board here — run: th init"
 
 - **Pass `--json` whenever you are going to read the output.** The plain output
   is a table for humans; `--json` gives you `id`, `status`, `blocked_by`,
-  `blocks`, `open_blockers`, `ready`, `labels` and `comments` per issue.
+  `blocks`, `open_blockers`, `ready`, `unblocks`, `unblocks_urgent`, `urgency`,
+  `labels` and `comments` per issue.
 - **Store one direction of each edge.** Only `blocked_by` is stored; `blocks`
   is derived. `--blocks X` is sugar that writes the edge onto X. Cycles are
   refused.
 - **Priorities are `must`, `high`, `normal`, `low`**, defaulting to `normal`.
-  `must` outranks everything in `th next`, including work in flight; `low` sorts
-  last but is still offered when nothing else is ready. Reserve `must` for
-  drop-everything work — if you mark several issues `must`, you have not
-  prioritised anything.
+  `must` outranks everything in `th next`; `low` sorts last but is still offered
+  when nothing else is ready. Reserve `must` for drop-everything work — if you
+  mark several issues `must`, you have not prioritised anything.
+- **Read `urgency`, not `priority`, to know how urgent something is.** Nothing
+  can be less urgent than what waits on it, so a `low` chore blocking a `must`
+  has `"priority": "low"` but `"urgency": "must"`, with `urgency_from` naming
+  the issue that raised it. `priority` is the floor you set; `urgency` is what
+  the graph makes of it, and it is what orders the queue and what
+  `th list --priority` matches. It is derived, so never try to "fix" a priority
+  to match — cut the edge or finish the work above it instead.
 - **Statuses are `todo`, `doing`, `done`.** There is no `blocked` status — an
   issue is blocked when a blocker of it is not yet `done`, and that is computed.
 - **Create blockers before the issues that depend on them**, so the ids exist.
@@ -75,8 +82,16 @@ th sync --repo owner/name                 # push the board to GitHub Issues
 th ui --port 8787 --open                  # kanban board on localhost
 ```
 
-`th next` ranks by priority first, then work already `doing`, then whatever
-unblocks the most other issues — so the top row is the thing to pick up.
+`th next` ranks a `must` first (inherited ones included), then by **leverage**:
+whatever frees the most urgent work (open `must`/`high` issues transitively
+waiting on it), then whatever frees the most work at all, and only then the
+issue's own urgency. So a `low` chore a `high` issue is stuck behind outranks a
+`high` issue nobody is waiting on — the chore *is* the high issue.
+
+Leverage is the **whole transitive fan-out**, not the direct edges: an issue
+blocking one issue that blocks four unblocks five, and beats the head of a
+three-long chain, which unblocks two. The top row is the thing to pick up; the
+`unblocks`, `unblocks_urgent` and `urgency` fields say why it is there.
 
 **A jammed board still gives you a pick.** If the graph holds a loop, or a
 blocker naming an issue that is not on the board, `th next` says so on stderr and

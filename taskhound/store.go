@@ -248,6 +248,97 @@ func (b *Board) Dependents(start string) []string {
 	return b.walk(start, b.Blocks)
 }
 
+// Unblocks measures the leverage of an issue: how much open work finishing it
+// would free, and how much of that work is urgent. Done dependents are not
+// counted, because finishing something cannot unblock work that is already
+// finished.
+func (b *Board) Unblocks(id string) (total, urgent int) {
+	for _, dep := range b.Dependents(id) {
+		is, err := b.Get(dep)
+		if err != nil || is.Status == StatusDone {
+			continue
+		}
+		total++
+		if priorityRank(is.Priority) <= priorityRank(PriorityHigh) {
+			urgent++
+		}
+	}
+	return total, urgent
+}
+
+// Urgency is the priority an issue actually has. Nothing can be less urgent
+// than what waits on it: a low chore blocking a must is a must, because the must
+// cannot start until the chore is done. So urgency is the most urgent priority
+// across the issue itself and every open issue transitively waiting on it, and
+// the id that raised it comes back with it so the answer is explainable.
+//
+// It is derived and never stored, like "blocked": cut the edge or finish the
+// work above it and the inherited urgency goes away on its own, so the file can
+// never hold a priority that the graph disagrees with.
+func (b *Board) Urgency(id string) (priority, raisedBy string) {
+	is, err := b.Get(id)
+	if err != nil {
+		return PriorityNormal, ""
+	}
+	priority = effectivePriority(is.Priority)
+	best := priorityRank(is.Priority)
+	for _, dep := range b.Dependents(id) {
+		other, err := b.Get(dep)
+		if err != nil || other.Status == StatusDone {
+			continue
+		}
+		if r := priorityRank(other.Priority); r < best {
+			best, priority, raisedBy = r, effectivePriority(other.Priority), other.ID
+		}
+	}
+	return priority, raisedBy
+}
+
+// sortNext puts issues in the order th next offers them, and is the whole of
+// what "next" means.
+//
+// A must comes first whatever else is true of it -- including a must inherited
+// from something waiting on it. After that the queue is about leverage rather
+// than the issue's own urgency, because a high issue you cannot start yet is
+// worth no more than the thing standing in front of it: what frees the most
+// urgent work, then what frees the most work at all, and only then how urgent
+// the issue is itself. So a low chore that three people are waiting on outranks
+// a high one nobody is waiting on -- which is the point.
+func (b *Board) sortNext(issues []*Issue) {
+	type key struct{ urgency, total, urgent int }
+	keys := make(map[string]key, len(issues))
+	for _, is := range issues {
+		total, urgent := b.Unblocks(is.ID)
+		urgency, _ := b.Urgency(is.ID)
+		keys[is.ID] = key{priorityRank(urgency), total, urgent}
+	}
+	must := priorityRank(PriorityMust)
+	sort.SliceStable(issues, func(i, j int) bool {
+		a, c := issues[i], issues[j]
+		ka, kc := keys[a.ID], keys[c.ID]
+		if am, cm := ka.urgency == must, kc.urgency == must; am != cm {
+			return am
+		}
+		if ka.urgent != kc.urgent {
+			return ka.urgent > kc.urgent
+		}
+		if ka.total != kc.total {
+			return ka.total > kc.total
+		}
+		if ka.urgency != kc.urgency {
+			return ka.urgency < kc.urgency
+		}
+		// Work already in flight before work not started, so a queue read twice
+		// in a row does not send you off in two directions.
+		if (a.Status == StatusDoing) != (c.Status == StatusDoing) {
+			return a.Status == StatusDoing
+		}
+		ia, _ := idNum(a.ID)
+		ic, _ := idNum(c.ID)
+		return ia < ic
+	})
+}
+
 // SetBlockedBy replaces an issue's blockers, rejecting unknown ids, self-edges
 // and anything that would close a cycle.
 func (b *Board) SetBlockedBy(is *Issue, refs []string) error {

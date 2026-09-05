@@ -93,6 +93,11 @@ const statusOf = id => JSON.parse(th('show', id, '--json')).status;
     /* 3 — the drawer writes title, description and blockers back */
     await page.click('.card[data-id="TH-3"]');
     await page.waitForSelector('#drawer.open');
+    check('drawer: the title is shown, not offered for editing',
+      await page.locator('#d-title').isHidden() && await page.locator('#d-title-view').isVisible());
+    await page.click('#edit-title');
+    check('drawer: the pencil reveals the title field',
+      await page.locator('#d-title').isVisible());
     await page.fill('#d-title', 'Renamed in the drawer');
     await page.click('#edit-desc');
     await page.fill('#d-desc', '## Heading\n\n- [x] ticked\n- [ ] unticked');
@@ -149,6 +154,7 @@ const statusOf = id => JSON.parse(th('show', id, '--json')).status;
     await page.click(`.card[data-id="${late}"]`);
     await page.waitForSelector('#drawer.open');
     const titleBefore = JSON.parse(th('show', late, '--json')).title;
+    await page.click('#edit-title');
     await page.fill('#d-title', '');
     await page.click('#save');
     await page.waitForFunction(() => document.getElementById('err').textContent.trim().length > 0,
@@ -159,6 +165,49 @@ const statusOf = id => JSON.parse(th('show', id, '--json')).status;
       JSON.parse(th('show', late, '--json')).title === titleBefore);
     check('validation: the drawer stays open so the edit is not lost',
       await page.locator('#drawer.open').count() === 1);
+    check('validation: the refused title is still there to fix',
+      await page.locator('#d-title').isVisible());
+
+    /* 9 — a blocker id is a way into the blocker */
+    await page.click('#close');
+    const blocked = th('add', 'Waits on the must', '--blocked-by', late);
+    await page.waitForSelector(`.card[data-id="${blocked}"] .chip.link[data-open="${late}"]`,
+      { timeout: 6000 });
+    await page.click(`.card[data-id="${blocked}"] .chip.link[data-open="${late}"]`);
+    await page.waitForSelector('#drawer.open');
+    check('links: clicking a blocker chip opens the blocker, not the card',
+      (await page.locator('#d-id').textContent()) === late,
+      await page.locator('#d-id').textContent());
+    check('links: the drawer lists the issues this one blocks',
+      await page.locator(`#d-blocks .chip.link[data-open="${blocked}"]`).count() === 1);
+    await page.click(`#d-blocks .chip.link[data-open="${blocked}"]`);
+    check('links: a blocks chip walks the edge the other way',
+      (await page.locator('#d-id').textContent()) === blocked);
+    check('links: the drawer lists what this one waits on',
+      await page.locator(`#d-blocked-links .chip.link[data-open="${late}"]`).count() === 1);
+    await page.click('#close');
+
+    /* 10 — the sort control reorders the cards inside a column */
+    const readyIds = () => page.$$eval('.col[data-col="ready"] .card', els => els.map(e => e.dataset.id));
+    const num = id => Number(id.split('-').pop());
+    const field = (id, key) => JSON.parse(th('show', id, '--json'))[key];
+
+    await page.selectOption('#sort', 'id');
+    const byId = await readyIds();
+    check('sort: created order runs up the ids',
+      byId.every((id, i) => i === 0 || num(byId[i - 1]) < num(id)), byId.join(','));
+
+    await page.selectOption('#sort', 'priority');
+    const byPriority = await readyIds();
+    check('sort: priority order starts with the most urgent card',
+      field(byPriority[0], 'urgency') === 'must', byPriority.join(','));
+    check('sort: reordering neither loses nor invents a card',
+      byPriority.length === byId.length, `${byPriority.length} vs ${byId.length}`);
+
+    await page.selectOption('#sort', 'unblocks');
+    const leverage = (await readyIds()).map(id => field(id, 'unblocks'));
+    check('sort: unblocks order runs down the counts',
+      leverage.every((n, i) => i === 0 || leverage[i - 1] >= n), leverage.join(','));
   } finally {
     await browser.close();
     proc.kill();

@@ -147,6 +147,8 @@ func (b *Board) Diagnose(anyReady bool) *Deadlock {
 	if len(candidates) == 0 {
 		return nil
 	}
+	// Priority first, not leverage: inside a loop every member unblocks every
+	// other, so the leverage that orders th next says nothing here.
 	sort.SliceStable(candidates, func(i, j int) bool {
 		a, c := candidates[i], candidates[j]
 		if ra, rc := priorityRank(a.Priority), priorityRank(c.Priority); ra != rc {

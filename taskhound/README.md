@@ -119,7 +119,7 @@ never come back empty while open work exists.
 | `th init [--prefix TH]` | create `.taskhound.yaml` here |
 | `th add <title>` | `-d BODY` (or `-d -` for stdin), `--blocked-by`, `--blocks`, `--label`, `--status`, `--priority` |
 | `th list` | `--status`, `--priority`, `--label`, `--ready`, `--blocked` |
-| `th next` | startable now, in priority order |
+| `th next` | startable now, best leverage first |
 | `th show <id>` | one issue in full, with both edge directions and comments |
 | `th deps <id>` | everything `<id>` transitively waits on |
 | `th dependents <id>` | everything that transitively waits on `<id>` |
@@ -136,7 +136,7 @@ case-insensitive and the prefix is optional: `th show 3` is `th show TH-3`.
 ## Priority
 
 Every issue is `must`, `high`, `normal` or `low`, and `normal` unless you say
-otherwise. It is the first thing `th next` considers:
+otherwise:
 
 ```bash
 th add "Production is down" --priority must
@@ -149,11 +149,74 @@ th list --priority high
   is a must is a board with no priorities.
 - **low** sorts after everything else, but it is still offered when nothing else
   is ready. Last, not never.
-- Within one priority, work already in flight comes first, then whatever
-  unblocks the most other issues.
 
 The default is stored as nothing at all, so an unprioritised board keeps exactly
 the file it always had, and a diff only ever shows a priority somebody chose.
+
+### Urgency: nothing is less urgent than what waits on it
+
+A `low` chore blocking a `must` **is** a `must` — the must cannot start until the
+chore is done, so calling the chore low is just wrong. The priority you set is a
+floor; the graph raises it:
+
+```
+$ th show TH-2
+TH-2  Rotate the staging credentials
+status:    todo
+priority:  low (raised to must by TH-3, which waits on this)
+```
+
+That raised value is the issue's **urgency**, and it is what every ranking, every
+`PRI` column and `th list --priority` actually use. It travels the whole chain,
+not one edge, and it comes from open work only — finish or unblock the issue
+above and the borrowed urgency goes away on its own.
+
+Urgency is derived and never stored, exactly like "blocked". Nothing rewrites
+your file behind your back, and the file can never hold a priority the graph
+disagrees with. `--json` carries both: `priority` is what you set,
+`urgency` is what it amounts to, and `urgency_from` names the issue that raised
+it. Tables print urgency with a `↑` when it was inherited:
+
+```
+ID    PRI    STATUS  UNBLOCKS      TITLE
+TH-2  must↑  todo    1 (1 urgent)  Rotate the staging credentials
+```
+
+### What `th next` actually ranks by
+
+A `must` first, whatever else is true of it. After that the queue is about
+**leverage** rather than the issue's own priority, because a `high` issue you
+cannot start yet is worth no more than the thing standing in front of it:
+
+1. `must` — including a `must` inherited from something waiting on it
+2. whatever frees the most **urgent** work — open `must` or `high` issues
+   transitively waiting on it
+3. whatever frees the most work at all
+4. the issue's own urgency
+5. work already `doing` before work not started, then id order
+
+Steps 2 and 3 count the **whole transitive fan-out**, not the direct edges. An
+issue blocking one issue that in turn blocks four unblocks five, and outranks the
+head of a three-long chain, which unblocks two — both have exactly one edge
+leaving them, and the edge is not what matters.
+
+So a `low` chore that a `high` issue is stuck behind outranks a `high` issue
+nobody is waiting on. That is the point: the chore *is* the high issue.
+
+```
+$ th next
+ID    PRI     STATUS  UNBLOCKS      TITLE
+TH-7  low     todo    1 (1 urgent)  Rotate the staging credentials
+TH-2  normal  doing   2             Extract the client
+TH-4  high    todo    0             Write the launch post
+```
+
+The counts are in `--json` too, as `unblocks` and `unblocks_urgent`. Neither
+counts a dependent that is already `done` — finishing something cannot unblock
+work that is already finished.
+
+TH-7 is `low` and top of the queue because a `high` is stuck behind it; TH-4 is
+`high` and last because nothing is.
 
 ## When the board jams
 
@@ -254,10 +317,15 @@ on the next sync, because the board is what is authoritative.
 `th ui` serves a kanban on `127.0.0.1` — loopback only, since the API writes to
 your files.
 
+Title and description are shown, not offered for editing: a drawer opened to
+read something cannot be typed over by accident. The ✎ beside either label — or
+a click on the value itself — swaps in the field, which goes back to being a
+value when you click away. A new issue opens with the title field already up,
+since there is nothing there to read.
+
 Descriptions are markdown. The drawer shows them rendered — headings, code,
-and the `- [ ]` acceptance criteria every ticket is made of — and the ✎ beside
-the Description label swaps it for the plain text, which re-renders when you
-click away. The textarea is always the value; the rendered block is only ever a view
+and the `- [ ]` acceptance criteria every ticket is made of. The field is always
+the value; the block beside it is only ever a view
 of it, so saving does not care which one you are looking at. Rendering is
 `mdlite`, copied in from `mdlite/md.js` and served out of the binary at
 `/md.js`; it escapes before it renders, so a description that arrives over the
@@ -265,8 +333,15 @@ API cannot inject markup.
 
 Four columns: **Blocked**, **Ready**, **Doing**, **Done**. The first is derived
 from the dependency edges; the other three are the issue's own status, so
-dragging a card between them is what sets it. Click a card to edit its title,
-description, status, blockers and labels, or to add a comment. **+ New issue**
+dragging a card between them is what sets it. **Sort** in the header reorders
+the cards inside every column — by `created` (id order, which is the order the
+file is in, and the default), by `priority`, or by `unblocks`, the count on the
+card. The choice is remembered per browser. Click a card to edit its title,
+description, status, blockers and labels, or to add a comment. Every id the
+board shows is a link into that issue: the ⛔ chips on a card, and the
+**Blocked by** and **Blocks** lists in the drawer, each open the issue they
+name — so you can walk the dependency graph in either direction without
+touching the CLI. **+ New issue**
 files one. The board polls every 2s, so edits made by the CLI or by another
 agent appear on their own — except while the editor drawer is open, which would
 stomp on your typing.
@@ -274,7 +349,7 @@ stomp on your typing.
 The HTTP API is the same surface as the CLI:
 
 ```
-GET    /api/board                    every issue, plus blocks/open_blockers/ready
+GET    /api/board                    every issue, plus blocks/open_blockers/ready/unblocks/urgency
 POST   /api/issues                   {title, description, status, blocked_by, labels}
 PATCH  /api/issues/{id}              any subset of those fields
 POST   /api/issues/{id}/comments     {body, author}
