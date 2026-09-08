@@ -135,7 +135,9 @@ log owns reasons. Both are committed.
   the heading itself, which is the one thing hand-written entries get wrong.
 - **`th log check` is the gate.** It fails when the log names an id that exists
   nowhere, or when an issue was finished with no entry naming it. Undated or
-  off-format headings are reported, not failed.
+  off-format headings are reported, not failed. A padded id is not a mismatch:
+  `V6-01` in the log and `V6-1` on the board are the same issue, and either
+  spelling works in `th log issue`.
 
 **A jammed board still gives you a pick.** If the graph holds a loop, or a
 blocker naming an issue that is not on the board, `th next` says so on stderr and

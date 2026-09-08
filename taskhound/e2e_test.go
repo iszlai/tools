@@ -975,3 +975,52 @@ func TestTheLogIsFoundAndReadThroughTheCLI(t *testing.T) {
 		t.Errorf("the appended entry is not in the list:\n%s", listed)
 	}
 }
+
+// TestCheckAsksAboutTheIssueAndNotTheSpelling drives the real failure through
+// the CLI: a log that pads its ids against a board that does not. Before this,
+// check reported every such id as naming nothing and every finished issue as
+// unlogged, and `th log issue TH-1` could not find the entry that wrote TH-01.
+func TestCheckAsksAboutTheIssueAndNotTheSpelling(t *testing.T) {
+	c := newCLI(t)
+	done := c.add("A decision worth writing up")
+	c.run("update", done, "--status", "done")
+	padded := paddedID(done)
+
+	logPath := filepath.Join(c.dir, LogName)
+	body := "# Captain's log\n\n" +
+		LogHeading("2026-09-08", padded+": why it was done") + "\n\nBecause it needed doing.\n"
+	if err := os.WriteFile(logPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := c.try("log", "check")
+	if err != nil {
+		t.Errorf("check failed over a leading zero (%v):\n%s", err, out)
+	}
+	if strings.Contains(out, "FAIL") {
+		t.Errorf("check reports a problem it should not:\n%s", out)
+	}
+
+	// The entry is reachable by either spelling, whichever the log used.
+	for _, ref := range []string{done, padded} {
+		if out := c.run("log", "issue", ref); !strings.Contains(out, "why it was done") {
+			t.Errorf("th log issue %s did not find the entry written as %s:\n%s", ref, padded, out)
+		}
+	}
+
+	// The tolerance is padding only. An id that is genuinely not on the board
+	// still has to fail, or the check has stopped checking.
+	if err := os.WriteFile(logPath, []byte(body+
+		"\n"+LogHeading("2026-09-09", "TH-0404: an id that names nothing")+"\n\nBody.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := c.try("log", "check"); err == nil {
+		t.Errorf("check passed with an id that is on neither the board nor the done log:\n%s", out)
+	}
+}
+
+// paddedID writes an id the way a hand-kept log tends to: TH-1 as TH-01.
+func paddedID(id string) string {
+	i := strings.LastIndex(id, "-")
+	return id[:i+1] + "0" + id[i+1:]
+}

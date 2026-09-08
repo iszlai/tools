@@ -431,6 +431,13 @@ Only ids of the board's own prefix are checked. A log that has outlived a prefix
 change is full of ids that are correctly not on the board any more, and reporting
 all of them would bury the one that is a typo; the rest are counted by prefix.
 
+Padding is not a mismatch. A log that writes `V6-01` where the board writes
+`V6-1` is naming the same issue, so both sides are compared with the zeros off
+and the case ignored — otherwise a hand-kept log fails on every entry it has, and
+the fix would be editing the history to suit the tool. `th log issue` is tolerant
+the same way: either spelling finds the entries written in the other. The
+tolerance stops at the number, so `V6-1` is still not `V6-12`.
+
 ## GitHub Issues
 
 `th sync` pushes the board to GitHub Issues through the `gh` CLI. It goes one

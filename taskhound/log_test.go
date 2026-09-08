@@ -309,3 +309,46 @@ func mustPattern(t *testing.T, pattern string) *regexp.Regexp {
 	}
 	return re
 }
+
+// TestAPaddedIDIsTheSameIssueAsAnUnpaddedOne pins the case that made check
+// useless on a real log: the log writes V6-01, the board writes V6-1, and
+// comparing the spelling reported 124 finished issues as unlogged.
+func TestAPaddedIDIsTheSameIssueAsAnUnpaddedOne(t *testing.T) {
+	for _, c := range []struct{ id, want string }{
+		{"V6-01", "V6-1"},
+		{"V6-1", "V6-1"},
+		{"v6-001", "V6-1"},
+		{"V5-00", "V5-0"},
+		{"WO-8a", "WO-8a"},
+		{"WO-08A", "WO-8a"},
+		{"UTF-8", "UTF-8"},
+		{"not-an-id", "NOT-AN-ID"},
+	} {
+		if got := logIDKey(c.id); got != c.want {
+			t.Errorf("logIDKey(%q) = %q, want %q", c.id, got, c.want)
+		}
+	}
+
+	// And the search goes both ways, because either spelling is the same issue.
+	l := readLog(t, writeLog(t,
+		"## 2026-09-01 — TH-01: written padded\n\nBody.\n"+
+			"\n## 2026-09-02 — TH-2: written plain\n\nProse naming TH-1 and TH-002.\n"))
+	for _, ref := range []string{"TH-1", "TH-01", "TH-0001"} {
+		re, err := logIDRegexp(ref)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := len(searchLog(l.Entries, re)); n != 2 {
+			t.Errorf("%s matched %d entries, want both spellings (2)", ref, n)
+		}
+	}
+	// Tolerance stops at the number: TH-1 is not TH-2 and not TH-12.
+	re, err := logIDRegexp("TH-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	matches := searchLog(l.Entries, re)
+	if len(matches) != 1 || !strings.Contains(matches[0].Entry.Title, "written plain") {
+		t.Errorf("TH-2 matched %d entries, want only its own", len(matches))
+	}
+}

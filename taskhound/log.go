@@ -394,3 +394,36 @@ func (l *Log) IDs() map[string]map[string]int {
 	}
 	return out
 }
+
+// logIDShape is logIDPattern anchored, with the number's padding split off, so
+// an id written by either hand can be reduced to one form.
+var logIDShape = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9]*)-0*([0-9]+)([A-Za-z]?)$`)
+
+// logIDKey reduces an id to the form the board writes it in: prefix uppercased,
+// leading zeros off the number, a hand-added letter suffix kept and lowercased.
+//
+// The log and the board are two files kept by different hands, and a log that
+// writes V6-01 where the board writes V6-1 is not naming a different issue --
+// it is padding. Every comparison between the two goes through here, so the
+// question is about the issue rather than about its spelling. Without it a real
+// log reported every finished issue as unlogged and every id it named as
+// existing nowhere, which is a gate nobody would keep.
+func logIDKey(id string) string {
+	id = strings.TrimSpace(id)
+	m := logIDShape.FindStringSubmatch(id)
+	if m == nil {
+		return strings.ToUpper(id)
+	}
+	return strings.ToUpper(m[1]) + "-" + m[2] + strings.ToLower(m[3])
+}
+
+// logIDRegexp matches an id however the log spelled its number, so asking about
+// V6-1 finds the entries that wrote V6-01 and asking about V6-01 finds the ones
+// that wrote V6-1. A ref that is not id-shaped is matched as written.
+func logIDRegexp(id string) (*regexp.Regexp, error) {
+	m := logIDShape.FindStringSubmatch(strings.TrimSpace(id))
+	if m == nil {
+		return regexp.Compile(`\b` + regexp.QuoteMeta(id) + `\b`)
+	}
+	return regexp.Compile(`(?i)\b` + regexp.QuoteMeta(m[1]) + `-0*` + m[2] + m[3] + `\b`)
+}

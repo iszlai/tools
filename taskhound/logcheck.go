@@ -117,25 +117,33 @@ func (r *logReport) check(l *Log, b *Board, archive *Archive, since string, stri
 	// board or in the done log. Only this prefix: a log that has outlived a
 	// prefix change is full of ids that are correctly not here any more, and
 	// reporting all of them would bury the one that is a typo.
+	//
+	// Both sides go through logIDKey, because the two files are kept by
+	// different hands and a log that writes V6-01 where the board writes V6-1 is
+	// padding, not a different issue. Matching the spelling instead reported
+	// every id in a real log as naming nothing and every finished issue as
+	// unlogged, which is a gate nobody would keep. The report still prints the
+	// id as the log wrote it, since that is what you would search the file for.
 	ids := l.IDs()
 	known := map[string]bool{}
 	for _, is := range b.Issues {
-		known[is.ID] = true
+		known[logIDKey(is.ID)] = true
 	}
 	for _, is := range archive.Issues {
-		known[is.ID] = true
+		known[logIDKey(is.ID)] = true
 	}
+	named := map[string]bool{}
 	for id, line := range ids[b.Prefix] {
-		if !known[id] {
+		named[logIDKey(id)] = true
+		if !known[logIDKey(id)] {
 			r.add("no such issue", id, line, "named in the log, on neither the board nor the done log", true)
 		}
 	}
 
 	// Every finished issue should have an entry naming it: a decision nobody
 	// wrote up is the thing this whole file exists to stop.
-	named := ids[b.Prefix]
 	for _, is := range finishedIssues(b, archive) {
-		if _, ok := named[is.ID]; ok {
+		if named[logIDKey(is.ID)] {
 			continue
 		}
 		if since != "" && is.UpdatedAt.Format("2006-01-02") < since {

@@ -374,7 +374,7 @@ func cmdLogIssue(args []string) error {
 		return err
 	}
 	id := normalizeLogID(rest[0], *file)
-	re, err := regexp.Compile(`\b` + regexp.QuoteMeta(id) + `\b`)
+	re, err := logIDRegexp(id)
 	if err != nil {
 		return err
 	}
