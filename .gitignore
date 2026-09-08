@@ -5,5 +5,8 @@ __pycache__/
 node_modules/
 pw-browsers/
 bin/
+# `go build ./...` writes a binary named after the package directory, which is
+# not what the Makefile builds and is not something to commit.
+taskhound/taskhound
 .taskhound.yaml.lock
 dist/
