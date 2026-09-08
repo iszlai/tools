@@ -472,24 +472,34 @@ type Store struct {
 
 func (s *Store) lockPath() string { return s.Path + ".lock" }
 
-// FindStore walks up from dir looking for the board file, returning the first
-// one it finds.
-func FindStore(dir string) (string, error) {
+// FindUp walks up from dir looking for name, returning the first one it finds.
+// The board and the captain's log are both found this way, the way git finds
+// .git, so one walker answers for both.
+func FindUp(dir, name string) (string, error) {
 	dir, err := filepath.Abs(dir)
 	if err != nil {
 		return "", err
 	}
 	for {
-		p := filepath.Join(dir, StoreName)
+		p := filepath.Join(dir, name)
 		if _, err := os.Stat(p); err == nil {
 			return p, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", fmt.Errorf("no %s here or in any parent directory (run `th init`)", StoreName)
+			return "", fmt.Errorf("no %s here or in any parent directory", name)
 		}
 		dir = parent
 	}
+}
+
+// FindStore walks up from dir looking for the board file.
+func FindStore(dir string) (string, error) {
+	path, err := FindUp(dir, StoreName)
+	if err != nil {
+		return "", fmt.Errorf("no %s here or in any parent directory (run `th init`)", StoreName)
+	}
+	return path, nil
 }
 
 // lock takes an advisory flock on the sidecar and returns the release func.

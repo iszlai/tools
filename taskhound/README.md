@@ -8,6 +8,7 @@ corrupting it.
 ```
 th add "Rate-limit the public API" --blocked-by TH-1
 th next                     # what can I start right now?
+th log add "Why"            # append a decision to captains-log.md
 th dependents TH-1          # what does finishing TH-1 unlock?
 th ui --open                # kanban board
 ```
@@ -132,6 +133,7 @@ never come back empty while open work exists.
 | `th comment <id> <body>` | append a comment |
 | `th archive` | move long-finished issues into the done log; `--older-than`, `--dry-run`, `--list` |
 | `th sync` | push the board to GitHub Issues; `--repo`, `--dry-run` |
+| `th log <cmd>` | `add`, `tail`, `since`, `ls`, `grep`, `issue`, `amendments`, `check` — see below |
 | `th ui` | `--port` (default 8787), `--open` |
 | `th agent-guide` | print the usage guide written for agents |
 
@@ -335,6 +337,99 @@ been archived can come back as new work.
 The log is only ever appended to, and it is written before the board is
 rewritten: interrupted between the two, an issue is duplicated rather than lost,
 and a duplicate is something you can see.
+
+## The captain's log
+
+The board says what is left. It cannot say **why** — why a road was cut, why a
+number is 3.5 and not 2.8, why a decision was reversed. That lives in
+`captains-log.md`, an append-only markdown file of decisions committed beside
+the board, and `th log` reads it and adds to it.
+
+```bash
+th log add "What was decided" <<'EOF'   # body from stdin, dated by the tool
+**Context.** …
+**Decision.** …
+EOF
+th log add "Ruled in the same sitting" --sub    # a ### under the last entry
+th log add "The gate holds two men" --id 37     # V8-37: goes in the heading
+
+th log tail 3                    # the last three entries, whole
+th log since 2026-09-01          # everything from a date
+th log ls                        # one line per entry
+th log grep parapet              # hits grouped under the decision they belong to
+th log issue V8-6                # every entry naming it, the ones about it first
+th log amendments vision.md      # entries that record a change to a document
+th log check                     # the log and the board agree
+```
+
+**It is append-only and stays readable without `th`.** Nothing here rewrites the
+file or reorders it, there is no sidecar index, and no state of its own — so the
+file is still a file you read with `less` on a machine that has never heard of
+this tool. Status lives on the board; the log is decisions only, which is why
+`th log check` reads the board and never writes it.
+
+### One format, written by the tool
+
+```markdown
+## 2026-09-08 — V8-37: the gate holds two men, not three
+
+The comment said three and `int(8.4 / 3.5)` is 2.
+```
+
+A heading, a blank line, prose. No separator rule — the heading already
+separates. An id goes at the **front of the title**, which is what puts the entry
+at the top of `th log issue`.
+
+Deriving the format from the last entry was the first attempt and it is worse: it
+perpetuates whatever drift is already in the file, and two agents appending on
+two days get two shapes depending on what happened to be last.
+
+**Reading stays tolerant**, because a log that predates the tool has shapes the
+tool would not write — a title wrapped onto a second `##` line, a heading with no
+date — and an append-only file may never be tidied to suit its own reader. What
+closes the gap is that `th log check` counts the entries that do not match, so
+drift is something you can see rather than something the parser quietly absorbs.
+
+### Why grouping, and not an index
+
+The cost of `grep -n X captains-log.md` was never the scan. A 16k-line log is
+about half a megabyte and a full pass is a millisecond. What made it expensive is
+that grep hands back line hits with no idea which *decision* they belong to, so
+something has to go and reconstruct the context around each one:
+
+```
+$ th log grep parapet
+captains-log.md:7   2026-08-23  The firing step exists because towers cannot shoot over themselves
+      11  into a ditch. It cannot: its own parapet is in the way.
+
+captains-log.md:13  (undated)   WO-8a — the threat overlay, corridor tint
+      15  A count, not the number ThreatMap already kept. The parapet limits what it sees.
+
+2 hit(s) in 2 entry(ies)
+```
+
+`--full` prints the whole of every matching entry, which is the "then read around
+each hit" step done for you. So there is no index and there is not going to be
+one: an index would add an on-disk file to keep in step with an append-only
+document, and a stale-index failure mode the plain scan cannot have.
+
+### What `th log check` fails on, and what it only reports
+
+| | |
+| --- | --- |
+| an id of your prefix that is on neither the board nor the done log | **fails** |
+| an issue finished with no entry naming it | **fails** |
+| a heading with no date, a date going backwards, a heading off-format | reports |
+
+The split is deliberate. A check a file is *meant* to fail is a wrong
+instruction in an authoritative tone, and a permanently red gate is one everyone
+learns to ignore — so the shapes an inherited log is full of are counted, not
+failed. `--strict` fails on those too, for a log that has caught up with its own
+format. `--since <date>` scopes the "no entry naming it" question.
+
+Only ids of the board's own prefix are checked. A log that has outlived a prefix
+change is full of ids that are correctly not on the board any more, and reporting
+all of them would bury the one that is a typo; the rest are counted by prefix.
 
 ## GitHub Issues
 

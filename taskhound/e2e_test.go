@@ -933,3 +933,45 @@ issues:
 		t.Errorf("the escalate block did not round-trip: %+v", again.Escalate)
 	}
 }
+
+// TestTheLogIsFoundAndReadThroughTheCLI covers what the library tests cannot:
+// the walk up from a subdirectory, and that th log check fails the process when
+// the log and the board disagree.
+func TestTheLogIsFoundAndReadThroughTheCLI(t *testing.T) {
+	c := newCLI(t)
+	done := c.add("A decision worth writing up")
+	c.run("update", done, "--status", "done")
+
+	logPath := filepath.Join(c.dir, LogName)
+	if err := os.WriteFile(logPath, []byte("# Captain's log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A log is found by walking up, the way the board is, so a command run deep
+	// in a tree reaches the one at the root.
+	deep := filepath.Join(c.dir, "game", "src")
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	from := &cli{t: t, dir: deep}
+	if _, err := from.try("log", "ls"); err != nil {
+		t.Fatalf("the log was not found from a subdirectory: %v", err)
+	}
+
+	// A finished issue with no entry naming it is what check exists to catch,
+	// and it has to fail the process rather than only mention it.
+	if out, err := c.try("log", "check"); err == nil {
+		t.Errorf("check passed with %s finished and unlogged:\n%s", done, out)
+	} else if !strings.Contains(err.Error(), "problem") {
+		t.Errorf("check failed for the wrong reason: %v", err)
+	}
+
+	from.run("log", "add", "Why "+done+" was done", "-d", "Because it needed doing.")
+	out := c.run("log", "check")
+	if strings.Contains(out, "FAIL") {
+		t.Errorf("check still fails once the decision is written up:\n%s", out)
+	}
+	if listed := c.run("log", "ls"); !strings.Contains(listed, "Why "+done) {
+		t.Errorf("the appended entry is not in the list:\n%s", listed)
+	}
+}

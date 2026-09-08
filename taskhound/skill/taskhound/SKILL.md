@@ -76,6 +76,20 @@ th update TH-3 --blocked-by TH-1,TH-4     # replace the whole blocker list
 th update TH-3 --label needs-review --unlabel ready-for-agent
 th comment TH-3 "Ran the migration on staging, green."
 
+th log add "What was decided" <<'EOF'      # a decision; the tool dates it
+**Context.** …
+**Decision.** …
+EOF
+th log add "Ruled the same sitting" --sub  # a ### under the last entry
+th log add "The gate holds two" --id V8-37 # V8-37: … goes in the heading
+th log tail 3                             # the last three entries, whole
+th log since 2026-09-01 --json
+th log grep "<pattern>" --json            # hits grouped by decision
+th log grep "<pattern>" --full            # whole entries, not just the lines
+th log issue V8-6 --json                  # entries about it first, then references
+th log amendments vision.md               # entries recording a doc change
+th log check                              # the log and the board agree
+
 th archive --dry-run                      # what would leave the board
 th archive --older-than 30d               # move long-finished work to the done log
 th archive --list --json                  # read the done log
@@ -96,6 +110,32 @@ three-long chain, which unblocks two. Volume comes before urgency-of-one, so a
 release blocker freeing sixteen `normal` issues outranks a chore freeing one
 `high` one. The top row is the thing to pick up; the `unblocks`,
 `unblocks_urgent` and `urgency` fields say why it is there.
+
+## The captain's log
+
+`captains-log.md` beside the board holds **why**: why a road was cut, why a
+number is what it is, why a decision was reversed. The board owns status; the
+log owns reasons. Both are committed.
+
+- **Read the log before re-deriving a decision.** `th log grep "<what>"` groups
+  hits under the entry that holds them, so one command answers "what was decided
+  about X" instead of a line-oriented search you have to reconstruct context
+  around. `--full` prints the matching entries whole.
+- **`th log issue <id>` is the question `th show` cannot answer.** It lists every
+  entry naming an issue, with the ones the id is *in the heading of* first —
+  those are what the entry is about, the rest are decisions that touched it. Run
+  it before picking up an issue somebody else has already reasoned about.
+- **Write an entry when a later reader would otherwise reconstruct it from the
+  diff.** A reversal, a number chosen by measurement, an option rejected and
+  why, a test that was wrong. Not a changelog: the commit already says what
+  changed. Pass `--id <issue>` so the entry lands in `th log issue`.
+- **Never edit or reorder the file.** It is append-only. If a decision is
+  reversed, write a new entry that says so and names the old one.
+- **The body comes from stdin**, so a heredoc needs no flag. `th log add` dates
+  the heading itself, which is the one thing hand-written entries get wrong.
+- **`th log check` is the gate.** It fails when the log names an id that exists
+  nowhere, or when an issue was finished with no entry naming it. Undated or
+  off-format headings are reported, not failed.
 
 **A jammed board still gives you a pick.** If the graph holds a loop, or a
 blocker naming an issue that is not on the board, `th next` says so on stderr and
