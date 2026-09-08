@@ -80,6 +80,45 @@ func priorityRank(p string) int {
 	return len(Priorities)
 }
 
+// Escalation turns leverage into priority: an issue that a lot of other work is
+// stacked up behind is important whether or not anybody remembered to say so.
+//
+// Volume has to buy a tier rather than a tiebreak. Ordered on leverage alone, a
+// chore freeing one high issue beat a release blocker freeing sixteen normal
+// ones, because a single flag of urgency outweighed any amount of volume. A
+// count that large is not a tiebreak, it is the priority.
+type Escalation struct {
+	High int `yaml:"high" json:"high"` // this many open issues waiting is at least high
+	Must int `yaml:"must" json:"must"` // ...and this many is at least must
+}
+
+// DefaultEscalation is what a board that does not say otherwise gets. Write an
+// escalate block to scale the thresholds to the size of the board, or set both
+// to 0 to switch escalation off entirely.
+var DefaultEscalation = Escalation{High: 3, Must: 10}
+
+func (b *Board) escalation() Escalation {
+	if b.Escalate == nil {
+		return DefaultEscalation
+	}
+	return *b.Escalate
+}
+
+// floor is the priority a count of waiting issues is worth on its own, or ""
+// when the count has no opinion. It must not answer "normal" for a small count:
+// normal outranks low, so a floor of normal would quietly promote every low
+// chore on the board. A threshold of 0 is off, so escalation can be declined
+// without inventing a number nothing can reach.
+func (e Escalation) floor(waiting int) string {
+	switch {
+	case e.Must > 0 && waiting >= e.Must:
+		return PriorityMust
+	case e.High > 0 && waiting >= e.High:
+		return PriorityHigh
+	}
+	return ""
+}
+
 func validStatus(s string) bool {
 	for _, v := range Statuses {
 		if v == s {
@@ -113,10 +152,11 @@ type Issue struct {
 // Board is the whole file. Edges live in exactly one place — each issue's
 // BlockedBy — and the reverse direction is computed by Blocks.
 type Board struct {
-	Version int      `yaml:"version" json:"version"`
-	Prefix  string   `yaml:"prefix" json:"prefix"`
-	NextID  int      `yaml:"next_id" json:"next_id"`
-	Issues  []*Issue `yaml:"issues" json:"issues"`
+	Version  int         `yaml:"version" json:"version"`
+	Prefix   string      `yaml:"prefix" json:"prefix"`
+	NextID   int         `yaml:"next_id" json:"next_id"`
+	Escalate *Escalation `yaml:"escalate,omitempty" json:"escalate,omitempty"`
+	Issues   []*Issue    `yaml:"issues" json:"issues"`
 
 	// The document this board was parsed from, kept so that saving can carry
 	// over keys written by a newer th. Unexported, so yaml ignores it.
@@ -266,15 +306,22 @@ func (b *Board) Unblocks(id string) (total, urgent int) {
 	return total, urgent
 }
 
-// Urgency is the priority an issue actually has. Nothing can be less urgent
-// than what waits on it: a low chore blocking a must is a must, because the must
-// cannot start until the chore is done. So urgency is the most urgent priority
-// across the issue itself and every open issue transitively waiting on it, and
-// the id that raised it comes back with it so the answer is explainable.
+// Urgency is the priority an issue actually has, which is the most urgent of
+// three things:
 //
-// It is derived and never stored, like "blocked": cut the edge or finish the
-// work above it and the inherited urgency goes away on its own, so the file can
-// never hold a priority that the graph disagrees with.
+//   - the priority somebody set on it, which is a floor and not the answer;
+//   - the priority of any open issue transitively waiting on it, because nothing
+//     can be less urgent than what waits on it -- a low chore blocking a must is
+//     a must, since the must cannot start until the chore is done;
+//   - what the sheer number of issues waiting on it is worth (see Escalation),
+//     because enough work waiting is important even when no single piece is.
+//
+// raisedBy names the issue that raised it, or is empty when the count did --
+// which is also how a caller tells the two apart.
+//
+// Urgency is derived and never stored, like "blocked": cut the edge or finish
+// the work above it and the borrowed urgency goes away on its own, so the file
+// can never hold a priority that the graph disagrees with.
 func (b *Board) Urgency(id string) (priority, raisedBy string) {
 	is, err := b.Get(id)
 	if err != nil {
@@ -282,14 +329,21 @@ func (b *Board) Urgency(id string) (priority, raisedBy string) {
 	}
 	priority = effectivePriority(is.Priority)
 	best := priorityRank(is.Priority)
+	waiting := 0
 	for _, dep := range b.Dependents(id) {
 		other, err := b.Get(dep)
 		if err != nil || other.Status == StatusDone {
 			continue
 		}
+		waiting++
 		if r := priorityRank(other.Priority); r < best {
 			best, priority, raisedBy = r, effectivePriority(other.Priority), other.ID
 		}
+	}
+	if floor := b.escalation().floor(waiting); floor != "" && priorityRank(floor) < best {
+		// The count outranks anything a single waiting issue asked for, so no one
+		// issue gets the credit.
+		priority, raisedBy = floor, ""
 	}
 	return priority, raisedBy
 }
@@ -297,13 +351,18 @@ func (b *Board) Urgency(id string) (priority, raisedBy string) {
 // sortNext puts issues in the order th next offers them, and is the whole of
 // what "next" means.
 //
-// A must comes first whatever else is true of it -- including a must inherited
-// from something waiting on it. After that the queue is about leverage rather
-// than the issue's own urgency, because a high issue you cannot start yet is
-// worth no more than the thing standing in front of it: what frees the most
-// urgent work, then what frees the most work at all, and only then how urgent
-// the issue is itself. So a low chore that three people are waiting on outranks
-// a high one nobody is waiting on -- which is the point.
+// A must comes first whatever else is true of it -- including a must it
+// inherited, or one the size of its backlog earned it. After that the queue is
+// about leverage rather than the issue's own urgency, because a high issue you
+// cannot start yet is worth no more than the thing standing in front of it:
+// what frees the most work, then what frees the most urgent work, and only then
+// how urgent the issue is itself. So a low chore that three people are waiting
+// on outranks a high one nobody is waiting on -- which is the point.
+//
+// Volume comes before urgency-of-one deliberately. The other way round, a chore
+// freeing a single high issue beat a release blocker freeing sixteen normal
+// ones: one flag outweighed any amount of work. Escalation and this ordering
+// are the same correction seen from two sides.
 func (b *Board) sortNext(issues []*Issue) {
 	type key struct{ urgency, total, urgent int }
 	keys := make(map[string]key, len(issues))
@@ -319,11 +378,11 @@ func (b *Board) sortNext(issues []*Issue) {
 		if am, cm := ka.urgency == must, kc.urgency == must; am != cm {
 			return am
 		}
-		if ka.urgent != kc.urgent {
-			return ka.urgent > kc.urgent
-		}
 		if ka.total != kc.total {
 			return ka.total > kc.total
+		}
+		if ka.urgent != kc.urgent {
+			return ka.urgent > kc.urgent
 		}
 		if ka.urgency != kc.urgency {
 			return ka.urgency < kc.urgency

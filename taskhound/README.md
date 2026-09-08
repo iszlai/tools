@@ -176,11 +176,49 @@ That raised value is the issue's **urgency**, and it is what every ranking, ever
 not one edge, and it comes from open work only — finish or unblock the issue
 above and the borrowed urgency goes away on its own.
 
+### Escalation: volume is a priority
+
+An issue that a lot of other work is stacked up behind is important whether or
+not anybody remembered to say so. So the **number** of open issues waiting on
+one raises its urgency too:
+
+| Open issues waiting | Urgency is at least |
+| --- | --- |
+| 3 | `high` |
+| 10 | `must` |
+
+```
+$ th show TH-1
+TH-1  Big blocker — gates the whole release
+status:    todo
+priority:  normal (raised to must: 16 issues are waiting on this)
+```
+
+This is the fix for a real failure. Ranked on leverage as a tiebreak alone, a
+`low` chore freeing one `high` issue beat a release blocker freeing sixteen
+`normal` ones — a single flag outweighed any amount of work. Sixteen issues
+waiting is not a tiebreak, it is the priority.
+
+Scale the thresholds to the size of your board, or set both to `0` to switch
+escalation off:
+
+```yaml
+version: 1
+prefix: TH
+next_id: 42
+escalate:
+    high: 5
+    must: 20
+issues:
+    ...
+```
+
 Urgency is derived and never stored, exactly like "blocked". Nothing rewrites
 your file behind your back, and the file can never hold a priority the graph
 disagrees with. `--json` carries both: `priority` is what you set,
 `urgency` is what it amounts to, and `urgency_from` names the issue that raised
-it. Tables print urgency with a `↑` when it was inherited:
+it — empty when the *count* did, which is how you tell the two apart. Tables
+print urgency with a `↑` whenever the graph raised it above what was set:
 
 ```
 ID    PRI    STATUS  UNBLOCKS      TITLE
@@ -193,10 +231,10 @@ A `must` first, whatever else is true of it. After that the queue is about
 **leverage** rather than the issue's own priority, because a `high` issue you
 cannot start yet is worth no more than the thing standing in front of it:
 
-1. `must` — including a `must` inherited from something waiting on it
-2. whatever frees the most **urgent** work — open `must` or `high` issues
+1. `must` — set, inherited, or earned by the size of the backlog behind it
+2. whatever frees the **most work**
+3. whatever frees the most **urgent** work — open `must` or `high` issues
    transitively waiting on it
-3. whatever frees the most work at all
 4. the issue's own urgency
 5. work already `doing` before work not started, then id order
 
@@ -204,6 +242,10 @@ Steps 2 and 3 count the **whole transitive fan-out**, not the direct edges. An
 issue blocking one issue that in turn blocks four unblocks five, and outranks the
 head of a three-long chain, which unblocks two — both have exactly one edge
 leaving them, and the edge is not what matters.
+
+Volume comes before urgency-of-one on purpose, and escalation is the same
+correction seen from the other side: without both, one `high` issue behind a
+chore outranked sixteen `normal` ones behind a release blocker.
 
 So a `low` chore that a `high` issue is stuck behind outranks a `high` issue
 nobody is waiting on. That is the point: the chore *is* the high issue.
@@ -221,7 +263,19 @@ counts a dependent that is already `done` — finishing something cannot unblock
 work that is already finished.
 
 TH-7 is `low` and top of the queue because a `high` is stuck behind it; TH-4 is
-`high` and last because nothing is.
+`high` and last because nothing is. On a board with real fan-out it looks like
+this — the release blocker earned its `must` from the sixteen issues behind it,
+and it beats a hand-set `must` with nothing behind it:
+
+```
+$ th next
+ID     PRI    STATUS  UNBLOCKS      TITLE
+TH-1   must↑  todo    16            Big blocker — gates the whole release
+TH-25  must   todo    0             Genuine must
+TH-20  high↑  todo    3             Modest hub
+TH-18  high↑  todo    1 (1 urgent)  Tiny chore
+TH-24  low    todo    0             Low chore, blocks nothing
+```
 
 ## When the board jams
 

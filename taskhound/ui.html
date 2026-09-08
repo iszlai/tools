@@ -312,11 +312,11 @@ function card(is) {
   const labels = (is.labels || []).map(l => `<span class="chip label">${esc(l)}</span>`).join('');
   // The urgency, not the stored priority: a low chore blocking a must is a
   // must, and a card that says "low" while the queue treats it as a must is a
-  // card that lies. The arrow says it was inherited.
-  const raised = is.urgency_from;
+  // card that lies. The arrow says the graph raised it.
+  const why = whyUrgent(is);
   const pri = is.urgency && is.urgency !== 'normal'
-    ? `<span class="chip pri ${esc(is.urgency)}"${raised ? ` title="raised by ${esc(raised)}"` : ''}>` +
-      `${esc(is.urgency)}${raised ? ' \u2191' : ''}</span>` : '';
+    ? `<span class="chip pri ${esc(is.urgency)}"${why ? ` title="${esc(why)}"` : ''}>` +
+      `${esc(is.urgency)}${why ? ' \u2191' : ''}</span>` : '';
   return `<article class="card ${column(is)}" draggable="true" data-id="${esc(is.id)}">
       <div class="id">${esc(is.id)}</div>
       <div class="title">${esc(is.title)}</div>
@@ -327,6 +327,13 @@ function card(is) {
 // Every id the board shows is a way into that issue. The status rides along,
 // because a blocker you are looking at is usually a blocker you want to know
 // the state of.
+function whyUrgent(is) {
+  if (!is || is.urgency === is.priority) return '';
+  return is.urgency_from
+    ? `raised to ${is.urgency} by ${is.urgency_from}, which waits on this`
+    : `raised to ${is.urgency}: ${is.unblocks} issues are waiting on this`;
+}
+
 function idChips(ids) {
   if (!ids.length) return '<span class="derived">-</span>';
   return ids.map(id => {
@@ -364,9 +371,7 @@ function openDrawer(id) {
   $('d-priority').innerHTML = board.priorities
     .map(p => `<option ${(is ? is.priority : 'normal') === p ? 'selected' : ''}>${p}</option>`).join('');
   // The select holds what you set; the note holds what the graph makes of it.
-  $('d-priority-note').textContent = is && is.urgency_from
-    ? `urgent as ${is.urgency}: ${is.urgency_from} waits on this`
-    : '';
+  $('d-priority-note').textContent = whyUrgent(is);
   $('d-blocked').value = is ? is.blocked_by.join(', ') : '';
   $('d-blocked-links').innerHTML = idChips(is ? is.blocked_by : []);
   $('d-labels').value = is ? (is.labels || []).join(', ') : '';

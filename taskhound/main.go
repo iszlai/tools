@@ -242,13 +242,27 @@ func views(b *Board, issues []*Issue) []issueView {
 
 // priCell is the PRI column. It shows the urgency rather than the stored
 // priority, because the urgency is what actually orders the board, with an
-// arrow when it was inherited from something waiting on the issue.
+// arrow when the graph raised it above what was set.
 func priCell(b *Board, is *Issue) string {
-	urgency, from := b.Urgency(is.ID)
-	if from != "" {
+	urgency, _ := b.Urgency(is.ID)
+	if urgency != effectivePriority(is.Priority) {
 		return urgency + "\u2191"
 	}
 	return urgency
+}
+
+// whyUrgent explains a raise in one phrase. An id means one waiting issue asked
+// for it; no id means the number of them did.
+func whyUrgent(b *Board, is *Issue) string {
+	urgency, from := b.Urgency(is.ID)
+	if urgency == effectivePriority(is.Priority) {
+		return ""
+	}
+	if from != "" {
+		return fmt.Sprintf("raised to %s by %s, which waits on this", urgency, from)
+	}
+	waiting, _ := b.Unblocks(is.ID)
+	return fmt.Sprintf("raised to %s: %d issues are waiting on this", urgency, waiting)
 }
 
 func printJSON(v any) error {
@@ -540,8 +554,8 @@ func cmdShow(args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "status:\t%s\n", state)
 	priority := effectivePriority(is.Priority)
-	if urgency, from := b.Urgency(is.ID); from != "" {
-		priority = fmt.Sprintf("%s (raised to %s by %s, which waits on this)", priority, urgency, from)
+	if why := whyUrgent(b, is); why != "" {
+		priority = fmt.Sprintf("%s (%s)", priority, why)
 	}
 	fmt.Fprintf(w, "priority:\t%s\n", priority)
 	fmt.Fprintf(w, "blocked by:\t%s\n", withStatus(b, is.BlockedBy))

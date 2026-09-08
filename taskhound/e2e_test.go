@@ -687,7 +687,10 @@ func TestNextRanksByLeverageThenPriority(t *testing.T) {
 	c.add("Waits on the hub", "--blocked-by", hub)
 	c.add("Also waits on the hub", "--blocked-by", hub)
 
-	want := strings.Join([]string{chore, hub, lonely}, ",")
+	// Volume before urgency-of-one: the hub frees two, the chore frees one, and
+	// the chore's one being high does not buy it the top of the queue. The other
+	// way round, a single flag outweighed any amount of work.
+	want := strings.Join([]string{hub, chore, lonely}, ",")
 	if got := strings.Join(ids(c.json("next", "--json")), ","); got != want {
 		t.Fatalf("next = %s, want %s", got, want)
 	}
@@ -814,5 +817,119 @@ func TestLeverageCountsTheWholeChainNotTheEdge(t *testing.T) {
 	// Both have a single direct edge: counting those would have called it a tie.
 	if len(queue[0].Blocks) != 1 || len(queue[1].Blocks) != 1 {
 		t.Errorf("the direct edge counts should be equal: %v vs %v", queue[0].Blocks, queue[1].Blocks)
+	}
+}
+
+// TestEscalationTurnsVolumeIntoPriority pins the rule that enough work waiting
+// on an issue is a priority in itself, whatever the issue says about itself.
+func TestEscalationTurnsVolumeIntoPriority(t *testing.T) {
+	c := newCLI(t)
+	shown := func(id string) issueView {
+		t.Helper()
+		var v issueView
+		if err := json.Unmarshal([]byte(c.run("show", id, "--json")), &v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+
+	// A low chore that nothing waits on stays low. A floor of "normal" would
+	// have promoted it, since normal outranks low.
+	alone := c.add("Blocks nothing", "--priority", "low")
+	if v := shown(alone); v.Urgency != "low" {
+		t.Errorf("an issue with nothing waiting on it was escalated to %s", v.Urgency)
+	}
+
+	// Three waiting is the default high threshold.
+	hub := c.add("Three wait on this", "--priority", "low")
+	for i := 0; i < 3; i++ {
+		c.add(fmt.Sprintf("Waits %d", i), "--blocked-by", hub)
+	}
+	v := shown(hub)
+	if v.Priority != "low" {
+		t.Errorf("escalation must not touch the stored priority: %s", v.Priority)
+	}
+	if v.Urgency != "high" {
+		t.Errorf("urgency = %s, want high at three waiting", v.Urgency)
+	}
+	if v.UrgencyFrom != "" {
+		t.Errorf("the count raised it, so no one issue gets the credit: %q", v.UrgencyFrom)
+	}
+
+	// Ten is the default must threshold, and it beats a genuine must with
+	// nothing behind it, because volume is what orders the queue.
+	big := c.add("Ten wait on this")
+	for i := 0; i < 10; i++ {
+		c.add(fmt.Sprintf("Also waits %d", i), "--blocked-by", big)
+	}
+	if v := shown(big); v.Urgency != "must" {
+		t.Errorf("urgency = %s, want must at ten waiting", v.Urgency)
+	}
+	c.run("add", "Genuinely must", "--priority", "must")
+	if got := ids(c.json("next", "--json")); got[0] != big {
+		t.Fatalf("next = %v, want the big blocker (%s) first", got, big)
+	}
+
+	// Finishing the work above it hands the priority back.
+	for _, id := range c.json("dependents", big, "--json") {
+		c.run("update", id.ID, "--status", "done")
+	}
+	if v := shown(big); v.Urgency != "normal" {
+		t.Errorf("urgency = %s, want normal once the waiting work is done", v.Urgency)
+	}
+}
+
+// A board can scale the thresholds to its own size, or decline escalation.
+func TestEscalationThresholdsComeFromTheBoard(t *testing.T) {
+	const board = `version: 1
+prefix: TH
+next_id: 4
+escalate:
+    high: 0
+    must: 0
+issues:
+    - id: TH-1
+      title: Blocks two
+      status: todo
+      priority: low
+    - id: TH-2
+      title: First waiter
+      status: todo
+      priority: low
+      blocked_by: [TH-1]
+    - id: TH-3
+      title: Second waiter
+      status: todo
+      priority: low
+      blocked_by: [TH-1]
+`
+	// Every issue is low, so inheritance has nothing to contribute and the only
+	// thing that could raise TH-1 is the number of issues behind it.
+	s := handEdited(t, board)
+	b, err := s.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if urgency, _ := b.Urgency("TH-1"); urgency != "low" {
+		t.Errorf("urgency = %s, want low — the board switched escalation off", urgency)
+	}
+
+	// One waiter is enough when the board says so.
+	b.Escalate = &Escalation{High: 1, Must: 2}
+	if urgency, _ := b.Urgency("TH-1"); urgency != "must" {
+		t.Errorf("urgency = %s, want must at a threshold of two", urgency)
+	}
+
+	// And the block survives a write, so tuning it is not undone by the next
+	// command that touches the board.
+	if err := s.Update(func(b *Board) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	again, err := s.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Escalate == nil || again.Escalate.High != 0 || again.Escalate.Must != 0 {
+		t.Errorf("the escalate block did not round-trip: %+v", again.Escalate)
 	}
 }
