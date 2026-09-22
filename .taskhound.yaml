@@ -1,6 +1,6 @@
 version: 1
 prefix: TH
-next_id: 8
+next_id: 9
 issues:
     - id: TH-1
       title: Smoke-test the taskhound kanban UI in a real browser
@@ -184,3 +184,45 @@ issues:
         - at: 2026-09-02T11:49:41Z
           author: lehel
           body: 'Done in diagnose.go. Cycles found with a coloured DFS that records the path, so the loop is reported by name; dangling blockers found separately. next reports both on stderr and, when nothing is startable, forces the highest-priority open issue and says why. Kept th next --json a bare array so the documented jq ''.[0].id'' recipe keeps working — on a jammed board that array holds the forced pick with forced: true, so it now returns something actionable in every state.'
+    - id: TH-8
+      title: th hands out an id the board already has
+      description: |-
+        Seen twice on a real board, and fixed by hand both times, which is how the second
+        one happened.
+
+        `Add` took the id straight from `next_id` and incremented it. That counter is a
+        cache of the answer, and the file it lives in is committed, so git is what
+        reconciles two writers — not the flock, which only ever covered one file on one
+        machine.
+
+        The ordinary merge breaks it. Two branches each file an issue, so both bump
+        `next_id` to the same number and only the two new issues land on the same lines.
+        Git takes the counter clean — both sides wrote 9 — and conflicts on the issues,
+        where keeping both is the right call. The board is left holding two TH-8s and a
+        counter that describes neither.
+
+        Nothing then fails, which is why it took two rounds to notice: `Get` answers with
+        the first match, so the second issue lists and every other command silently means
+        the first. And if the resolution keeps a `next_id` that is behind the board at
+        all, the next add collides again, and the one after that.
+
+        - [ ] an id is minted above everything the board and the done log hold, not from
+              the counter, so a board merged badly heals on its next add
+        - [ ] an id in the done log stays spent: archiving is not a free list
+        - [ ] another prefix on the board does not spend one of ours
+        - [ ] a duplicate is reported by `th next` rather than sitting there quietly
+        - [ ] `th doctor --fix` moves the unreachable issue onto a free id and leaves the
+              id with the issue that had it first, so no reference changes meaning
+      status: done
+      priority: high
+      created_at: 2026-09-22T06:34:09Z
+      updated_at: 2026-09-22T06:34:19Z
+      comments:
+        - at: 2026-09-22T06:34:19Z
+          author: claude
+          body: |-
+            Fixed in store.go and diagnose.go. `Add` calls `mintID`, which treats `next_id` as a floor and starts above every id the board and the done log already hold — so a counter left behind by a merge heals on the next add instead of colliding on it forever. Ids with another prefix are not counted. The done log is read alongside the board under the same lock; a done log that will not parse is carried rather than raised, so reads still work and only the write that would have to know which ids are free is refused.
+
+            For the ones already in a file: `Duplicates` finds an id naming two issues, or shared with the done log, `th next` reports it on stderr beside loops and dangling blockers, and `th doctor` reports it on its own and repairs it with --fix. The first holder keeps the id — `Get` already resolved it there, so every blocker and log entry that names it goes on meaning what it meant, and the issue that moves is the one nothing could reach. A blocker is only rewritten when the id it named has left the board entirely, which is the board-and-done-log case.
+
+            Verified against the merge that caused it: two branches, one `git merge`, keep both sides — the board carries two TH-3s, `th next` now says so, `th add` returns TH-4 rather than TH-3, and `th doctor --fix` moves the second onto TH-5 with TH-2's blocker still pointing at TH-3.

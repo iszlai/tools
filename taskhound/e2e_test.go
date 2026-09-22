@@ -1024,3 +1024,37 @@ func paddedID(id string) string {
 	i := strings.LastIndex(id, "-")
 	return id[:i+1] + "0" + id[i+1:]
 }
+
+// The duplicate a bad merge leaves behind, from noticing it to living with the
+// repair: the board is diagnosed, fixed and then quiet, and the issue that
+// moved is reachable by its new id while the one that kept it is untouched.
+func TestDoctorRepairsADuplicateID(t *testing.T) {
+	c := newCLI(t)
+	if err := os.WriteFile(filepath.Join(c.dir, StoreName), []byte(mergedBoard), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := c.try("doctor")
+	if err == nil {
+		t.Error("doctor should exit non-zero while an id names two issues")
+	}
+	if !strings.Contains(out, "duplicate: TH-3") {
+		t.Errorf("doctor should name the duplicate: %q", out)
+	}
+
+	if fixed := c.run("doctor", "--fix"); !strings.Contains(fixed, "moved: TH-3 is now TH-4") {
+		t.Errorf("the fix should say what moved where: %q", fixed)
+	}
+	if out, err := c.try("doctor"); err != nil {
+		t.Errorf("a repaired board should come back clean: %v %q", err, out)
+	}
+
+	if shown := c.run("show", "TH-4"); !strings.Contains(shown, "Beta work") {
+		t.Errorf("the issue that moved should answer to its new id: %q", shown)
+	}
+	if shown := c.run("show", "TH-3"); !strings.Contains(shown, "Alpha work") {
+		t.Errorf("the issue that kept the id should be untouched: %q", shown)
+	}
+	if id := c.add("filed after the repair"); id != "TH-5" {
+		t.Errorf("the next add should be TH-5, got %s", id)
+	}
+}

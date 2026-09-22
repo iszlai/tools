@@ -228,6 +228,14 @@ read-modify-write under an exclusive `flock` on a sidecar lock file, landing via
 temp-file-and-rename so a reader never sees half a file. The test suite runs 24
 concurrent `th add` processes against one board and asserts nothing is lost.
 
+The lock covers one file on one machine, though, and the board is committed — so
+the other writer is often a branch, and what merges the two is `git`. Two
+branches that each file an issue bump `next_id` to the same number, which merges
+clean while the issues conflict, and keeping both leaves the same id on two of
+them. So ids are minted above everything the board and the done log hold rather
+than from the counter, and `th doctor --fix` moves an issue off an id that is
+already taken.
+
 `th archive` moves long-finished issues into a `.taskhound-done.yaml` beside the
 board, so the board stays about the work that is left. Only `done` issues move,
 and references to them are dropped from whatever stayed behind — safe exactly

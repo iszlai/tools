@@ -157,3 +157,164 @@ func mustResolve(t *testing.T, p string) string {
 	}
 	return r
 }
+
+// The merged board: two branches each filed an issue, so both bumped the
+// counter to the same number and only the issues conflicted. Keeping both is
+// the right call for the issues and leaves the counter describing neither.
+const mergedBoard = `version: 1
+prefix: TH
+next_id: 4
+issues:
+    - id: TH-1
+      title: First
+      status: todo
+      created_at: 2026-09-02T10:00:00Z
+      updated_at: 2026-09-02T10:00:00Z
+    - id: TH-3
+      title: Alpha work
+      status: todo
+      created_at: 2026-09-02T10:00:00Z
+      updated_at: 2026-09-02T10:00:00Z
+    - id: TH-3
+      title: Beta work
+      status: todo
+      created_at: 2026-09-02T10:00:01Z
+      updated_at: 2026-09-02T10:00:01Z
+`
+
+func TestAddSkipsIDsTheBoardAlreadyHolds(t *testing.T) {
+	s := handEdited(t, mergedBoard)
+	var got []string
+	for i := 0; i < 3; i++ {
+		if err := s.Update(func(b *Board) error {
+			got = append(got, b.Add("new", "", StatusTodo, PriorityNormal, nil).ID)
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// next_id said TH-4, but TH-3 was already spoken for twice; the counter is
+	// a floor, so minting starts above everything in hand.
+	if want := []string{"TH-4", "TH-5", "TH-6"}; !equalStrings(got, want) {
+		t.Fatalf("minted %v, want %v", got, want)
+	}
+	b, err := s.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]int{}
+	for _, is := range b.Issues {
+		seen[is.ID]++
+	}
+	for id, n := range seen {
+		if id != "TH-3" && n > 1 {
+			t.Errorf("%s was handed out %d times", id, n)
+		}
+	}
+}
+
+// A counter behind the board is the state that keeps producing duplicates: it
+// hands out the same ids on every add until someone notices. Minting has to
+// climb past the board rather than trust it.
+func TestAddClimbsPastACounterLeftBehind(t *testing.T) {
+	s := handEdited(t, strings.Replace(mergedBoard, "next_id: 4", "next_id: 2", 1))
+	var id string
+	if err := s.Update(func(b *Board) error {
+		id = b.Add("new", "", StatusTodo, PriorityNormal, nil).ID
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if id != "TH-4" {
+		t.Fatalf("minted %s, want TH-4 — a counter behind the board must not be believed", id)
+	}
+}
+
+// An id in the done log is not free either: reusing it would put the same name
+// in two files, with the log entries that explain it pointing at whichever you
+// read first.
+func TestAddSkipsIDsTheDoneLogHolds(t *testing.T) {
+	s := handEdited(t, mergedBoard)
+	done := `version: 1
+issues:
+    - id: TH-6
+      title: Finished months ago
+      status: done
+      created_at: 2026-08-01T10:00:00Z
+      updated_at: 2026-08-01T10:00:00Z
+      archived_at: 2026-08-15T10:00:00Z
+`
+	if err := os.WriteFile(s.ArchivePath(), []byte(done), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var id string
+	if err := s.Update(func(b *Board) error {
+		id = b.Add("new", "", StatusTodo, PriorityNormal, nil).ID
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if id != "TH-7" {
+		t.Fatalf("minted %s, want TH-7 — the done log holds TH-6", id)
+	}
+}
+
+// Someone else's ids turn up on a board: pasted into a title, tracked in a
+// migration. TH-9 is not spent because FOO-9 exists.
+func TestAnotherPrefixDoesNotSpendAnID(t *testing.T) {
+	s := handEdited(t, mergedBoard+`    - id: FOO-90
+      title: Not ours
+      status: todo
+      created_at: 2026-09-02T10:00:00Z
+      updated_at: 2026-09-02T10:00:00Z
+`)
+	var id string
+	if err := s.Update(func(b *Board) error {
+		id = b.Add("new", "", StatusTodo, PriorityNormal, nil).ID
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if id != "TH-4" {
+		t.Fatalf("minted %s, want TH-4 — FOO-90 is not this board's", id)
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// A done log that will not parse must not take the board down with it: reading
+// still works, and only the write that would have to know which ids are spent
+// is refused.
+func TestABrokenDoneLogStopsWritesAndNotReads(t *testing.T) {
+	s := handEdited(t, mergedBoard)
+	if err := os.WriteFile(s.ArchivePath(), []byte("<<<<<<< HEAD\nissues: [\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.Read()
+	if err != nil {
+		t.Fatalf("reading the board should survive a broken done log: %v", err)
+	}
+	if len(b.Issues) != 3 {
+		t.Fatalf("got %d issues, want 3", len(b.Issues))
+	}
+	err = s.Update(func(b *Board) error {
+		b.Add("new", "", StatusTodo, PriorityNormal, nil)
+		return nil
+	})
+	if err == nil {
+		t.Fatal("an add must not mint an id while the done log is unreadable")
+	}
+	if !strings.Contains(err.Error(), "done log") {
+		t.Errorf("the error should name the file that is broken: %v", err)
+	}
+}

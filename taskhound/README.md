@@ -132,6 +132,7 @@ never come back empty while open work exists.
 | `th update <id>` | `--title`, `-d`, `--status`, `--priority`, `--blocked-by`, `--add-blocked-by`, `--remove-blocked-by`, `--blocks`, `--label`, `--unlabel` |
 | `th comment <id> <body>` | append a comment |
 | `th archive` | move long-finished issues into the done log; `--older-than`, `--dry-run`, `--list` |
+| `th doctor` | duplicate ids, loops and blockers that name nothing; `--fix` |
 | `th sync` | push the board to GitHub Issues; `--repo`, `--dry-run` |
 | `th log <cmd>` | `add`, `tail`, `since`, `ls`, `grep`, `issue`, `amendments`, `check` — see below |
 | `th ui` | `--port` (default 8787), `--open` |
@@ -312,6 +313,52 @@ The diagnosis goes to **stderr**, so `th next --json` stays a clean array for
 `jq`. On a jammed board that array holds the forced pick, carrying
 `"forced": true` and `"forced_reason"`, which means `.[0].id` gives you
 something to start whatever state the board is in.
+
+### The same id twice
+
+The routes that put a loop on the board put an id on two issues, and that one is
+quieter. Nothing fails: `Get` answers with the first match, so the second issue
+lists and nothing else about it works — `th show`, `th update`, `th comment` and
+every `blocked_by` that names it all mean the first.
+
+The merge that does it is the ordinary one. Two branches each file an issue, so
+both bump `next_id` to the same number and only the two new issues land on the
+same lines:
+
+```
+$ git merge topic
+CONFLICT (content): Merge conflict in .taskhound.yaml
+```
+
+The conflict is over two issue bodies, and keeping both is the right call for
+the issues — but `next_id` merged clean, because both sides wrote the same
+number. The board now holds two `TH-7`s and a counter that describes neither.
+
+So `next_id` is a floor and not the answer. `th add` mints above every id the
+board and the done log already hold, which means a board merged badly heals on
+its next add instead of handing the same id out until someone notices. What is
+already in the file is `th doctor`'s job:
+
+```
+$ th doctor
+duplicate: TH-7 names 2 issues ("Rotate the signing key", "Cache the key lookup")
+th answers with the first of them; `th doctor --fix` moves the rest onto free ids
+
+$ th doctor --fix
+moved: TH-7 is now TH-12  Cache the key lookup
+```
+
+The id stays with the issue that had it first. That is the point: `Get` already
+resolved it to that issue, so every blocker, every log entry and every habit
+that names `TH-7` goes on meaning exactly what it meant — the issue that moves
+is the one nothing could reach anyway. Which of the two a blocker had in mind is
+not knowable from the file, and guessing at it is the one way to make this
+worse.
+
+`th doctor` exits non-zero while anything is wrong, so it is worth a line in
+whatever already runs `th log check`. It repairs duplicates only: a loop and a
+dangling blocker are a statement about the work, and which edge was wrong is
+yours to say.
 
 ## The done log
 
@@ -530,6 +577,12 @@ be guarding nothing. Add the lock file to `.gitignore`; commit the board.
 `go test` runs 24 concurrent `th add` processes and 20 concurrent `th comment`
 processes against one file and asserts nothing is lost. POSIX only — `flock`
 has no Windows equivalent here.
+
+The lock covers one file on one machine, which is the smaller half of the
+problem: the board is committed, so the other writer is usually a branch, and
+what merges the two is `git`. That is why `th add` derives the next id from the
+board rather than from `next_id`, and why `th doctor` exists — see [the same id
+twice](#the-same-id-twice).
 
 ## For agents
 

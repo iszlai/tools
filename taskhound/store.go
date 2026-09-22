@@ -161,6 +161,21 @@ type Board struct {
 	// The document this board was parsed from, kept so that saving can carry
 	// over keys written by a newer th. Unexported, so yaml ignores it.
 	raw *yaml.Node
+
+	// Ids that are spoken for without being on the board: the done log's, which
+	// have left the board but not the history. Unexported, so yaml ignores it.
+	retired map[string]bool
+
+	// Why that list is not to be trusted, when the done log could not be read.
+	retiredErr error
+}
+
+// retire marks an id as taken although no issue on the board holds it.
+func (b *Board) retire(id string) {
+	if b.retired == nil {
+		b.retired = map[string]bool{}
+	}
+	b.retired[id] = true
 }
 
 func NewBoard(prefix string) *Board {
@@ -197,7 +212,7 @@ func (b *Board) Get(ref string) (*Issue, error) {
 func (b *Board) Add(title, description, status, priority string, labels []string) *Issue {
 	stamp := now()
 	is := &Issue{
-		ID:          fmt.Sprintf("%s-%d", b.Prefix, b.NextID),
+		ID:          b.mintID(),
 		Title:       title,
 		Description: description,
 		Status:      status,
@@ -206,9 +221,59 @@ func (b *Board) Add(title, description, status, priority string, labels []string
 		CreatedAt:   stamp,
 		UpdatedAt:   stamp,
 	}
-	b.NextID++
 	b.Issues = append(b.Issues, is)
 	return is
+}
+
+// mintID hands out an id nothing else holds, and advances the counter past it.
+//
+// next_id is a cache of the answer rather than the answer. The board is a file
+// in git, and the merge that goes wrong is the ordinary one: two branches each
+// file an issue, so both bump next_id to the same number and only the two new
+// issues land on the same lines. Resolving that by keeping both -- the obvious
+// resolution, and the right one for the issues -- leaves the counter merged
+// clean and the board holding the same id twice. Get answers with the first of
+// them, so the second issue is unreachable by show, update and every blocked_by
+// that names it, and nothing ever says so.
+//
+// A counter that ends up behind the board is worse than the duplicate that put
+// it there, because it hands the same id out again on every add until someone
+// notices. So the counter is only a floor: the ids already in hand are the rest
+// of the answer, and minting starts above both. A board that has been merged
+// badly heals on its next add instead of colliding forever.
+func (b *Board) mintID() string {
+	next := b.NextID
+	after := func(id string) {
+		if n, ok := b.issueNum(id); ok && n >= next {
+			next = n + 1
+		}
+	}
+	for _, is := range b.Issues {
+		after(is.ID)
+	}
+	for id := range b.retired {
+		after(id)
+	}
+	if next < 1 {
+		next = 1
+	}
+	b.NextID = next + 1
+	return fmt.Sprintf("%s-%d", b.Prefix, next)
+}
+
+// issueNum reads the number off an id belonging to this board. The prefix has
+// to match: a board tracking someone else's FOO-9 in a blocker or a hand edit
+// has not thereby spent TH-9.
+func (b *Board) issueNum(id string) (int, bool) {
+	i := strings.LastIndex(id, "-")
+	if i <= 0 || !strings.EqualFold(id[:i], b.Prefix) {
+		return 0, false
+	}
+	n, err := strconv.Atoi(id[i+1:])
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
 }
 
 // Blocks returns the issues that name id as a blocker — the reverse of
@@ -543,6 +608,24 @@ func (s *Store) readUnlocked() (*Board, error) {
 	if b.Issues == nil {
 		b.Issues = []*Issue{}
 	}
+	// The done log is part of the answer to "which ids are taken": archiving
+	// moves an issue off the board, and handing its id to a new one would put
+	// the same name in two files, with the log entries that explain it pointing
+	// at whichever you read first. It is read here, beside the board and under
+	// the board's lock, so that minting and diagnosis both see it.
+	//
+	// A done log that will not parse -- a conflict resolved badly, a hand edit
+	// -- is carried rather than raised, so that reading the board still works
+	// when the file beside it is broken. Update raises it, because that is
+	// where an id gets handed out and this is the list that says which are
+	// free.
+	if a, err := s.readArchiveUnlocked(); err != nil {
+		b.retiredErr = err
+	} else {
+		for _, is := range a.Issues {
+			b.retire(is.ID)
+		}
+	}
 	return &b, nil
 }
 
@@ -569,6 +652,9 @@ func (s *Store) Update(fn func(*Board) error) error {
 	b, err := s.readUnlocked()
 	if err != nil {
 		return err
+	}
+	if b.retiredErr != nil {
+		return b.retiredErr
 	}
 	if err := fn(b); err != nil {
 		return err
