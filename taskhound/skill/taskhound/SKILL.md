@@ -93,6 +93,8 @@ th log check                              # the log and the board agree
 th archive --dry-run                      # what would leave the board
 th archive --older-than 30d               # move long-finished work to the done log
 th archive --list --json                  # read the done log
+th doctor                                 # duplicate ids, loops, blockers that name nothing
+th doctor --fix                           # move issues off an id something else holds
 th sync --dry-run                         # what would go to GitHub Issues
 th sync --repo owner/name                 # push the board to GitHub Issues
 th ui --port 8787 --open                  # kanban board on localhost
@@ -146,13 +148,20 @@ So `th next --json | jq -r '.[0].id'` returns something to start whatever state
 the board is in — check `.[0].forced` before treating it as ordinary work, and
 tell the user what is wrong rather than silently working a jammed board.
 
+**An id that names two issues is reported the same way,** by `th next` and by
+`th doctor`. `th` answers with the first of them, so the second issue lists and
+nothing else about it works — do not try to reach it by editing the YAML. Run
+`th doctor --fix`: it moves the unreachable one onto a free id and leaves the id
+with the issue that had it first, so nothing that named it changes meaning.
+
 ## The done log
 
 `th archive` moves issues finished before a cutoff (default 14 days) into
 `.taskhound-done.yaml`, so `th list` stays about the work that is left. Only
 `done` issues move; references to them are dropped from the issues that stay,
 which cannot change what is ready. `th show <id>` still resolves an archived id.
-Ids are never reused.
+Ids are never reused: an archived id stays spent, and `th add` mints above
+everything the board and the done log hold rather than trusting `next_id`.
 
 Run it when a board has accumulated closed work, not after every ticket.
 

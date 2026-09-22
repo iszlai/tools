@@ -35,6 +35,7 @@ usage: th <command> [flags]
   update <id>              change title, description, status, blockers, labels
   comment <id> <body>      append a comment
   archive                  move long-finished issues into the done log
+  doctor                   check the board for duplicate ids, loops and ghosts
   log <command>            the captain's log: append and read decisions
   sync                     push the board to GitHub Issues via the gh CLI
   ui                       serve the kanban board on localhost
@@ -77,6 +78,8 @@ func main() {
 		err = cmdComment(args)
 	case "archive":
 		err = cmdArchive(args)
+	case "doctor":
+		err = cmdDoctor(args)
 	case "log":
 		err = cmdLog(args)
 	case "sync":

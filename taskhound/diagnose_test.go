@@ -161,3 +161,117 @@ func TestADoneCycleIsNotReported(t *testing.T) {
 		t.Errorf("a cycle among done issues should be ignored: %v", got)
 	}
 }
+
+// A duplicate breaks nothing, which is what makes it worth reporting: the
+// board lists two TH-3s and every other command quietly means the first.
+func TestDuplicateIDsAreReported(t *testing.T) {
+	s := handEdited(t, mergedBoard)
+	b, err := s.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dups := b.Duplicates()
+	if len(dups) != 1 || dups[0].ID != "TH-3" || len(dups[0].Titles) != 2 {
+		t.Fatalf("duplicates = %+v, want one TH-3 naming two issues", dups)
+	}
+	d := b.Diagnose(true)
+	if d == nil || len(d.Duplicates) != 1 {
+		t.Fatalf("a duplicate should be diagnosed even with work ready: %+v", d)
+	}
+	var out strings.Builder
+	d.report(&out)
+	if !strings.Contains(out.String(), `TH-3 names 2 issues ("Alpha work", "Beta work")`) {
+		t.Errorf("the report should quote both titles: %q", out.String())
+	}
+}
+
+// The first holder keeps the id, so every blocker that names it goes on
+// meaning what it meant. The issue that moves is the one nothing could reach.
+func TestRenumberLeavesTheFirstHolderAndItsReferencesAlone(t *testing.T) {
+	s := handEdited(t, mergedBoard)
+	var moved []Renumbered
+	if err := s.Update(func(b *Board) error {
+		first, err := b.Get("TH-1")
+		if err != nil {
+			return err
+		}
+		if err := b.SetBlockedBy(first, []string{"TH-3"}); err != nil {
+			return err
+		}
+		moved = b.Renumber()
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(moved) != 1 || moved[0].From != "TH-3" || moved[0].To != "TH-4" {
+		t.Fatalf("moved = %+v, want TH-3 -> TH-4", moved)
+	}
+	b, err := s.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.Duplicates()) != 0 {
+		t.Errorf("the board should be clean after a renumber: %+v", b.Duplicates())
+	}
+	kept, err := b.Get("TH-3")
+	if err != nil || kept.Title != "Alpha work" {
+		t.Fatalf("TH-3 should still be the issue that had it first: %+v, %v", kept, err)
+	}
+	first, _ := b.Get("TH-1")
+	if len(first.BlockedBy) != 1 || first.BlockedBy[0] != "TH-3" {
+		t.Errorf("a blocker naming TH-3 should not have moved: %v", first.BlockedBy)
+	}
+}
+
+// The one case where a reference has to follow: the id stays with the archived
+// copy, which is not on the board, so what the board's blockers resolved to is
+// the issue that moved.
+func TestRenumberFollowsAReferenceOffTheBoard(t *testing.T) {
+	s := handEdited(t, `version: 1
+prefix: TH
+next_id: 3
+issues:
+    - id: TH-1
+      title: Live work
+      status: todo
+      blocked_by: [TH-2]
+      created_at: 2026-09-01T10:00:00Z
+      updated_at: 2026-09-01T10:00:00Z
+    - id: TH-2
+      title: The board's TH-2
+      status: todo
+      created_at: 2026-09-01T10:00:00Z
+      updated_at: 2026-09-01T10:00:00Z
+`)
+	done := `version: 1
+issues:
+    - id: TH-2
+      title: The done log's TH-2
+      status: done
+      created_at: 2026-08-01T10:00:00Z
+      updated_at: 2026-08-01T10:00:00Z
+      archived_at: 2026-08-15T10:00:00Z
+`
+	if err := os.WriteFile(s.ArchivePath(), []byte(done), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Update(func(b *Board) error {
+		if got := b.Renumber(); len(got) != 1 || got[0].To != "TH-3" {
+			t.Fatalf("moved = %+v, want the board's TH-2 onto TH-3", got)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _ := b.Get("TH-1")
+	if len(first.BlockedBy) != 1 || first.BlockedBy[0] != "TH-3" {
+		t.Fatalf("the blocker should follow the issue it resolved to: %v", first.BlockedBy)
+	}
+	if len(b.Duplicates()) != 0 {
+		t.Errorf("board and done log should no longer share an id: %+v", b.Duplicates())
+	}
+}
