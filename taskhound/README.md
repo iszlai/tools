@@ -544,12 +544,15 @@ from the dependency edges; the other three are the issue's own status, so
 dragging a card between them is what sets it. **Sort** in the header reorders
 the cards inside every column — by `created` (id order, which is the order the
 file is in, and the default), by `priority`, or by `unblocks`, the count on the
-card. The choice is remembered per browser. Click a card to edit its title,
+card. The choice is remembered per browser. **Search** (`/` to focus, esc to
+clear) narrows every column to the issues that match each word typed — in the
+id, title, description, labels or comments. Click a card to edit its title,
 description, status, blockers and labels, or to add a comment. Every id the
 board shows is a link into that issue: the ⛔ chips on a card, and the
 **Blocked by** and **Blocks** lists in the drawer, each open the issue they
 name — so you can walk the dependency graph in either direction without
-touching the CLI. **+ New issue**
+touching the CLI. ⤢ in the drawer (or `f`) opens the issue full screen, and
+brings it back; that too is remembered. **+ New issue**
 files one. The board polls every 2s, so edits made by the CLI or by another
 agent appear on their own — except while the editor drawer is open, which would
 stomp on your typing.

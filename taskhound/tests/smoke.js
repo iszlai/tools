@@ -208,6 +208,45 @@ const statusOf = id => JSON.parse(th('show', id, '--json')).status;
     const leverage = (await readyIds()).map(id => field(id, 'unblocks'));
     check('sort: unblocks order runs down the counts',
       leverage.every((n, i) => i === 0 || leverage[i - 1] >= n), leverage.join(','));
+
+    /* 11 — search narrows the board to the issues that match */
+    const shown = () => page.$$eval('.card', els => els.map(e => e.dataset.id));
+    const total = (await shown()).length;
+    await page.keyboard.press('/');
+    check('search: / focuses the search box',
+      await page.evaluate(() => document.activeElement.id === 'search'));
+    await page.keyboard.type('renamed drawer');
+    check('search: every word must match, and only TH-3 does',
+      (await shown()).join() === 'TH-3', (await shown()).join());
+    await page.fill('#search', 'left from the board');
+    check('search: comment text is searched',
+      (await shown()).join() === 'TH-3', (await shown()).join());
+    await page.fill('#search', 'th-1');
+    check('search: an id finds its issue', (await shown()).includes('TH-1'), (await shown()).join());
+    await page.fill('#search', 'zzz-no-such-thing');
+    check('search: no match empties the board and says so',
+      (await shown()).length === 0 && (await page.locator('.empty', { hasText: 'no matches' }).count()) === 4);
+    await page.waitForTimeout(2500);
+    check('search: the poll keeps the filter', (await shown()).length === 0);
+    await page.focus('#search');
+    await page.keyboard.press('Escape');
+    check('search: esc clears it and brings every card back',
+      (await shown()).length === total && (await page.inputValue('#search')) === '');
+
+    /* 12 — a ticket can be opened full screen and brought back */
+    await page.click('.card[data-id="TH-3"]');
+    await page.waitForSelector('#drawer.open');
+    const width = () => page.$eval('#drawer', el => el.getBoundingClientRect().width);
+    const narrow = await width();
+    await page.click('#full');
+    check('full: the button widens the drawer to the window', await width() === 1400, String(await width()));
+    await page.click('#close');
+    await page.click('.card[data-id="TH-1"]');
+    await page.waitForSelector('#drawer.open');
+    check('full: the next ticket opens full screen too', await width() === 1400, String(await width()));
+    await page.keyboard.press('f');
+    check('full: f brings it back to the side drawer', await width() === narrow, String(await width()));
+    await page.click('#close');
   } finally {
     await browser.close();
     proc.kill();
