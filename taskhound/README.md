@@ -41,8 +41,21 @@ th init          # writes ./.taskhound.yaml — commit it
 
 ## Upgrading
 
-Whichever way you installed, `th version` says what you have, and the upgrade is
-the same command you used the first time.
+From v0.10.0 on, whichever way you installed:
+
+```
+$ th upgrade
+downloading latest for darwin/arm64...
+upgraded /Users/you/.local/bin/th: v0.10.0 -> v0.11.0
+```
+
+It fetches the latest published build for your platform and swaps it in over
+the running binary, or says `already on the latest release` and changes nothing.
+It replaces the binary only. If you installed the agent skill from a checkout,
+`./install.sh --update` refreshes both.
+
+On older builds, `th version` says what you have, and the upgrade is the same
+command you used the first time.
 
 **If you installed the prebuilt binary**, re-run the same curl: it always
 resolves to the latest release and overwrites in place.
@@ -137,6 +150,7 @@ never come back empty while open work exists.
 | `th log <cmd>` | `add`, `tail`, `since`, `ls`, `grep`, `issue`, `amendments`, `check` — see below |
 | `th ui` | `--port` (default 8787), `--open` |
 | `th agent-guide` | print the usage guide written for agents |
+| `th upgrade` | replace `th` with the latest published release |
 
 Every command takes `-f <file>`, and every query takes `--json`. Ids are
 case-insensitive and the prefix is optional: `th show 3` is `th show TH-3`.

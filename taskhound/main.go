@@ -40,6 +40,7 @@ usage: th <command> [flags]
   sync                     push the board to GitHub Issues via the gh CLI
   ui                       serve the kanban board on localhost
   agent-guide              print the usage guide written for LLM agents
+  upgrade                  replace th with the latest published release
   version                  print the version
 
 Every command takes -f <file> to point at a specific board; otherwise th walks
@@ -88,6 +89,8 @@ func main() {
 		err = cmdUI(args)
 	case "agent-guide":
 		fmt.Print(stripFrontMatter(skillDoc))
+	case "upgrade":
+		err = cmdUpgrade(args)
 	case "version", "--version":
 		fmt.Println("taskhound " + version)
 	case "help", "-h", "--help":

@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -1057,4 +1059,78 @@ func TestDoctorRepairsADuplicateID(t *testing.T) {
 	if id := c.add("filed after the repair"); id != "TH-5" {
 		t.Errorf("the next add should be TH-5, got %s", id)
 	}
+}
+
+// TestUpgradeReplacesTheBinary points th upgrade at a fake release server and
+// checks the binary on disk is swapped for the published build, and that
+// upgrading to the release already installed changes nothing.
+func TestUpgradeReplacesTheBinary(t *testing.T) {
+	newer := "#!/bin/sh\necho taskhound v99.0.0\n"
+	same := "#!/bin/sh\necho taskhound dev\n" // the test binary is unstamped
+
+	out, bin, dir := upgradeAgainst(t, newer)
+	if !strings.Contains(out, "dev -> v99.0.0") {
+		t.Fatalf("upgrade said %q", out)
+	}
+	if got, _ := os.ReadFile(bin); string(got) != newer {
+		t.Fatalf("binary was not replaced")
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, ".th-upgrade-*")); len(left) > 0 {
+		t.Fatalf("left temp files behind: %v", left)
+	}
+
+	out, bin, dir = upgradeAgainst(t, same)
+	if !strings.Contains(out, "already on the latest release (dev)") {
+		t.Fatalf("upgrade said %q", out)
+	}
+	if got, _ := os.ReadFile(bin); string(got) == same {
+		t.Fatalf("binary was replaced although it was current")
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, ".th-upgrade-*")); len(left) > 0 {
+		t.Fatalf("left temp files behind: %v", left)
+	}
+}
+
+// TestUpgradeWithNoPublishedBuildLeavesThAlone checks a missing asset is an
+// error and the installed binary survives it.
+func TestUpgradeWithNoPublishedBuildLeavesThAlone(t *testing.T) {
+	out, bin, _ := upgradeAgainst(t, "")
+	if !strings.Contains(out, "no build published") {
+		t.Fatalf("expected a clear failure, got %q", out)
+	}
+	want, _ := os.ReadFile(thBin)
+	if got, _ := os.ReadFile(bin); !bytes.Equal(got, want) {
+		t.Fatalf("binary changed after a failed upgrade")
+	}
+}
+
+// upgradeAgainst runs th upgrade on a fresh copy of the test binary against a
+// release server publishing release for this platform ("" publishes nothing),
+// and returns the combined output, the copy's path and its directory.
+func upgradeAgainst(t *testing.T, release string) (out, bin, dir string) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if release == "" || r.URL.Path != fmt.Sprintf("/latest/download/th_%s_%s", runtime.GOOS, runtime.GOARCH) {
+			http.NotFound(w, r)
+			return
+		}
+		io.WriteString(w, release)
+	}))
+	defer srv.Close()
+
+	// Upgrade a copy, never the binary the other tests share.
+	dir = t.TempDir()
+	bin = filepath.Join(dir, "th")
+	data, err := os.ReadFile(thBin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bin, data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, "upgrade")
+	cmd.Env = append(os.Environ(), "TASKHOUND_RELEASES_URL="+srv.URL)
+	b, _ := cmd.CombinedOutput()
+	return string(b), bin, dir
 }
