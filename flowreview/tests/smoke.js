@@ -151,8 +151,11 @@ async function selectFileAndMeasure(page, pathSubstr) {
     const changeRow = apiRows.find((r) => r.kind === 'change');
     check('rows: a change row exists in the API response', !!changeRow, JSON.stringify(apiRows));
     if (changeRow) {
-      const oldCell = await page.locator(`#diff-rows [data-hunk="${changeRow.hunk_id}"][data-side="old"].code`).first().evaluate((el) => ({ ...el.dataset }));
-      const newCell = await page.locator(`#diff-rows [data-hunk="${changeRow.hunk_id}"][data-side="new"].code`).first().evaluate((el) => ({ ...el.dataset }));
+      // .bg-del/.bg-add narrow to the change row's own cells: every cell in
+      // the hunk shares the same data-hunk, but only the change row's old
+      // side is tinted bg-del and its new side bg-add.
+      const oldCell = await page.locator(`#diff-rows [data-hunk="${changeRow.hunk_id}"][data-side="old"].code.bg-del`).first().evaluate((el) => ({ ...el.dataset }));
+      const newCell = await page.locator(`#diff-rows [data-hunk="${changeRow.hunk_id}"][data-side="new"].code.bg-add`).first().evaluate((el) => ({ ...el.dataset }));
       check('rows: DOM old-side anchor matches the API row exactly',
         Number(oldCell.line) === changeRow.old_no && Number(oldCell.position) === changeRow.old_position,
         `DOM=${JSON.stringify(oldCell)} API old_no/old_position=${changeRow.old_no}/${changeRow.old_position}`);
@@ -180,7 +183,25 @@ async function selectFileAndMeasure(page, pathSubstr) {
     const back = await selectedPath();
     check('keyboard: k moves back to the previous file', back === before, `${back} vs ${before}`);
 
-    /* 6 -- marking a hunk reviewed updates the file queue's badge */
+    /* 6 -- n/p jump between hunks, independent of which file (big.js, with
+       ~100 scattered single-line hunks, is the file that actually exercises
+       this -- a.txt only has one). */
+    await selectFileAndMeasure(page, 'big.js');
+    const diffScrollTop = () => page.evaluate(() => document.getElementById('diff').scrollTop);
+    const beforeN = await diffScrollTop();
+    await page.keyboard.press('n');
+    const afterN1 = await diffScrollTop();
+    check('keyboard: n jumps forward to a hunk', afterN1 > beforeN, `${beforeN} -> ${afterN1}`);
+
+    await page.keyboard.press('n');
+    const afterN2 = await diffScrollTop();
+    check('keyboard: n again jumps further forward', afterN2 > afterN1, `${afterN1} -> ${afterN2}`);
+
+    await page.keyboard.press('p');
+    const afterP = await diffScrollTop();
+    check('keyboard: p jumps back to the previous hunk', afterP === afterN1, `${afterN2} -> ${afterP}, want ${afterN1}`);
+
+    /* 7 -- marking a hunk reviewed updates the file queue's badge */
     await selectFileAndMeasure(page, 'a.txt');
     await page.waitForSelector('#diff-rows [data-hunk]');
     const hunkId = await page.getAttribute('#diff-rows [data-hunk]', 'data-hunk');
@@ -193,24 +214,24 @@ async function selectFileAndMeasure(page, pathSubstr) {
     const badgeCount = await page.locator('.file-row .reviewed-badge').count();
     check('review state: a fully reviewed file shows a badge after reload', badgeCount >= 1, String(badgeCount));
 
-    /* 7 -- the API behind the UI responds */
+    /* 8 -- the API behind the UI responds */
     const health = await page.evaluate(() => fetch('/api/health').then((r) => r.json()));
     check('api: /api/health reports ok', health.ok === true, JSON.stringify(health));
 
-    /* 8 -- performance budget: first paint of the 10k-line file */
+    /* 9 -- performance budget: first paint of the 10k-line file */
     const bigPaintMs = await selectFileAndMeasure(page, 'big.js');
     console.log(`big.js select -> first paint: ${bigPaintMs}ms (budget ${PAINT_BUDGET_MS}ms)`);
     check('performance: 10k-line file first paint is under budget', bigPaintMs < PAINT_BUDGET_MS, `${bigPaintMs}ms`);
     await page.waitForSelector('#diff-rows [data-hunk]');
 
-    /* 9 -- performance budget: switching between two already-opened,
+    /* 10 -- performance budget: switching between two already-opened,
        normal-sized files is near instant (the render cache hit) */
     await selectFileAndMeasure(page, 'b.txt');
     const switchMs = await selectFileAndMeasure(page, 'a.txt');
     console.log(`a.txt <-> b.txt switch: ${switchMs}ms (budget ${SWITCH_BUDGET_MS}ms)`);
     check('performance: file switch between two normal files is under budget', switchMs < SWITCH_BUDGET_MS, `${switchMs}ms`);
 
-    /* 10 -- performance budget: scrolling the 10k-line file top to bottom
+    /* 11 -- performance budget: scrolling the 10k-line file top to bottom
        produces no long task over the budget */
     await selectFileAndMeasure(page, 'big.js');
     await page.evaluate(() => {

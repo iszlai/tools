@@ -24,6 +24,14 @@ const state = {
   hunkRows: [], // indices into `rows` where kind === "hunk", for n/p
 };
 
+// selectToken guards against a slow fetch from an earlier selectFile call
+// landing after a newer one: each call takes the next token and, after its
+// fetch resolves, applies the response only if it is still the latest call
+// in flight. Without this, fast j/k navigation can let an older file's rows
+// (e.g. a large file that took longer to fetch) overwrite a file selected
+// after it.
+let selectToken = 0;
+
 async function getJSON(url, opts) {
   const res = await fetch(url, opts);
   let body = null;
@@ -185,7 +193,10 @@ function jumpHunk(delta) {
 async function selectFile(id) {
   state.selected = id;
   renderFiles();
+  const token = ++selectToken;
   const rows = await getJSON(`/api/file/${encodeURIComponent(id)}/rows`);
+  if (token !== selectToken) return; // a newer selectFile call has since started
+
   state.rows = rows;
   state.hunkRows = [];
   for (let i = 0; i < rows.length; i++) {
