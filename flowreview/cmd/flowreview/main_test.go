@@ -73,3 +73,79 @@ func TestParseArgsRejectsTrailingGarbage(t *testing.T) {
 		t.Fatal("want an error for an unexpected trailing argument")
 	}
 }
+
+func TestParseArgsFlagsBeforeOrAfterPositional(t *testing.T) {
+	cases := [][]string{
+		{"--no-open", "diff", "main..feature"},
+		{"diff", "main..feature", "--no-open"},
+		{"diff", "--no-open", "main..feature"},
+	}
+	for _, args := range cases {
+		opts, err := parseArgs(args)
+		if err != nil {
+			t.Fatalf("parseArgs(%v): %v", args, err)
+		}
+		if opts.source.Kind != model.SourceRange || opts.source.Ref != "main..feature" || !opts.noOpen {
+			t.Errorf("parseArgs(%v) = %+v, want Range main..feature with noOpen", args, opts)
+		}
+	}
+}
+
+func TestParseArgsPRSubcommand(t *testing.T) {
+	opts, err := parseArgs([]string{"pr", "owner/repo#42"})
+	if err != nil {
+		t.Fatalf("parseArgs: %v", err)
+	}
+	if opts.prRaw != "owner/repo#42" {
+		t.Errorf("prRaw = %q, want %q", opts.prRaw, "owner/repo#42")
+	}
+	if opts.source.Kind != "" {
+		t.Errorf("source.Kind = %q, want empty until run() resolves prRaw", opts.source.Kind)
+	}
+}
+
+func TestParseArgsPRSubcommandMissingArg(t *testing.T) {
+	if _, err := parseArgs([]string{"pr"}); err == nil {
+		t.Fatal("want an error for 'pr' with no reference")
+	}
+}
+
+func TestParseArgsPatchSubcommandMatchesFlagForm(t *testing.T) {
+	bySubcommand, err := parseArgs([]string{"patch", "change.diff"})
+	if err != nil {
+		t.Fatalf("parseArgs(patch subcommand): %v", err)
+	}
+	byFlag, err := parseArgs([]string{"--patch", "change.diff"})
+	if err != nil {
+		t.Fatalf("parseArgs(--patch flag): %v", err)
+	}
+	if bySubcommand.source != byFlag.source {
+		t.Errorf("source via subcommand = %+v, via flag = %+v, want equal", bySubcommand.source, byFlag.source)
+	}
+}
+
+func TestParseArgsUnknownFlag(t *testing.T) {
+	if _, err := parseArgs([]string{"--bogus"}); err == nil {
+		t.Fatal("want an error for an unrecognized flag")
+	}
+}
+
+func TestParseArgsPortEqualsForm(t *testing.T) {
+	opts, err := parseArgs([]string{"--port=4242"})
+	if err != nil {
+		t.Fatalf("parseArgs: %v", err)
+	}
+	if opts.port != 4242 {
+		t.Errorf("port = %d, want 4242", opts.port)
+	}
+}
+
+func TestParseArgsBrowserFlag(t *testing.T) {
+	opts, err := parseArgs([]string{"--browser"})
+	if err != nil {
+		t.Fatalf("parseArgs: %v", err)
+	}
+	if !opts.browser {
+		t.Error("browser = false, want true")
+	}
+}
