@@ -21,6 +21,7 @@ type Limits struct {
 	Timeout      time.Duration `json:"timeout"`
 	MaxTokens    int           `json:"max_tokens"`
 	MaxFunctions int           `json:"max_functions"`
+	MaxFindings  int           `json:"max_findings,omitempty"` // 0 = unlimited; Runner stops forwarding past this
 }
 
 // Scope says what to review. Empty slices mean the whole session.
