@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/iszlai/tools/flowreview/internal/core/render"
 	"github.com/iszlai/tools/flowreview/internal/core/review"
 	"github.com/iszlai/tools/flowreview/internal/core/session"
 )
@@ -47,7 +48,8 @@ func (noopWindow) Navigate(string) {}
 
 // Server is flowreview's HTTP API plus the embedded UI.
 type Server struct {
-	store *session.Store
+	store       *session.Store
+	renderCache *render.Cache
 
 	mu     sync.RWMutex
 	ws     *review.Workspace
@@ -64,7 +66,7 @@ func New(store *session.Store, ws *review.Workspace, window WindowController) *S
 	if window == nil {
 		window = noopWindow{}
 	}
-	s := &Server{store: store, ws: ws, window: window, mux: http.NewServeMux()}
+	s := &Server{store: store, ws: ws, window: window, renderCache: render.NewCache(), mux: http.NewServeMux()}
 	s.routes()
 	return s
 }
@@ -126,6 +128,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/session", s.handleSession)
 	s.mux.HandleFunc("GET /api/files", s.handleFiles)
 	s.mux.HandleFunc("GET /api/file/{id}/rows", s.handleFileRows)
+	s.mux.HandleFunc("GET /styles/chroma.css", s.handleChromaCSS)
 	s.mux.HandleFunc("POST /api/state", s.handleState)
 	s.mux.HandleFunc("POST /api/comments", s.handleUpsertComment)
 	s.mux.HandleFunc("DELETE /api/comments/{id}", s.handleDeleteComment)

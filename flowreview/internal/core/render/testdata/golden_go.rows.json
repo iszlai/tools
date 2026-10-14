@@ -1,0 +1,56 @@
+[
+  {
+    "kind": "hunk",
+    "old_html": "@@ -1,5 +1,5 @@",
+    "new_html": "@@ -1,5 +1,5 @@",
+    "hunk_id": "875fb182eab501b07a41d70a0c841d24bd072757"
+  },
+  {
+    "kind": "context",
+    "old_no": 1,
+    "new_no": 1,
+    "old_html": "\u003cspan class=\"kn\"\u003epackage\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"nx\"\u003egreet\u003c/span\u003e",
+    "new_html": "\u003cspan class=\"kn\"\u003epackage\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"nx\"\u003egreet\u003c/span\u003e",
+    "hunk_id": "875fb182eab501b07a41d70a0c841d24bd072757",
+    "old_position": 1,
+    "new_position": 1
+  },
+  {
+    "kind": "context",
+    "old_no": 2,
+    "new_no": 2,
+    "hunk_id": "875fb182eab501b07a41d70a0c841d24bd072757",
+    "old_position": 2,
+    "new_position": 2
+  },
+  {
+    "kind": "context",
+    "old_no": 3,
+    "new_no": 3,
+    "old_html": "\u003cspan class=\"kd\"\u003efunc\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"nf\"\u003eGreet\u003c/span\u003e\u003cspan class=\"p\"\u003e(\u003c/span\u003e\u003cspan class=\"nx\"\u003ename\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"kt\"\u003estring\u003c/span\u003e\u003cspan class=\"p\"\u003e)\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"kt\"\u003estring\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"p\"\u003e{\u003c/span\u003e",
+    "new_html": "\u003cspan class=\"kd\"\u003efunc\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"nf\"\u003eGreet\u003c/span\u003e\u003cspan class=\"p\"\u003e(\u003c/span\u003e\u003cspan class=\"nx\"\u003ename\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"kt\"\u003estring\u003c/span\u003e\u003cspan class=\"p\"\u003e)\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"kt\"\u003estring\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"p\"\u003e{\u003c/span\u003e",
+    "hunk_id": "875fb182eab501b07a41d70a0c841d24bd072757",
+    "old_position": 3,
+    "new_position": 3
+  },
+  {
+    "kind": "change",
+    "old_no": 4,
+    "new_no": 4,
+    "old_html": "\u003cspan class=\"w\"\u003e\t\u003c/span\u003e\u003cspan class=\"k\"\u003ereturn\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"s\"\u003e\u0026#34;\u003c/span\u003e\u003cmark class=\"x-del\"\u003e\u003cspan class=\"s\"\u003eHello\u003c/span\u003e\u003c/mark\u003e\u003cspan class=\"s\"\u003e, \u0026#34;\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"o\"\u003e+\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"nx\"\u003ename\u003c/span\u003e",
+    "new_html": "\u003cspan class=\"w\"\u003e\t\u003c/span\u003e\u003cspan class=\"k\"\u003ereturn\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"s\"\u003e\u0026#34;\u003c/span\u003e\u003cmark class=\"x-add\"\u003e\u003cspan class=\"s\"\u003eHi there\u003c/span\u003e\u003c/mark\u003e\u003cspan class=\"s\"\u003e, \u0026#34;\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"o\"\u003e+\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"nx\"\u003ename\u003c/span\u003e\u003cmark class=\"x-add\"\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"o\"\u003e+\u003c/span\u003e\u003cspan class=\"w\"\u003e \u003c/span\u003e\u003cspan class=\"s\"\u003e\u0026#34;!\u0026#34;\u003c/span\u003e\u003c/mark\u003e",
+    "hunk_id": "875fb182eab501b07a41d70a0c841d24bd072757",
+    "old_position": 4,
+    "new_position": 5
+  },
+  {
+    "kind": "context",
+    "old_no": 5,
+    "new_no": 5,
+    "old_html": "\u003cspan class=\"p\"\u003e}\u003c/span\u003e",
+    "new_html": "\u003cspan class=\"p\"\u003e}\u003c/span\u003e",
+    "hunk_id": "875fb182eab501b07a41d70a0c841d24bd072757",
+    "old_position": 6,
+    "new_position": 6
+  }
+]
