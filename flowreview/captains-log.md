@@ -39,3 +39,8 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-25 merged; llama.cpp b11609 pinned
 
 **Decision (agent, accepted).** Pinned llama.cpp release b11609 (macOS arm64 tar.gz; sha256 committed in third_party/llama/SHA256SUMS). `make fetch-llama` copies the 11 files llama-server needs (otool closure, symlinks dereferenced) into the gitignored dist/; `make build` adds `-tags llama_embed` when dist/ exists, otherwise builds use the stub provider. CompleteJSON uses `response_format: json_schema`, retrying once with the bare `json_schema` field if the server rejects it. Verified end to end with SmolLM2-135M (20 tokens in 75 ms).
+
+## 2026-10-14 — FR-20 merged; history cache keyed by caller-supplied HEAD
+
+**Decision (agent, accepted).** `Mine(ctx, headSHA)` takes HEAD from the caller so a cache hit runs no git at all. The cache is a plain JSON write (regenerable), invalidated when mining params change. Ledger: ~0.75 s for 654 commits in 365 days, under the 2 s budget.
+**Also.** Test fixtures pass `-c commit.gpgsign=false` per git call: the user's global gpgsign made the FR-2 git tests take 36 s.

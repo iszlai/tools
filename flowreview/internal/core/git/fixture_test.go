@@ -60,7 +60,7 @@ func commit(t *testing.T, dir string, clock *fixtureTime, msg string) string {
 		"GIT_AUTHOR_NAME=Fixture", "GIT_AUTHOR_EMAIL=fixture@example.com", "GIT_AUTHOR_DATE=" + when,
 		"GIT_COMMITTER_NAME=Fixture", "GIT_COMMITTER_EMAIL=fixture@example.com", "GIT_COMMITTER_DATE=" + when,
 	}
-	runGit(t, dir, env, "commit", "-q", "-m", msg)
+	runGit(t, dir, env, "-c", "commit.gpgsign=false", "commit", "-q", "-m", msg)
 	return strings.TrimSpace(runGit(t, dir, nil, "rev-parse", "HEAD"))
 }
 

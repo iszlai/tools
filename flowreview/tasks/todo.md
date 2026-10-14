@@ -30,7 +30,7 @@ Full plan: `../PLAN.md`. Board: `th next` in this folder (`.taskhound.yaml`, pre
 - [ ] FR-17 Flow ordering
 - [ ] FR-18 Call-chain explorer UI
 - [ ] FR-19 Blast radius and signature changes
-- [ ] FR-20 Co-change companions and hotspots
+- [x] FR-20 Co-change companions and hotspots
 - [ ] FR-21 Test reach
 - [ ] FR-22 Delta re-review (with diff against the body you reviewed)
 - [ ] FR-23 Commit walkthrough order
