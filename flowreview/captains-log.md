@@ -153,3 +153,8 @@ Why things are the way they are. Append-only; written with `th log add`.
 **Bugs found in end-to-end.** sidecar.Lazy started llama-server on the first request's timeout context, so it died after one summary; quitting the window (NSApp terminate: → exit) and SIGTERM both left the 5 GB sidecar running. Both fixed with tests or manual checks.
 **Long lines.** The UI agent's "wrap on" was full-width + one horizontal scrollbar, which hides the new side; default switched to clip. True soft wrap needs variable row heights in the virtualized grid; not done.
 **Summaries default.** With no config.json and the recommended model installed, summaries are on; explicit enabled:false wins.
+
+## 2026-10-14 — FR-18: Call-chain navigation from function lines (rest of FR-18)
+
+**Context.** The user asked (via the layout agent) for a button on function/method lines to jump to callers and callees. The FR-18 trim had shipped only the sidebar panel for changed functions.
+**Decision.** One Sonnet agent builds the rest of FR-18: inline ⇅ button on declaration lines, popover with callers/callees/implementations for any visible function (Go precise, other languages tree-sitter heuristic), read-only file view for targets outside the diff, back/forward history. Reuse the cached Go analysis instead of a third package load.
