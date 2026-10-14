@@ -60,7 +60,10 @@ const state = {
   // join key source for the callers panel too.
 
   // FR-wrap: long-line wrap toggle ('w'), persisted in localStorage; default on.
-  wrap: localStorage.getItem('flowreview.wrap') !== '0',
+  // Off by default: "on" lays every code column out at full width behind
+  // one horizontal scrollbar (true soft wrap would break the fixed row
+  // height virtualization relies on), which pushes the new side off screen.
+  wrap: localStorage.getItem('flowreview.wrap') === '1',
 };
 
 // expandedHunks tracks FR-8's "expand enclosing function": hunk_id -> the
@@ -1394,8 +1397,10 @@ function forceSidebarRedraw() {
 function applyWrapMode() {
   document.body.classList.toggle('wrap-lines', state.wrap);
   const btn = document.getElementById('wrap-toggle');
-  btn.textContent = state.wrap ? 'Wrap: on' : 'Wrap: off';
-  btn.title = `Toggle long-line wrap (w)`;
+  btn.textContent = state.wrap ? '↔ Long lines: scroll' : '↔ Long lines: clip';
+  btn.title = state.wrap
+    ? 'Long lines: full width, one horizontal scrollbar for the diff (w)'
+    : 'Long lines: clipped at the column edge, both sides visible (w)';
 }
 
 function toggleWrap() {

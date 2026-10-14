@@ -75,11 +75,8 @@ async function postJSON(url, body) {
 }
 
 // --- on/off toggle: a visible glyph button, plus 's' -----------------------
-// The button is built here, not added to index.html's static topbar markup:
-// another agent is building a real top-bar toolbar in app.js, so touching
-// that markup from this file risks a collision. A small fixed control is the
-// documented fallback (someone can move it into the toolbar at merge time);
-// everything about it lives in this file alone.
+// The button is built here and slotted into the top-bar toolbar, just
+// before its "?" help button, so everything about it lives in this file.
 
 function buildToggleButton() {
   const btn = document.createElement('button');
@@ -88,7 +85,9 @@ function buildToggleButton() {
   btn.textContent = '✦';
   btn.setAttribute('aria-label', 'Toggle hunk summaries');
   btn.addEventListener('click', toggleEnabled);
-  document.body.appendChild(btn);
+  const toolbar = document.getElementById('toolbar');
+  if (toolbar) toolbar.insertBefore(btn, toolbar.lastElementChild); // before "?"
+  else document.body.appendChild(btn);
   return btn;
 }
 

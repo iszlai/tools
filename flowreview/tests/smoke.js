@@ -696,26 +696,25 @@ async function runWorktreeSmoke() {
     check('FR-21: an unreached function shows the warning flag', /no test reaches this/.test(testsTextUnrelated), testsTextUnrelated);
 
     /* ======================== long-line wrap toggle ======================== */
-    /* 25 -- wrap on (the default) shows a long line at its natural width
-       (no internal per-cell clipping); wrap off returns to the original
-       clipped/internal-scroll look; the toolbar button does the same thing
-       the `w` key does. */
+    /* 25 -- long lines are clipped by default (both sides stay visible);
+       "scroll" mode shows a long line at its natural width; the toolbar
+       button does the same thing the `w` key does. */
     await selectFileAndMeasure(page, 'long.txt');
     await page.waitForSelector('#diff-rows [data-hunk]');
     const longCell = page.locator('#diff-rows [data-side="new"].code').first();
     await longCell.waitFor();
-    const wrapOnOverflow = await longCell.evaluate((el) => el.scrollWidth - el.clientWidth);
-    check('wrap: wrap on (default) shows the long line at its natural width', wrapOnOverflow <= 1, String(wrapOnOverflow));
+    const wrapOffOverflow = await longCell.evaluate((el) => el.scrollWidth - el.clientWidth);
+    check('wrap: by default a long line is clipped inside its cell', wrapOffOverflow > 50, String(wrapOffOverflow));
 
     await page.keyboard.press('w');
-    await page.waitForFunction(() => !document.body.classList.contains('wrap-lines'), { timeout: 2000 });
-    const wrapOffOverflow = await longCell.evaluate((el) => el.scrollWidth - el.clientWidth);
-    check('wrap: the `w` key turns wrap off, clipping the long line inside its cell', wrapOffOverflow > 50, String(wrapOffOverflow));
+    await page.waitForFunction(() => document.body.classList.contains('wrap-lines'), { timeout: 2000 });
+    const wrapOnOverflow = await longCell.evaluate((el) => el.scrollWidth - el.clientWidth);
+    check('wrap: the `w` key shows the long line at its natural width', wrapOnOverflow <= 1, String(wrapOnOverflow));
 
     await page.click('#wrap-toggle');
-    await page.waitForFunction(() => document.body.classList.contains('wrap-lines'), { timeout: 2000 });
-    const wrapOnAgainOverflow = await longCell.evaluate((el) => el.scrollWidth - el.clientWidth);
-    check('wrap: clicking the wrap-toggle button does the same as the `w` key', wrapOnAgainOverflow <= 1, String(wrapOnAgainOverflow));
+    await page.waitForFunction(() => !document.body.classList.contains('wrap-lines'), { timeout: 2000 });
+    const wrapOffAgainOverflow = await longCell.evaluate((el) => el.scrollWidth - el.clientWidth);
+    check('wrap: clicking the wrap-toggle button does the same as the `w` key', wrapOffAgainOverflow > 50, String(wrapOffAgainOverflow));
 
     /* ======================== every shortcut also has a button ======================== */
     /* 26 -- the pre-existing shortcut-only actions (prev/next file, prev/next

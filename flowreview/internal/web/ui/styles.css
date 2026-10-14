@@ -519,10 +519,6 @@ body.fr-summaries-off .fr-summary-strip { display: none; }
    the top-bar toolbar another agent is building in app.js; a natural
    candidate to fold into that toolbar later. */
 #fr-summary-toggle-button {
-  position: fixed;
-  top: 6px;
-  right: 40px;
-  z-index: 55;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--muted);
