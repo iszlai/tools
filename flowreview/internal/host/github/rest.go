@@ -1,6 +1,7 @@
 package github
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,24 +14,23 @@ import (
 // Sentinel errors for the status codes callers most need to branch on.
 // Wrapped with context via %w, so errors.Is still matches.
 var (
-	ErrUnauthorized = errors.New("github: unauthorized")
-	ErrForbidden    = errors.New("github: forbidden")
-	ErrNotFound     = errors.New("github: not found")
+	ErrUnauthorized  = errors.New("github: unauthorized")
+	ErrForbidden     = errors.New("github: forbidden")
+	ErrNotFound      = errors.New("github: not found")
+	ErrUnprocessable = errors.New("github: unprocessable (one or more comments could not be placed on the diff)")
 )
-
-// errNotImplemented is returned by the FR-11 publish stubs.
-var errNotImplemented = errors.New("github: not implemented (FR-11)")
 
 // newRequest builds a request for path, which may be a path relative to the
 // client's base URL ("/repos/o/r/pulls/1") or an absolute URL (as Link
 // headers give for later pages). accept overrides the default JSON media
-// type when non-empty, e.g. for the raw-diff representation of a PR.
-func (c *Client) newRequest(ctx context.Context, method, path, accept string) (*http.Request, error) {
+// type when non-empty, e.g. for the raw-diff representation of a PR. body is
+// the request body (nil for a GET).
+func (c *Client) newRequest(ctx context.Context, method, path, accept string, body io.Reader) (*http.Request, error) {
 	url := path
 	if !strings.HasPrefix(path, "http://") && !strings.HasPrefix(path, "https://") {
 		url = c.baseURL + path
 	}
-	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (c *Client) getJSON(ctx context.Context, path string, out any) error {
 // getRaw GETs path and returns the raw body, e.g. a PR's unified diff
 // requested with the application/vnd.github.v3.diff media type.
 func (c *Client) getRaw(ctx context.Context, path, accept string) ([]byte, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path, accept)
+	req, err := c.newRequest(ctx, http.MethodGet, path, accept, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -78,13 +78,43 @@ func (c *Client) getRaw(ctx context.Context, path, accept string) ([]byte, error
 	return body, nil
 }
 
+// postJSON POSTs body (marshaled to JSON) to path and decodes a single JSON
+// object from the response into out; out may be nil to discard the response
+// body once the status has been checked.
+func (c *Client) postJSON(ctx context.Context, path string, body, out any) error {
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("github: POST %s: encode request: %w", path, err)
+	}
+	req, err := c.newRequest(ctx, http.MethodPost, path, "", bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("github: POST %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+	if err := checkStatus(resp); err != nil {
+		return err
+	}
+	if out == nil {
+		return nil
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("github: POST %s: decode response: %w", path, err)
+	}
+	return nil
+}
+
 // fetchAllPages GETs path and every page the Link header's rel="next" points
 // to, decoding each page as a JSON array of T and concatenating the results.
 func fetchAllPages[T any](ctx context.Context, c *Client, path string) ([]T, error) {
 	var all []T
 	next := path
 	for next != "" {
-		req, err := c.newRequest(ctx, http.MethodGet, next, "")
+		req, err := c.newRequest(ctx, http.MethodGet, next, "", nil)
 		if err != nil {
 			return nil, err
 		}
@@ -157,6 +187,8 @@ func checkStatus(resp *http.Response) error {
 		return fmt.Errorf("%w: %s (token may lack scope, or you hit a rate limit)", ErrForbidden, msg)
 	case http.StatusNotFound:
 		return fmt.Errorf("%w: %s (check the owner/repo/PR number, and that your token can see it)", ErrNotFound, msg)
+	case http.StatusUnprocessableEntity:
+		return fmt.Errorf("%w: %s", ErrUnprocessable, msg)
 	default:
 		if msg == "" {
 			msg = resp.Status

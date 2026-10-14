@@ -19,6 +19,8 @@ import (
 func init() {
 	review.FetchPR = fetchPRHook
 	review.FetchRemoteComments = fetchRemoteCommentsHook
+	review.SubmitReview = submitReviewHook
+	review.PublishComment = publishCommentHook
 }
 
 // resolvePRRef turns the argument to "flowreview pr" into a full PRRef: a URL
@@ -78,4 +80,22 @@ func fetchRemoteCommentsHook(ctx context.Context, src model.Source) ([]host.Remo
 		return nil, err
 	}
 	return client.ListComments(ctx, *src.PR)
+}
+
+// submitReviewHook implements review.SubmitReview (FR-11).
+func submitReviewHook(ctx context.Context, ref model.PRRef, r host.Review) (*host.ReviewResult, error) {
+	client, err := github.New(github.Options{})
+	if err != nil {
+		return nil, err
+	}
+	return client.SubmitReview(ctx, ref, r)
+}
+
+// publishCommentHook implements review.PublishComment (FR-11).
+func publishCommentHook(ctx context.Context, ref model.PRRef, commitID string, c model.CommentDraft) (*host.CommentResult, error) {
+	client, err := github.New(github.Options{})
+	if err != nil {
+		return nil, err
+	}
+	return client.PublishComment(ctx, ref, commitID, c)
 }

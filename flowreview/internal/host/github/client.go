@@ -1,7 +1,6 @@
 // Package github implements the FlowReview host.Host interface against the
-// GitHub REST API. The read half (fetching PRs, diffs, comments and reviews)
-// is FR-10; SubmitReview and PublishComment are FR-11 and return an error
-// here so the interface is satisfied in the meantime.
+// GitHub REST API: fetching PRs, diffs, comments and reviews (FR-10), and
+// submitting a review or a single comment (FR-11, publish.go).
 package github
 
 import (
