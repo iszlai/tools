@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/iszlai/tools/flowreview/internal/host"
@@ -251,5 +252,28 @@ func TestPublishComment_requiresAnchor(t *testing.T) {
 	_, err := c.PublishComment(context.Background(), model.PRRef{Owner: "o", Repo: "r", Number: 1}, "sha", model.CommentDraft{ID: "general", Body: "no anchor"})
 	if err == nil {
 		t.Fatal("PublishComment: want an error for a draft with no anchor")
+	}
+}
+
+// TestPublishComment_422IncludesErrorDetail checks a 422's "errors" detail
+// reaches the error text: GitHub's bare "Validation Failed" alone gave the
+// user nothing to act on.
+func TestPublishComment_422IncludesErrorDetail(t *testing.T) {
+	ref := model.PRRef{Owner: "o", Repo: "r", Number: 1}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/o/r/pulls/1/comments", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		w.Write([]byte(`{"message":"Validation Failed","errors":["User can only have one pending review per pull request",{"resource":"PullRequestReviewComment","field":"line","code":"invalid"}]}`))
+	})
+	c := newTestClient(t, mux)
+
+	_, err := c.PublishComment(context.Background(), ref, "headsha", draftAt("c1", "a.txt", model.SideNew, 3))
+	if err == nil {
+		t.Fatal("want an error")
+	}
+	for _, want := range []string{"Validation Failed", "one pending review", "PullRequestReviewComment line invalid"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
 	}
 }

@@ -759,3 +759,6 @@ body.wrap-lines #diff-rows {
   grid-template-columns: var(--lineno-w) max-content var(--lineno-w) max-content;
 }
 body.wrap-lines .cell.code { overflow-x: visible; }
+
+/* Request-level publish failure (renderPublishPanel). */
+.publish-error { color: var(--removed-fg); }

@@ -32,6 +32,16 @@ var ErrNotAPRSession = errors.New("review: publishing needs a PR session")
 // both hooks alongside FetchPR.
 var errHostNotWired = errors.New("review: publishing is not wired to a host")
 
+// PendingReview reports the user's own unsubmitted review on the PR, if
+// any (htmlURL, true). nil skips the check. GitHub allows one pending
+// review per user per PR; while one exists, new comments get attached to it
+// (invisible to everyone else) and the request still fails with 422.
+var PendingReview func(ctx context.Context, ref model.PRRef) (htmlURL string, found bool, err error)
+
+// ErrPendingReview is Publish's answer when the user has an unsubmitted
+// review on the PR: nothing is sent.
+var ErrPendingReview = errors.New("you have an unsubmitted (pending) review on this PR on GitHub; open the PR, use \"Finish your review\" to submit or discard it, then publish again")
+
 // ExcludedDraft is a comment draft Preflight will not send, and why.
 type ExcludedDraft struct {
 	DraftID string `json:"draft_id"`
@@ -162,6 +172,14 @@ func (w *Workspace) Publish(ctx context.Context, ev host.ReviewEvent, body strin
 		return nil, fmt.Errorf("review: publish: PR session has no PR reference")
 	}
 	ref := *sess.Source.PR
+
+	if PendingReview != nil {
+		// Advisory: if the check itself fails, publish anyway and let the
+		// host's own answer speak.
+		if url, found, err := PendingReview(ctx, ref); err == nil && found {
+			return nil, fmt.Errorf("%w (%s)", ErrPendingReview, url)
+		}
+	}
 
 	out := &PublishResult{Excluded: plan.Excluded, Results: []host.CommentResult{}}
 	if isRetry(plan) {

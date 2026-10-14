@@ -164,6 +164,31 @@ func nextPageURL(header string) string {
 // apiError is GitHub's standard error body shape.
 type apiError struct {
 	Message string `json:"message"`
+	// Errors carries the detail behind a 422's bare "Validation Failed":
+	// entries are objects with a message (or code/field), or plain strings.
+	Errors []json.RawMessage `json:"errors"`
+}
+
+// details flattens Errors into readable strings.
+func (e apiError) details() []string {
+	var out []string
+	for _, raw := range e.Errors {
+		var str string
+		if json.Unmarshal(raw, &str) == nil {
+			out = append(out, str)
+			continue
+		}
+		var obj struct{ Message, Code, Field, Resource string }
+		if json.Unmarshal(raw, &obj) == nil {
+			switch {
+			case obj.Message != "":
+				out = append(out, obj.Message)
+			case obj.Code != "":
+				out = append(out, strings.TrimSpace(obj.Resource+" "+obj.Field+" "+obj.Code))
+			}
+		}
+	}
+	return out
 }
 
 // checkStatus turns a non-2xx response into a clear error, reading GitHub's
@@ -178,6 +203,9 @@ func checkStatus(resp *http.Response) error {
 	var apiErr apiError
 	if json.Unmarshal(body, &apiErr) == nil && apiErr.Message != "" {
 		msg = apiErr.Message
+		if d := apiErr.details(); len(d) > 0 {
+			msg += ": " + strings.Join(d, "; ")
+		}
 	}
 
 	switch resp.StatusCode {

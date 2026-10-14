@@ -352,3 +352,39 @@ func TestPublish_mixedFailedAndDraftGoesThroughSubmitReview(t *testing.T) {
 		t.Error("PublishComment was called, want the mix to go through SubmitReview only")
 	}
 }
+
+// TestPublish_pendingReviewBlocksWithoutSending covers a user who has an
+// unsubmitted review on the PR (e.g. started with "Start a review" on
+// github.com): GitHub would attach the new comment to that invisible review
+// and still answer 422, so Publish must refuse up front and send nothing.
+func TestPublish_pendingReviewBlocksWithoutSending(t *testing.T) {
+	ws, _, _ := openPRFixtureForPublish(t)
+	addDraft(t, ws, model.CommentDraft{
+		Anchor:      &model.Anchor{Path: "a.txt", Side: model.SideNew, Line: 2, HunkID: hunkIDFor(t, ws, "a.txt")},
+		Body:        "inline note",
+		Status:      model.CommentDraftStatus,
+		Publishable: true,
+	})
+
+	sent := false
+	withPublishHooks(t, func(context.Context, model.PRRef, host.Review) (*host.ReviewResult, error) {
+		sent = true
+		return &host.ReviewResult{}, nil
+	}, func(context.Context, model.PRRef, string, model.CommentDraft) (*host.CommentResult, error) {
+		sent = true
+		return &host.CommentResult{}, nil
+	})
+	old := PendingReview
+	PendingReview = func(context.Context, model.PRRef) (string, bool, error) {
+		return "https://example/pull/1#pullrequestreview-9", true, nil
+	}
+	t.Cleanup(func() { PendingReview = old })
+
+	_, err := ws.Publish(ctx(t), host.EventComment, "", nil)
+	if !errors.Is(err, ErrPendingReview) {
+		t.Fatalf("Publish error = %v, want ErrPendingReview", err)
+	}
+	if sent {
+		t.Error("Publish sent something to the host despite the pending review")
+	}
+}

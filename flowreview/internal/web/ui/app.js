@@ -39,6 +39,7 @@ const state = {
   publish: {
     plan: null, // last PublishPreflight response (inline/general/excluded/head_sha), or null
     confirming: false, // true once Submit has been clicked, before the user confirms
+    error: '', // last request-level publish failure, shown in the panel
   },
 
   // FR-17: flow order toggle. orderMode persists in localStorage; 'flow'
@@ -1079,6 +1080,9 @@ function renderPublishPanel() {
     ? `<p>${plan.inline.length} inline, ${plan.general.length} general${plan.excluded.length ? `, ${plan.excluded.length} excluded` : ''}</p>` +
       (plan.excluded.length ? `<ul>${plan.excluded.map((x) => `<li>${escapeHTML(x.reason)}</li>`).join('')}</ul>` : '')
     : '';
+  // A request-level failure (e.g. a pending review on GitHub) is shown here;
+  // per-draft failures are shown on the drafts themselves.
+  if (state.publish.error) pf.innerHTML += `<p class="publish-error">${escapeHTML(state.publish.error)}</p>`;
 
   const confirm = document.getElementById('publish-confirm');
   confirm.hidden = !state.publish.confirming;
@@ -1105,13 +1109,25 @@ function cancelSubmitConfirm() {
   renderPublishPanel();
 }
 
+// publishRequest posts to /api/publish, recording a request-level error for
+// renderPublishPanel instead of letting it vanish as an unhandled rejection.
+async function publishRequest(body) {
+  state.publish.error = '';
+  try {
+    await postJSON('/api/publish', body);
+  } catch (err) {
+    state.publish.error = 'Publish failed: ' + err.message;
+  }
+}
+
 async function confirmSubmit() {
   const event = document.getElementById('publish-event').value;
   const body = document.getElementById('publish-body').value;
-  await postJSON('/api/publish', { event, body, draft_ids: [] });
+  await publishRequest({ event, body, draft_ids: [] });
   state.publish.confirming = false;
   state.publish.plan = null;
   await refreshSession();
+  renderPublishPanel();
 }
 
 // retryDraft re-submits exactly one previously-failed draft: the server
@@ -1119,8 +1135,9 @@ async function confirmSubmit() {
 // retry and publishes it alone (no new review object), see
 // review.Workspace.Publish's isRetry.
 async function retryDraft(id) {
-  await postJSON('/api/publish', { event: 'COMMENT', body: '', draft_ids: [id] });
+  await publishRequest({ event: 'COMMENT', body: '', draft_ids: [id] });
   await refreshSession();
+  renderPublishPanel();
 }
 
 // ======================== FR-19/FR-21: callers + tests sidebar ========================
