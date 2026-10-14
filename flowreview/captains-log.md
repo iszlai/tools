@@ -105,3 +105,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 
 **Measured (43 cases).** 7B: 0.739, 7% hallucinated symbols, 3.1 s/hunk, 5.6 GB. 1.5B: 0.701, 11.5%, 0.9 s, 1.9 GB. 3B: 0.673, 16%, 1.5 s, 3.0 GB (worse than 1.5B on every axis).
 **Decision (agent).** Grounding counts the file path as a valid symbol. Near-duplicate board-bump hunks dropped (71 → 43). No rename cases exist in this history (gap). FR-27 stays open (doing) until the user picks Recommended entries; Qwen3.5 entries need an eval run in a session where `go run` is permitted.
+
+## 2026-10-14 — FR-21 merged; test commands grouped by the test's package
+
+**Decision (agent, accepted).** Suggested `go test -run` lines group by the test's own package dir (where `go test` runs), not the changed function's. `/api/tests` computes in the background behind `{"pending":true}`; its cache is a package-level map keyed by *Server to avoid touching the Server struct, so it should be unified with the order/radius endpoints later.
