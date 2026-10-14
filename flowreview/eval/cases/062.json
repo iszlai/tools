@@ -4,17 +4,15 @@
   "commit": "c9c9685458cf83495535ec37e8aa4f50d6a37156",
   "path": "flowreview/go.mod",
   "hunk": " module github.com/iszlai/tools/flowreview\n \n-go 1.25\n+go 1.25.0\n \n-require golang.org/x/mod v0.28.0\n+require (\n+\tgolang.org/x/mod v0.39.0\n+\tgolang.org/x/tools v0.48.0\n+)\n+\n+require golang.org/x/sync v0.22.0 // indirect\n",
-  "candidate_symbols": [
-    "golang",
-    "indirect",
-    "mod",
-    "org",
-    "require",
-    "sync",
-    "tools"
-  ],
   "expected": {
+    "kind": "config",
+    "symbols": [],
     "added_lines": 7,
-    "removed_lines": 2
+    "removed_lines": 2,
+    "facts": [
+      "Bumps the go directive from 1.25 to 1.25.0.",
+      "Bumps golang.org/x/mod from v0.28.0 to v0.39.0.",
+      "Adds golang.org/x/tools v0.48.0 as a direct requirement and golang.org/x/sync v0.22.0 as an indirect one."
+    ]
   }
 }

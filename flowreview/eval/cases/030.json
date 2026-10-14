@@ -4,14 +4,16 @@
   "commit": "46263fd28fb234a1333b191a9fe614b0944b621c",
   "path": "taskhound/e2e_test.go",
   "hunk": " \t\"fmt\"\n \t\"io\"\n \t\"net/http\"\n+\t\"net/http/httptest\"\n \t\"os\"\n \t\"os/exec\"\n \t\"path/filepath\"\n \t\"regexp\"\n+\t\"runtime\"\n \t\"strings\"\n \t\"sync\"\n \t\"testing\"\n",
-  "candidate_symbols": [
-    "http",
-    "httptest",
-    "net",
-    "runtime"
-  ],
   "expected": {
+    "kind": "refactor",
+    "symbols": [
+      "httptest",
+      "runtime"
+    ],
     "added_lines": 2,
-    "removed_lines": 0
+    "removed_lines": 0,
+    "facts": [
+      "Adds the \"net/http/httptest\" and \"runtime\" imports to e2e_test.go."
+    ]
   }
 }

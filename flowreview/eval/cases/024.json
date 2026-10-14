@@ -4,16 +4,14 @@
   "commit": "767032c84221442f8c146616b0de5735502ae83a",
   "path": "taskhound/main.go",
   "hunk": "   update \u003cid\u003e              change title, description, status, blockers, labels\n   comment \u003cid\u003e \u003cbody\u003e      append a comment\n   archive                  move long-finished issues into the done log\n+  log \u003ccommand\u003e            the captain's log: append and read decisions\n   sync                     push the board to GitHub Issues via the gh CLI\n   ui                       serve the kanban board on localhost\n   agent-guide              print the usage guide written for LLM agents\n",
-  "candidate_symbols": [
-    "append",
-    "captain",
-    "command",
-    "decisions",
-    "log",
-    "read"
-  ],
   "expected": {
+    "kind": "behavior",
+    "symbols": [],
     "added_lines": 1,
-    "removed_lines": 0
+    "removed_lines": 0,
+    "facts": [
+      "Adds a line to the CLI usage text documenting a new `log \u003ccommand\u003e` entry.",
+      "Describes it as \"the captain's log: append and read decisions\"."
+    ]
   }
 }

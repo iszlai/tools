@@ -4,16 +4,14 @@
   "commit": "8216075bcb393411420b26330b8ed8553bea6c1f",
   "path": "flowreview/Makefile",
   "hunk": " \tgo vet ./...\n \n smoke: build ## drive the UI in headless Chromium (see tests/smoke.js)\n-\tPLAYWRIGHT_BROWSERS_PATH=./pw-browsers node tests/smoke.js\n+\tPLAYWRIGHT_BROWSERS_PATH=$${PLAYWRIGHT_BROWSERS_PATH:-../taskhound/pw-browsers} node tests/smoke.js\n \n install: build ## install bin/flowreview into PREFIX\n \tinstall -m 0755 $(BIN) $(PREFIX)/flowreview\n",
-  "candidate_symbols": [
-    "PLAYWRIGHT_BROWSERS_PATH",
-    "browsers",
-    "node",
-    "smoke",
-    "taskhound",
-    "tests"
-  ],
   "expected": {
+    "kind": "config",
+    "symbols": [],
     "added_lines": 1,
-    "removed_lines": 1
+    "removed_lines": 1,
+    "facts": [
+      "Changes the smoke target's PLAYWRIGHT_BROWSERS_PATH from a hardcoded \"./pw-browsers\" to a shell default expansion falling back to \"../taskhound/pw-browsers\".",
+      "The variable can now be overridden by the caller's environment."
+    ]
   }
 }

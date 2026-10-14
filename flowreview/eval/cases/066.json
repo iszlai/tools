@@ -4,22 +4,13 @@
   "commit": "10c2cf94373d9196ea26f68e0ab4748c428a897d",
   "path": "flowreview/cmd/flowreview/main.go",
   "hunk": " package main\n \n import (\n+\t\"bytes\"\n+\t\"context\"\n+\t\"encoding/json\"\n+\t\"errors\"\n+\t\"flag\"\n \t\"fmt\"\n+\t\"net\"\n+\t\"net/http\"\n \t\"os\"\n+\t\"os/exec\"\n+\t\"runtime\"\n+\t\"strings\"\n+\n+\t\"github.com/iszlai/tools/flowreview/internal/core/review\"\n+\t\"github.com/iszlai/tools/flowreview/internal/core/session\"\n+\t\"github.com/iszlai/tools/flowreview/internal/model\"\n+\t\"github.com/iszlai/tools/flowreview/internal/web\"\n+\t\"github.com/iszlai/tools/flowreview/internal/window\"\n )\n \n // version is stamped by the Makefile.\n",
-  "candidate_symbols": [
-    "bytes",
-    "com",
-    "core",
-    "encoding",
-    "errors",
-    "exec",
-    "flag",
-    "flowreview",
-    "github",
-    "http",
-    "internal",
-    "iszlai"
-  ],
   "expected": {
+    "kind": "refactor",
+    "symbols": [],
     "added_lines": 16,
-    "removed_lines": 0
+    "removed_lines": 0,
+    "facts": [
+      "Adds a block of new imports to cmd/flowreview/main.go: several stdlib packages (bytes, context, encoding/json, errors, flag, net, net/http, os/exec, runtime, strings) plus four internal flowreview packages (core/review, core/session, model, web, window)."
+    ]
   }
 }

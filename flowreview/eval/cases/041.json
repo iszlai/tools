@@ -4,22 +4,15 @@
   "commit": "b3ae73e0a94a1fb70df143b74ddce5a4d400e0b4",
   "path": "flowreview/.taskhound.yaml",
   "hunk": "       labels:\n         - M2\n       created_at: 2026-10-14T07:26:52Z\n-      updated_at: 2026-10-14T07:26:52Z\n+      updated_at: 2026-10-14T08:06:56Z\n+      comments:\n+        - at: 2026-10-14T08:06:56Z\n+          author: lehel\n+          body: 'FR-4 Refresh flags needs-re-review at file level only (any hunk left in the same path). Refine here: pair old/new hunks by overlapping line range or body similarity.'\n     - id: FR-23\n       title: Commit walkthrough order\n       description: See PLAN.md §5 for scope, acceptance criteria and size.\n",
-  "candidate_symbols": [
-    "Refine",
-    "Refresh",
-    "any",
-    "author",
-    "body",
-    "comments",
-    "file",
-    "flags",
-    "here",
-    "hunk",
-    "hunks",
-    "left"
-  ],
   "expected": {
+    "kind": "config",
+    "symbols": [],
     "added_lines": 5,
-    "removed_lines": 1
+    "removed_lines": 1,
+    "facts": [
+      "Adds a comments: list to the FR-22 entry in .taskhound.yaml with one entry authored by lehel.",
+      "The comment notes FR-4's Refresh only flags needs-re-review at file level and suggests pairing hunks by overlapping line range or body similarity.",
+      "Also bumps updated_at."
+    ]
   }
 }

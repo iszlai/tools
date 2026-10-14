@@ -4,22 +4,19 @@
   "commit": "72f14bc917512bc121be25f72175ea8c007e42dc",
   "path": "taskhound/main.go",
   "hunk": " \n // priCell is the PRI column. It shows the urgency rather than the stored\n // priority, because the urgency is what actually orders the board, with an\n-// arrow when it was inherited from something waiting on the issue.\n+// arrow when the graph raised it above what was set.\n func priCell(b *Board, is *Issue) string {\n-\turgency, from := b.Urgency(is.ID)\n-\tif from != \"\" {\n+\turgency, _ := b.Urgency(is.ID)\n+\tif urgency != effectivePriority(is.Priority) {\n \t\treturn urgency + \"\\u2191\"\n \t}\n \treturn urgency\n }\n \n+// whyUrgent explains a raise in one phrase. An id means one waiting issue asked\n+// for it; no id means the number of them did.\n+func whyUrgent(b *Board, is *Issue) string {\n+\turgency, from := b.Urgency(is.ID)\n+\tif urgency == effectivePriority(is.Priority) {\n+\t\treturn \"\"\n+\t}\n+\tif from != \"\" {\n+\t\treturn fmt.Sprintf(\"raised to %s by %s, which waits on this\", urgency, from)\n+\t}\n+\twaiting, _ := b.Unblocks(is.ID)\n+\treturn fmt.Sprintf(\"raised to %s: %d issues are waiting on this\", urgency, waiting)\n+}\n+\n func printJSON(v any) error {\n \tenc := json.NewEncoder(os.Stdout)\n \tenc.SetIndent(\"\", \"  \")\n",
-  "candidate_symbols": [
-    "Board",
-    "Issue",
-    "Priority",
-    "Sprintf",
-    "Unblocks",
-    "Urgency",
-    "above",
-    "are",
-    "arrow",
-    "asked",
-    "did",
-    "effectivePriority"
-  ],
   "expected": {
+    "kind": "behavior",
+    "symbols": [
+      "priCell",
+      "whyUrgent",
+      "Urgency",
+      "effectivePriority"
+    ],
     "added_lines": 17,
-    "removed_lines": 3
+    "removed_lines": 3,
+    "facts": [
+      "Changes priCell to compare urgency against effectivePriority(is.Priority) instead of checking a nonempty \"from\" value, to decide whether to show the raised-priority arrow.",
+      "Adds a new function whyUrgent(b, is) that explains a priority raise in one phrase, naming the waiting issue or the count of waiting issues."
+    ]
   }
 }

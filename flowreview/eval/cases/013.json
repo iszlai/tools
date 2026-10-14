@@ -4,22 +4,16 @@
   "commit": "adff2f3b1fcab157656faf8d3c5cf6cd988d44f1",
   "path": "taskhound/Makefile",
   "hunk": " ui: build ## serve the kanban board for the board in this directory\n \t$(BIN) ui --port $(PORT) --open\n \n+smoke: build ## drive the board in headless Chromium (needs playwright, see tests/smoke.js)\n+\tPLAYWRIGHT_BROWSERS_PATH=./pw-browsers node tests/smoke.js\n+\n release: ## cross-compile every target into dist/\n \tmkdir -p dist \u0026\u0026 rm -f dist/th_*\n \tfor target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do \\\n",
-  "candidate_symbols": [
-    "Chromium",
-    "PLAYWRIGHT_BROWSERS_PATH",
-    "board",
-    "browsers",
-    "build",
-    "drive",
-    "headless",
-    "needs",
-    "node",
-    "playwright",
-    "see",
-    "smoke"
-  ],
   "expected": {
+    "kind": "config",
+    "symbols": [
+      "smoke"
+    ],
     "added_lines": 3,
-    "removed_lines": 0
+    "removed_lines": 0,
+    "facts": [
+      "Adds a new `smoke` Makefile target that depends on build.",
+      "It runs `PLAYWRIGHT_BROWSERS_PATH=./pw-browsers node tests/smoke.js`."
+    ]
   }
 }

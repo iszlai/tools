@@ -4,22 +4,16 @@
   "commit": "4027bada65f53d331448411e326f35656523c55b",
   "path": "taskhound/Makefile",
   "hunk": " BIN     := bin/th\n PREFIX  ?= $(HOME)/.local/bin\n PORT    ?= 8787\n-VERSION ?= dev\n+\n+# What a build calls itself. A release passes the tag in; anything else asks\n+# git, so a build from a checkout reports the release it is standing on and how\n+# far past it you are, rather than claiming to be \"dev\" forever. Only a checkout\n+# with no tag in sight is dev.\n+VERSION ?= $(shell git describe --tags --match 'taskhound-v*' --dirty 2\u003e/dev/null | sed 's/^taskhound-//')\n+ifeq ($(strip $(VERSION)),)\n+VERSION := dev\n+endif\n \n # Dependencies are vendored, so build and test never need the network or a\n # working module proxy.\n",
-  "candidate_symbols": [
-    "Only",
-    "VERSION",
-    "What",
-    "anything",
-    "are",
-    "asks",
-    "build",
-    "calls",
-    "checkout",
-    "claiming",
-    "describe",
-    "dev"
-  ],
   "expected": {
+    "kind": "config",
+    "symbols": [
+      "VERSION"
+    ],
     "added_lines": 9,
-    "removed_lines": 1
+    "removed_lines": 1,
+    "facts": [
+      "Replaces the hardcoded `VERSION ?= dev` with a computed value from `git describe --tags --match 'taskhound-v*' --dirty`.",
+      "Falls back to \"dev\" when the describe output is empty (no tag in sight)."
+    ]
   }
 }

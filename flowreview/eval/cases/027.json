@@ -5,7 +5,14 @@
   "path": "taskhound/diagnose.go",
   "hunk": " \n import (\n \t\"fmt\"\n+\t\"os\"\n \t\"sort\"\n \t\"strings\"\n )\n",
   "expected": {
+    "kind": "refactor",
+    "symbols": [
+      "os"
+    ],
     "added_lines": 1,
-    "removed_lines": 0
+    "removed_lines": 0,
+    "facts": [
+      "Adds the \"os\" import to diagnose.go."
+    ]
   }
 }

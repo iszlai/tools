@@ -5,16 +5,17 @@
   "path": "taskhound/main.go",
   "hunk": " func view(b *Board, is *Issue) issueView {\n \tv := issueView{\n \t\tIssue:        is,\n+\t\tPriority:     effectivePriority(is.Priority),\n \t\tBlocks:       b.Blocks(is.ID),\n \t\tOpenBlockers: b.OpenBlockers(is),\n \t\tReady:        b.Ready(is),\n",
   "enclosing_function": "func view(b *Board, is *Issue) issueView {\n\tv := issueView{\n\t\tIssue:        is,\n\t\tPriority:     effectivePriority(is.Priority),\n\t\tBlocks:       b.Blocks(is.ID),\n\t\tOpenBlockers: b.OpenBlockers(is),\n\t\tReady:        b.Ready(is),\n\t}\n\tif v.Blocks == nil {\n\t\tv.Blocks = []string{}\n\t}\n\tif v.OpenBlockers == nil {\n\t\tv.OpenBlockers = []string{}\n\t}\n\tif v.Issue.BlockedBy == nil {\n\t\tv.Issue.BlockedBy = []string{}\n\t}\n\treturn v\n}",
-  "candidate_symbols": [
-    "Board",
-    "Issue",
-    "Priority",
-    "effectivePriority",
-    "issueView",
-    "view"
-  ],
   "expected": {
+    "kind": "behavior",
+    "symbols": [
+      "view",
+      "effectivePriority",
+      "Priority"
+    ],
     "added_lines": 1,
-    "removed_lines": 0
+    "removed_lines": 0,
+    "facts": [
+      "In view(), sets the new Priority field to effectivePriority(is.Priority)."
+    ]
   }
 }

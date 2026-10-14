@@ -4,17 +4,17 @@
   "commit": "4027bada65f53d331448411e326f35656523c55b",
   "path": "taskhound/Makefile",
   "hunk": " \t@grep -hE '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\\t/' | expand -t22\n \n build: ## build bin/th\n-\tgo build -trimpath -o $(BIN) .\n+\tgo build -trimpath -ldflags \"-X main.version=$(VERSION)\" -o $(BIN) .\n \n test: ## run the unit and end-to-end tests\n \tgo test ./...\n",
-  "candidate_symbols": [
-    "BIN",
-    "VERSION",
-    "build",
-    "ldflags",
-    "main",
-    "trimpath",
-    "version"
-  ],
   "expected": {
+    "kind": "config",
+    "symbols": [
+      "VERSION",
+      "BIN"
+    ],
     "added_lines": 1,
-    "removed_lines": 1
+    "removed_lines": 1,
+    "facts": [
+      "Changes the build target's go build invocation to add -ldflags \"-X main.version=$(VERSION)\".",
+      "The binary now has its version stamped in at build time."
+    ]
   }
 }

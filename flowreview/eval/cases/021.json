@@ -5,22 +5,16 @@
   "path": "taskhound/e2e_test.go",
   "hunk": " \tc.add(\"Waits on the hub\", \"--blocked-by\", hub)\n \tc.add(\"Also waits on the hub\", \"--blocked-by\", hub)\n \n-\twant := strings.Join([]string{chore, hub, lonely}, \",\")\n+\t// Volume before urgency-of-one: the hub frees two, the chore frees one, and\n+\t// the chore's one being high does not buy it the top of the queue. The other\n+\t// way round, a single flag outweighed any amount of work.\n+\twant := strings.Join([]string{hub, chore, lonely}, \",\")\n \tif got := strings.Join(ids(c.json(\"next\", \"--json\")), \",\"); got != want {\n \t\tt.Fatalf(\"next = %s, want %s\", got, want)\n \t}\n",
   "enclosing_function": "func TestNextRanksByLeverageThenPriority(t *testing.T) {\n\tc := newCLI(t)\n\tlonely := c.add(\"High, but nothing waits on it\", \"--priority\", \"high\")\n\tchore := c.add(\"Low chore\", \"--priority\", \"low\")\n\tc.add(\"Stuck behind the chore\", \"--priority\", \"high\", \"--blocked-by\", chore)\n\thub := c.add(\"Normal, two things wait on it\")\n\tc.add(\"Waits on the hub\", \"--blocked-by\", hub)\n\tc.add(\"Also waits on the hub\", \"--blocked-by\", hub)\n\n\t// Volume before urgency-of-one: the hub frees two, the chore frees one, and\n\t// the chore's one being high does not buy it the top of the queue. The other\n\t// way round, a single flag outweighed any amount of work.\n\twant := strings.Join([]string{hub, chore, lonely}, \",\")\n\tif got := strings.Join(ids(c.json(\"next\", \"--json\")), \",\"); got != want {\n\t\tt.Fatalf(\"next = %s, want %s\", got, want)\n\t}\n\n\t// A must is still absolute, leverage or no leverage.\n\tmust := c.add(\"Production is down\", \"--priority\", \"must\")\n\tif got := ids(c.json(\"next\", \"--json\")); got[0] != must {\n\t\tt.Fatalf(\"a must with no dependents did not come first: %v\", got)\n\t}\n\n\t// The counts the order is built from travel with the issue.\n\tvar seen bool\n\tfor _, v := range c.json(\"next\", \"--json\") {\n\t\tif v.ID != chore {\n\t\t\tcontinue\n\t\t}\n\t\tseen = true\n\t\tif v.Unblocks != 1 || v.UnblocksUrgent != 1 {\n\t\t\tt.Errorf(\"%s unblocks = %d (%d urgent), want 1 (1 urgent)\", v.ID, v.Unblocks, v.UnblocksUrgent)\n\t\t}\n\t}\n\tif !seen {\n\t\tt.Errorf(\"%s fell out of the queue\", chore)\n\t}\n}",
-  "candidate_symbols": [
-    "Join",
-    "TestNextRanksByLeverageThenPriority",
-    "Volume",
-    "amount",
-    "any",
-    "before",
-    "being",
-    "buy",
-    "chore",
-    "does",
-    "flag",
-    "frees"
-  ],
   "expected": {
+    "kind": "test",
+    "symbols": [
+      "TestNextRanksByLeverageThenPriority"
+    ],
     "added_lines": 4,
-    "removed_lines": 1
+    "removed_lines": 1,
+    "facts": [
+      "In TestNextRanksByLeverageThenPriority, changes the expected order from {chore, hub, lonely} to {hub, chore, lonely}.",
+      "A new comment explains leverage (volume) now outranks a single high-priority issue with no dependents."
+    ]
   }
 }

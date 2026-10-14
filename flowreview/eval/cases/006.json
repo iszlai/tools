@@ -5,22 +5,17 @@
   "path": "taskhound/web.go",
   "hunk": " \t\tw.Write(uiHTML)\n \t})\n \n+\tmux.HandleFunc(\"GET /md.js\", func(w http.ResponseWriter, r *http.Request) {\n+\t\tw.Header().Set(\"Content-Type\", \"text/javascript; charset=utf-8\")\n+\t\tw.Write(mdJS)\n+\t})\n+\n \tmux.HandleFunc(\"GET /api/board\", func(w http.ResponseWriter, r *http.Request) {\n \t\tb, err := s.Read()\n \t\tif err != nil {\n",
   "enclosing_function": "\tmux.HandleFunc(\"GET /md.js\", func(w http.ResponseWriter, r *http.Request) {\n\t\tw.Header().Set(\"Content-Type\", \"text/javascript; charset=utf-8\")\n\t\tw.Write(mdJS)\n\t})",
-  "candidate_symbols": [
-    "Content",
-    "GET",
-    "HandleFunc",
-    "Header",
-    "Request",
-    "ResponseWriter",
-    "Set",
-    "Write",
-    "charset",
-    "http",
-    "javascript",
-    "mdJS"
-  ],
   "expected": {
+    "kind": "behavior",
+    "symbols": [
+      "mdJS",
+      "HandleFunc"
+    ],
     "added_lines": 5,
-    "removed_lines": 0
+    "removed_lines": 0,
+    "facts": [
+      "Registers a new HTTP handler for \"GET /md.js\".",
+      "The handler sets Content-Type to \"text/javascript; charset=utf-8\" and writes mdJS."
+    ]
   }
 }

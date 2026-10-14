@@ -4,14 +4,14 @@
   "commit": "a8c965d2ff725414e16bd8d651083e7a2abd0d90",
   "path": "flowreview/go.mod",
   "hunk": " module github.com/iszlai/tools/flowreview\n \n go 1.25\n+\n+require golang.org/x/mod v0.28.0\n",
-  "candidate_symbols": [
-    "golang",
-    "mod",
-    "org",
-    "require"
-  ],
   "expected": {
+    "kind": "config",
+    "symbols": [],
     "added_lines": 2,
-    "removed_lines": 0
+    "removed_lines": 0,
+    "facts": [
+      "Adds `require golang.org/x/mod v0.28.0` to go.mod.",
+      "The go directive stays at 1.25."
+    ]
   }
 }
