@@ -70,7 +70,13 @@ func isNavigable(k model.SymbolKind) bool {
 // func or method at all.
 func ResolveGo(ctx context.Context, res *golang.Result, files []model.ChangedFile, path string, src []byte, line int, exact bool) (*Report, error) {
 	if exact && res != nil {
-		if sym := golang.SymbolAt(res, path, line); sym != nil && isNavigable(sym.Kind) {
+		if sym := golang.SymbolAt(res, path, line); sym != nil {
+			// A definitive answer either way: a type or interface at line is
+			// never navigable, and re-parsing the syntax-only fallback below
+			// would only find the same thing again.
+			if !isNavigable(sym.Kind) {
+				return nil, nil
+			}
 			return resolveGoExact(res, files, *sym), nil
 		}
 	}
