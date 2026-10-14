@@ -135,3 +135,21 @@ Why things are the way they are. Append-only; written with `th log add`.
 
 **Context.** The session /goal asked for the whole backlog; the user later limited the run to the MVP for credit reasons.
 **Decision (user, 2026-10-14).** Stay paused: 14 slices remain open on the board. The user clears the goal hook with /goal clear.
+
+## 2026-10-14 — Post-MVP: UI surfacing + AI summaries resumed on user request
+
+**Context.** User asked for the next minimal set after dogfooding PR toknapp/fx#62, then said "ok do ui ones" and "a different sonnet agent could do the ai part".
+**Decision.** Two Sonnet agents in parallel: (1) flow order in file list, Callers + Tests sidebar sections (trimmed FR-18 over existing /api/order, /api/radius, /api/tests) and a wrap toggle for long lines; (2) FR-28 pipeline + trimmed FR-29 cards. To avoid merge pain the summary UI lives in a separate summary.js with a minimal app.js hook. FR-29 trimmed: no "expand", no "risky first" sort, no settings UI (model choice stays in `flowreview model`). Read-only file view for out-of-diff callers deferred.
+
+## 2026-10-14 — FR-27: Qwen 3.5 with thinking off beats Qwen 2.5
+
+**Context.** The first Qwen 3.5 run scored 0% valid JSON: the template's thinking mode ate the token budget. The sidecar now sends chat_template_kwargs {enable_thinking:false}.
+**Result.** eval/reports/2026-10-14-qwen3.5-nothink.md: 4B 0.904 (kind acc 86%, halluc 7.4%, 4.3 s/hunk, 5.6 GB) vs Qwen 2.5 7B 0.739 (42%, 7.0%, 3.1 s, 5.6 GB). 9B 0.894 at 8.3 s, no gain over 4B. 0.8B 0.709 at 1.1 s ~ ties 2.5 1.5B (0.701). 2B 0.695, 91% JSON valid.
+**Recommendation (not applied, the user picks).** Default to qwen3.5-4b for large and medium tiers; small tier qwen3.5-0.8b or keep 2.5 1.5B.
+
+## 2026-10-14 — FR-29: UI surfacing, summaries and the behavior-first prompt merged
+
+**Prompt.** The user judged 43 cases blind (eval/judge/make_judge.py): b1-prose (plain-language behavior, "Previously …; now …") won 37, v1 4, b2-before-after 2. 4B vs 9B 22:21, so the 4B stays default (3.5 s vs 5.7 s per hunk). Pipeline now sends Variants[Current]; PromptVersion v2-behavior. The automatic scorer under-rates prose: it counts HTML/HTTP/UI/JavaScript as hallucinated symbols.
+**Bugs found in end-to-end.** sidecar.Lazy started llama-server on the first request's timeout context, so it died after one summary; quitting the window (NSApp terminate: → exit) and SIGTERM both left the 5 GB sidecar running. Both fixed with tests or manual checks.
+**Long lines.** The UI agent's "wrap on" was full-width + one horizontal scrollbar, which hides the new side; default switched to clip. True soft wrap needs variable row heights in the virtualized grid; not done.
+**Summaries default.** With no config.json and the recommended model installed, summaries are on; explicit enabled:false wins.
