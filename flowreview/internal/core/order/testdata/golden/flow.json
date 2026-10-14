@@ -1,0 +1,84 @@
+{
+  "kind": "flow",
+  "groups": [
+    {
+      "title": "handler CreateUser",
+      "entry_point": {
+        "id": "flow.example/app/handler.CreateUser",
+        "name": "CreateUser",
+        "kind": "func",
+        "language": "go",
+        "package": "flow.example/app/handler",
+        "path": "handler/handler.go",
+        "range": {
+          "start_line": 14,
+          "end_line": 16
+        },
+        "signature": "func(w net/http.ResponseWriter, r *net/http.Request)",
+        "exported": true
+      },
+      "files": [
+        {
+          "file_id": "f-service",
+          "path": "service/service.go",
+          "why": "called from handler CreateUser",
+          "symbols": [
+            "CreateUser"
+          ]
+        },
+        {
+          "file_id": "f-repo",
+          "path": "repo/repo.go",
+          "why": "called from CreateUser (changed) ← handler CreateUser",
+          "symbols": [
+            "Save"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "scenario Create user.Validate a create user request",
+      "entry_point": {
+        "id": "features/create_user.feature#Create user.Validate a create user request",
+        "name": "Validate a create user request",
+        "kind": "scenario",
+        "language": "gherkin",
+        "receiver": "Create user",
+        "path": "features/create_user.feature",
+        "range": {
+          "start_line": 3,
+          "end_line": 4
+        }
+      },
+      "files": [
+        {
+          "file_id": "f-validate",
+          "path": "service/validate.go",
+          "why": "called from aCreateUserRequestIsValidated ← scenario Validate a create user request",
+          "symbols": [
+            "Validate"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "helper (no entry point found)",
+      "files": [
+        {
+          "file_id": "f-util",
+          "path": "util/util.go",
+          "why": "no in-repo callers found",
+          "symbols": [
+            "helper"
+          ]
+        }
+      ]
+    }
+  ],
+  "unclassified": [
+    {
+      "file_id": "f-readme",
+      "path": "README.md"
+    }
+  ]
+}

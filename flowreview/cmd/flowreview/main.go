@@ -38,6 +38,8 @@ usage:
   flowreview --patch <file>           same as "flowreview patch <file>"
   flowreview sessions [--json] [--all]
                                        list review sessions
+  flowreview order [--json] [<ref|range>]
+                                       print the diff in flow order
   flowreview model <command>          manage the embedded summarizer model
   flowreview toolchain <command>      manage downloaded Go toolchains
   flowreview version                  print the version
@@ -79,6 +81,8 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 			return runToolchainCLI(args[1:], stdout, stderr)
 		case "sessions":
 			return runSessionsCLI(args[1:], stdout, stderr)
+		case "order":
+			return runOrderCLI(args[1:], stdout, stderr)
 		}
 	}
 
