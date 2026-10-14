@@ -164,6 +164,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/tests", s.handleTests)                             // FR-21, internal/web/tests.go
 	s.mux.HandleFunc("GET /api/radius", s.handleRadius)                           // FR-19, internal/web/radius.go
 	s.mux.HandleFunc("GET /api/order", s.handleOrder)                             // FR-17, internal/web/order.go
+	s.mux.HandleFunc("GET /api/symbol", s.handleSymbol)                           // FR-18, internal/web/symbol.go
+	s.mux.HandleFunc("GET /api/file/{id}/symbols", s.handleFileSymbols)           // FR-18, internal/web/symbol.go
+	s.mux.HandleFunc("GET /api/blob", s.handleBlob)                               // FR-18, internal/web/blob.go
 	s.mux.HandleFunc("POST /api/publish", s.handlePublish)                        // FR-11, internal/web/publish.go
 	s.mux.HandleFunc("POST /api/publish/preflight", s.handlePublishPreflight)     // FR-11, internal/web/publish.go
 	s.mux.HandleFunc("GET /api/summaries", s.handleSummaries)                     // FR-28, internal/web/summary.go
