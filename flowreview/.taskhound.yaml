@@ -116,7 +116,7 @@ issues:
     - id: FR-11
       title: 'GitHub host: publish'
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       priority: high
       blocked_by:
         - FR-9
@@ -124,7 +124,7 @@ issues:
       labels:
         - M1
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T10:15:23Z
     - id: FR-12
       title: CLI surface M1
       description: See PLAN.md §5 for scope, acceptance criteria and size.
@@ -314,11 +314,14 @@ issues:
         - M3
         - hitl
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T09:46:49Z
+      updated_at: 2026-10-14T10:28:27Z
       comments:
         - at: 2026-10-14T09:46:49Z
           author: lehel
           body: 'Eval report 2026-10-14 (43 cases from this repo): 7B score 0.739 / 7% hallucination / 3.1 s; 1.5B 0.701 / 11.5% / 0.9 s; 3B 0.673 / 16% / 1.5 s. Kind accuracy is weak (30–42%). Qwen3.5 0.8B/2B/4B/9B added to the catalog, not yet evaluated (llama.cpp b11609 support unconfirmed). Open: user picks Recommended per tier.'
+        - at: 2026-10-14T10:28:27Z
+          author: lehel
+          body: 'Qwen3.5 eval (user ran it, report eval/reports/2026-10-14-qwen3.5-thinking.md): 0% valid JSON on all four sizes. Likely cause: thinking mode consumes the output (empty content). Next try: send chat_template_kwargs {enable_thinking:false} (or /no_think) for Qwen3 family and re-run. Also: the eval command overwrites the day''s report — add a suffix per run.'
     - id: FR-28
       title: Summary pipeline
       description: See PLAN.md §5 for scope, acceptance criteria and size.
