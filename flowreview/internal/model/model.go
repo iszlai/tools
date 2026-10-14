@@ -205,14 +205,17 @@ type Location struct {
 type SymbolKind string
 
 const (
-	SymFunc      SymbolKind = "func"
-	SymMethod    SymbolKind = "method"
-	SymType      SymbolKind = "type"
-	SymInterface SymbolKind = "interface"
-	SymClass     SymbolKind = "class"
-	SymScenario  SymbolKind = "scenario"
-	SymStep      SymbolKind = "step"
-	SymStepDef   SymbolKind = "stepdef"
+	SymFunc       SymbolKind = "func"
+	SymMethod     SymbolKind = "method"
+	SymType       SymbolKind = "type"
+	SymInterface  SymbolKind = "interface"
+	SymClass      SymbolKind = "class"
+	SymFeature    SymbolKind = "feature"    // a Gherkin Feature
+	SymBackground SymbolKind = "background" // a Gherkin Background
+	SymRule       SymbolKind = "rule"       // a Gherkin Rule
+	SymScenario   SymbolKind = "scenario"
+	SymStep       SymbolKind = "step"
+	SymStepDef    SymbolKind = "stepdef"
 )
 
 // CodeSymbol is a named piece of code. ID is unique within a repo: for Go
