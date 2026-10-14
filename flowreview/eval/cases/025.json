@@ -4,20 +4,19 @@
   "commit": "72bfaef013f2aeb4cdae53aba8678d4fd8e4763a",
   "path": "taskhound/log.go",
   "hunk": " \t}\n \treturn out\n }\n+\n+// logIDShape is logIDPattern anchored, with the number's padding split off, so\n+// an id written by either hand can be reduced to one form.\n+var logIDShape = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9]*)-0*([0-9]+)([A-Za-z]?)$`)\n+\n+// logIDKey reduces an id to the form the board writes it in: prefix uppercased,\n+// leading zeros off the number, a hand-added letter suffix kept and lowercased.\n+//\n+// The log and the board are two files kept by different hands, and a log that\n+// writes V6-01 where the board writes V6-1 is not naming a different issue --\n+// it is padding. Every comparison between the two goes through here, so the\n+// question is about the issue rather than about its spelling. Without it a real\n+// log reported every finished issue as unlogged and every id it named as\n+// existing nowhere, which is a gate nobody would keep.\n+func logIDKey(id string) string {\n+\tid = strings.TrimSpace(id)\n+\tm := logIDShape.FindStringSubmatch(id)\n+\tif m == nil {\n+\t\treturn strings.ToUpper(id)\n+\t}\n+\treturn strings.ToUpper(m[1]) + \"-\" + m[2] + strings.ToLower(m[3])\n+}\n+\n+// logIDRegexp matches an id however the log spelled its number, so asking about\n+// V6-1 finds the entries that wrote V6-01 and asking about V6-01 finds the ones\n+// that wrote V6-1. A ref that is not id-shaped is matched as written.\n+func logIDRegexp(id string) (*regexp.Regexp, error) {\n+\tm := logIDShape.FindStringSubmatch(strings.TrimSpace(id))\n+\tif m == nil {\n+\t\treturn regexp.Compile(`\\b` + regexp.QuoteMeta(id) + `\\b`)\n+\t}\n+\treturn regexp.Compile(`(?i)\\b` + regexp.QuoteMeta(m[1]) + `-0*` + m[2] + m[3] + `\\b`)\n+}\n",
-  "enclosing_function": "func (l *Log) IDs() map[string]map[string]int {\n\tout := map[string]map[string]int{}\n\tnote := func(line string, n int) {\n\t\tfor _, m := range logIDPattern.FindAllStringSubmatch(line, -1) {\n\t\t\tprefix, id := m[1], m[0]\n\t\t\tif out[prefix] == nil {\n\t\t\t\tout[prefix] = map[string]int{}\n\t\t\t}\n\t\t\tif _, seen := out[prefix][id]; !seen {\n\t\t\t\tout[prefix][id] = n\n\t\t\t}\n\t\t}\n\t}\n\tfor _, e := range l.Entries {\n\t\tfor i, h := range e.heading {\n\t\t\tnote(h, e.Line+i)\n\t\t}\n\t\tbody := e.Line + len(e.heading)\n\t\tfor i, line := range e.Body {\n\t\t\tnote(line, body+i)\n\t\t}\n\t}\n\treturn out\n}",
   "candidate_symbols": [
     "Compile",
     "Every",
     "FindStringSubmatch",
-    "IDs",
-    "Log",
     "MustCompile",
     "QuoteMeta",
     "Regexp",
     "ToLower",
     "ToUpper",
     "TrimSpace",
-    "Without"
+    "Without",
+    "about",
+    "added"
   ],
   "expected": {
     "added_lines": 33,

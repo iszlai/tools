@@ -172,22 +172,33 @@ func isSourceFile(path string) bool {
 }
 
 // enclosingFunction asks the tree-sitter structural provider for the
-// function containing h's first line with content on the new side, falling
-// back to "" for a hunk that only deletes lines. Best effort: an unsupported
-// language or a miss also returns "".
+// function containing h's first *added* line, falling back to the first line
+// with any content on the new side for a hunk that only deletes (context
+// lines also carry a NewNo, but querying one of those instead of an added
+// line would find whatever function precedes the hunk, not the one the
+// change actually landed in). Best effort: an unsupported language or a miss
+// also returns "".
 func enclosingFunction(ctx context.Context, ts *treesitter.Provider, path string, newSrc []byte, h model.DiffHunk) string {
 	if !ts.Supports(path) {
 		return ""
 	}
 	line := 0
 	for _, l := range h.Lines {
-		if l.NewNo > 0 {
+		if l.Kind == model.LineAdd && l.NewNo > 0 {
 			line = l.NewNo
 			break
 		}
 	}
 	if line == 0 {
-		return "" // pure deletion hunk; the old-side function text is not worth the extra git calls here
+		for _, l := range h.Lines {
+			if l.NewNo > 0 {
+				line = l.NewNo
+				break
+			}
+		}
+	}
+	if line == 0 {
+		return "" // pure deletion hunk with nothing left on the new side
 	}
 	sym, err := ts.FunctionAt(ctx, path, newSrc, line)
 	if err != nil || sym == nil {
