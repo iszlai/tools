@@ -72,6 +72,22 @@ func TestScoreSymbolHallucinated(t *testing.T) {
 	}
 }
 
+func TestScoreFilePathIsGrounded(t *testing.T) {
+	// The prompt tells the model the file path (internal/llm/summary.Messages
+	// includes "File: <path>"), so citing it back is a grounded mention, not
+	// a hallucination, even though it appears in neither the hunk nor the
+	// enclosing function.
+	c := Case{
+		Path:     "flowreview/.taskhound.yaml",
+		Hunk:     "+      status: done\n",
+		Expected: Expected{Kind: "config"},
+	}
+	res := Score(c, model.SnippetSummary{Kind: "config", What: "Flips a task's status in .taskhound.yaml to done."}, true)
+	if len(res.HallucinatedSymbols) != 0 {
+		t.Errorf("want the cited file path not flagged as hallucinated, got %v", res.HallucinatedSymbols)
+	}
+}
+
 func TestScoreIgnoresPlainWords(t *testing.T) {
 	// Ordinary English words (no internal capital, no underscore, no dot, no
 	// call parens) should never be treated as symbol candidates at all, so

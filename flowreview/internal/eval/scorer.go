@@ -63,11 +63,14 @@ var countsRe = regexp.MustCompile(`\+(\d+)\s*/\s*[-−](\d+)`)
 //
 //	0.30 * kind match            (summary.Kind == c.Expected.Kind)
 //	0.35 * symbol grounding      (1 - hallucination rate among identifier-
-//	                              looking tokens in What; a summary that names
-//	                              no symbols at all grounds perfectly by this
-//	                              measure — the penalty is for naming
-//	                              something that is not there, not for saying
-//	                              less)
+//	                              looking tokens in What, checked against the
+//	                              hunk, the enclosing function and the file
+//	                              path — the model is told the path too, so
+//	                              citing it back is grounded, not invented; a
+//	                              summary that names no symbols at all grounds
+//	                              perfectly by this measure — the penalty is
+//	                              for naming something that is not there, not
+//	                              for saying less)
 //	0.25 * expected-symbol recall (fraction of c.Expected.Symbols mentioned
 //	                              anywhere in What/InferredWhy/Impact;
 //	                              vacuously 1.0 when the case names none)
@@ -83,7 +86,10 @@ func Score(c Case, summary model.SnippetSummary, validJSON bool) CaseResult {
 
 	res.KindMatch = summary.Kind == c.Expected.Kind
 
-	haystack := c.Hunk + "\n" + c.EnclosingFunction
+	// c.Path is part of the haystack because the prompt tells the model the
+	// file path (internal/llm/summary.Messages): citing it back is grounded,
+	// not invented.
+	haystack := c.Path + "\n" + c.Hunk + "\n" + c.EnclosingFunction
 	seen := map[string]bool{}
 	for _, tok := range symbolTokenRe.FindAllString(summary.What, -1) {
 		if !LooksLikeSymbol(tok) {
