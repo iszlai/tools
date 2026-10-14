@@ -56,6 +56,10 @@ var Catalog = []Entry{
 		Params:     "7B",
 		MinRAMGB:   24,
 		Tier:       TierLarge,
+		// FR-27, eval/reports/2026-10-14.md (43 cases): score 0.739, kind
+		// accuracy 42%, hallucination rate 7.0%, 3.06s mean latency, 14.5
+		// tok/s, 5627 MB peak RSS on this Mac.
+		EvalScore: 0.739,
 	},
 	{
 		Name:       "qwen3-8b-q4_k_m",
@@ -104,6 +108,10 @@ var Catalog = []Entry{
 		Params:     "3B",
 		MinRAMGB:   16,
 		Tier:       TierMedium,
+		// FR-27, eval/reports/2026-10-14.md (43 cases): score 0.673, kind
+		// accuracy 30%, hallucination rate 16.3%, 1.46s mean latency, 33.8
+		// tok/s, 2969 MB peak RSS on this Mac.
+		EvalScore: 0.673,
 	},
 	{
 		Name:       "qwen2.5-coder-1.5b-instruct-q4_k_m",
@@ -114,6 +122,71 @@ var Catalog = []Entry{
 		Licence:    "Apache-2.0",
 		LicenceURL: "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/blob/main/LICENSE",
 		Params:     "1.5B",
+		MinRAMGB:   8,
+		Tier:       TierSmall,
+		// FR-27, eval/reports/2026-10-14.md (43 cases): score 0.701, kind
+		// accuracy 33%, hallucination rate 11.5%, 922ms mean latency, 63.8
+		// tok/s, 1854 MB peak RSS on this Mac.
+		EvalScore: 0.701,
+	},
+	// Qwen3.5 (2026): added for FR-27 to compare against Qwen2.5-Coder at
+	// similar sizes. Unlike the Qwen2.5-Coder line these ship one chat-ready
+	// checkpoint per size (no separate "-Instruct" suffix; "-Base" names the
+	// raw pretrained one, which this catalog does not use) and are
+	// vision-capable multimodal models under the hood — the GGUF repos also
+	// ship mmproj-*.gguf files this catalog ignores, using text chat only.
+	// URL/SHA256/Size/Licence came from Hugging Face's git-lfs pointer files
+	// and model cards (unsloth's GGUF quantizations), not yet independently
+	// re-verified by a build in this environment (see the final report: a
+	// sandbox classifier blocked running go build/go test/go run against this
+	// file after it was edited with fetched web content). EvalScore is 0 for
+	// all four — they were never run through the harness, so whether b11609
+	// can even load Qwen3.5's architecture is unconfirmed.
+	{
+		Name:       "qwen3.5-9b-q4_k_m",
+		Display:    "Qwen3.5 9B (Q4_K_M)",
+		URL:        "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
+		SHA256:     "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
+		Size:       5680522464,
+		Licence:    "Apache-2.0",
+		LicenceURL: "https://huggingface.co/Qwen/Qwen3.5-9B/blob/main/LICENSE",
+		Params:     "9B",
+		MinRAMGB:   24,
+		Tier:       TierLarge,
+	},
+	{
+		Name:       "qwen3.5-4b-q4_k_m",
+		Display:    "Qwen3.5 4B (Q4_K_M)",
+		URL:        "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf",
+		SHA256:     "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+		Size:       2740937888,
+		Licence:    "Apache-2.0",
+		LicenceURL: "https://huggingface.co/Qwen/Qwen3.5-4B/blob/main/LICENSE",
+		Params:     "4B",
+		MinRAMGB:   16,
+		Tier:       TierMedium,
+	},
+	{
+		Name:       "qwen3.5-2b-q4_k_m",
+		Display:    "Qwen3.5 2B (Q4_K_M)",
+		URL:        "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf",
+		SHA256:     "aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223",
+		Size:       1280835840,
+		Licence:    "Apache-2.0",
+		LicenceURL: "https://huggingface.co/Qwen/Qwen3.5-2B/blob/main/LICENSE",
+		Params:     "2B",
+		MinRAMGB:   8,
+		Tier:       TierSmall,
+	},
+	{
+		Name:       "qwen3.5-0.8b-q4_k_m",
+		Display:    "Qwen3.5 0.8B (Q4_K_M)",
+		URL:        "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf",
+		SHA256:     "bd258782e35f7f458f8aced1adc053e6e92e89bc735ba3be89d38a06121dc517",
+		Size:       532517120,
+		Licence:    "Apache-2.0",
+		LicenceURL: "https://huggingface.co/Qwen/Qwen3.5-0.8B/blob/main/LICENSE",
+		Params:     "0.8B",
 		MinRAMGB:   8,
 		Tier:       TierSmall,
 	},
