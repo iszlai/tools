@@ -125,3 +125,8 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-9: FR-7 and FR-9 merged; comments live in the side panel
 
 **Decision (agent, accepted).** Comment threads render in the side panel, with a gutter dot and a focused-line outline in the diff, because the virtualized grid assumes a fixed row height and inline variable-height rows would endanger the scroll budget. `R` posts one state per hunk (no batch endpoint). API responses send `Cache-Control: no-store` (a reload could read stale review state). `POST /api/reload` re-diffs and runs Refresh. Merge note: FR-8's expand click handler and FR-9's line click handler were unified into one delegated `onDiffClick`.
+
+## 2026-10-14 — FR-11 merged; MVP (M1) complete
+
+**Decision (agent, accepted).** Preflight keeps a draft only if its hunk id still exists in the freshly fetched PR diff (stronger than comparing head SHAs, and tolerant of unrelated pushes). New line+side API (old→LEFT, new→RIGHT); general drafts go into the review body. A 422 falls back to a body-only review plus per-comment posts, so one bad line can't sink the batch. Retrying only-failed drafts posts them individually. Batch reviews don't return per-comment links (GitHub API limit).
+**Milestone.** With FR-1–FR-12 and FR-39 merged, M1 is functionally complete; the remaining gate is the user's dogfood review of a real PR.
