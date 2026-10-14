@@ -23,8 +23,10 @@ import (
 //
 // Model choice: the user's own pick (config.json's Model/Path) if set,
 // otherwise the catalog's models.RecommendedFor this machine's RAM tier, if
-// that entry happens to be installed. Nothing is auto-installed or
-// auto-enabled here -- Enabled still has to be true, same as FR-26 intends.
+// that entry happens to be installed. Nothing is auto-installed. With no
+// config.json at all, summaries are on when the recommended model is
+// installed (installing it was the user's opt-in); an explicit
+// "enabled": false in config.json always wins.
 // The returned stop func stops the sidecar if Lazy ever started one; it is
 // always safe to call, including when no provider was wired up at all.
 func buildSummaryPipeline(dataRoot string) (*summary.Pipeline, func()) {
@@ -32,6 +34,9 @@ func buildSummaryPipeline(dataRoot string) (*summary.Pipeline, func()) {
 	noop := func() {}
 
 	cfg, err := models.LoadConfig(dataRoot)
+	if err == nil && !configExists(dataRoot) {
+		cfg.Enabled = true
+	}
 	if err != nil || !cfg.Enabled || !llama.Available() {
 		return summary.NewPipeline(cache, nil, "", 0), noop
 	}
@@ -85,4 +90,9 @@ func resolveModel(dataRoot string, cfg model.ModelConfig) (modelID, path string)
 		return "", ""
 	}
 	return entry.Name, candidate
+}
+
+func configExists(dataRoot string) bool {
+	_, err := os.Stat(filepath.Join(dataRoot, "config.json"))
+	return err == nil
 }
