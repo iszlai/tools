@@ -790,6 +790,173 @@ async function runWorktreeSmoke() {
     check('topbar: the help button does the same as `?`', /wrap/.test(toolbarHelpText), toolbarHelpText);
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => document.getElementById('help-overlay').hidden);
+
+    /* ======================== collapsible + resizable panes ======================== */
+    /* 27 -- the file-list and sidebar collapse buttons grow the diff pane,
+       zero the collapsed pane's own width, and reverse cleanly. */
+    await selectFileAndMeasure(page, 'a.txt');
+    const diffWidthBefore = await page.evaluate(() => document.getElementById('diff').getBoundingClientRect().width);
+    await page.click('#files-toggle');
+    await page.waitForFunction((before) => document.getElementById('diff').getBoundingClientRect().width > before, diffWidthBefore, { timeout: 2000 }).catch(() => {});
+    const diffWidthFilesCollapsed = await page.evaluate(() => document.getElementById('diff').getBoundingClientRect().width);
+    check('panes: collapsing the file list grows the diff pane', diffWidthFilesCollapsed > diffWidthBefore, `${diffWidthBefore} -> ${diffWidthFilesCollapsed}`);
+    const filesWidthCollapsed = await page.evaluate(() => document.getElementById('files').getBoundingClientRect().width);
+    check('panes: a collapsed file list has zero width', filesWidthCollapsed === 0, String(filesWidthCollapsed));
+
+    await page.click('#files-toggle'); // expand again
+    await page.waitForFunction((before) => document.getElementById('diff').getBoundingClientRect().width < before, diffWidthFilesCollapsed, { timeout: 2000 }).catch(() => {});
+    const diffWidthFilesExpanded = await page.evaluate(() => document.getElementById('diff').getBoundingClientRect().width);
+    check('panes: expanding the file list shrinks the diff pane back', diffWidthFilesExpanded < diffWidthFilesCollapsed, `${diffWidthFilesCollapsed} -> ${diffWidthFilesExpanded}`);
+
+    const diffWidthBeforeSide = await page.evaluate(() => document.getElementById('diff').getBoundingClientRect().width);
+    await page.click('#side-toggle');
+    await page.waitForFunction((before) => document.getElementById('diff').getBoundingClientRect().width > before, diffWidthBeforeSide, { timeout: 2000 }).catch(() => {});
+    const diffWidthSideCollapsed = await page.evaluate(() => document.getElementById('diff').getBoundingClientRect().width);
+    check('panes: collapsing the sidebar grows the diff pane', diffWidthSideCollapsed > diffWidthBeforeSide, `${diffWidthBeforeSide} -> ${diffWidthSideCollapsed}`);
+    const sideWidthCollapsed = await page.evaluate(() => document.getElementById('side').getBoundingClientRect().width);
+    check('panes: a collapsed sidebar has zero width', sideWidthCollapsed === 0, String(sideWidthCollapsed));
+
+    await page.click('#side-toggle'); // expand again, for the resize checks below
+    await page.waitForFunction((before) => document.getElementById('side').getBoundingClientRect().width > 0, sideWidthCollapsed, { timeout: 2000 }).catch(() => {});
+
+    /* 28 -- dragging the file-list handle resizes it; the width persists
+       after a reload; double-clicking the handle resets it to default. */
+    const filesHandleBox = await page.locator('#files-resizer').boundingBox();
+    const filesWidthBeforeDrag = await page.evaluate(() => document.getElementById('files').getBoundingClientRect().width);
+    await page.mouse.move(filesHandleBox.x + filesHandleBox.width / 2, filesHandleBox.y + filesHandleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(filesHandleBox.x + 90, filesHandleBox.y + filesHandleBox.height / 2, { steps: 5 });
+    await page.mouse.up();
+    const filesWidthAfterDrag = await page.evaluate(() => document.getElementById('files').getBoundingClientRect().width);
+    check('resize: dragging the file-list handle changes its width', Math.abs(filesWidthAfterDrag - filesWidthBeforeDrag) > 30, `${filesWidthBeforeDrag} -> ${filesWidthAfterDrag}`);
+
+    await page.reload();
+    await page.waitForSelector('.file-row');
+    const filesWidthAfterReload = await page.evaluate(() => document.getElementById('files').getBoundingClientRect().width);
+    check('resize: the file-list width persists after a reload', Math.abs(filesWidthAfterReload - filesWidthAfterDrag) < 2, `${filesWidthAfterDrag} vs ${filesWidthAfterReload}`);
+
+    await page.dblclick('#files-resizer');
+    await page.waitForFunction(() => Math.abs(document.getElementById('files').getBoundingClientRect().width - 230) < 2, { timeout: 2000 }).catch(() => {});
+    const filesWidthAfterReset = await page.evaluate(() => document.getElementById('files').getBoundingClientRect().width);
+    check('resize: double-clicking the file-list handle resets its width to default', Math.abs(filesWidthAfterReset - 230) < 2, String(filesWidthAfterReset));
+
+    /* 29 -- dragging the diff's old/new split handle changes the column
+       split (persisted); double-clicking it resets to the 50/50 default. */
+    await selectFileAndMeasure(page, 'fn.go');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    const splitHandleBox = await page.locator('#diff-split-resizer').boundingBox();
+    await page.mouse.move(splitHandleBox.x + splitHandleBox.width / 2, splitHandleBox.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(splitHandleBox.x - 200, splitHandleBox.y + 100, { steps: 5 });
+    await page.mouse.up();
+    const fracAfterDrag = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--diff-old-frac').trim());
+    check('resize: dragging the old/new split handle changes the split fraction', fracAfterDrag !== '' && fracAfterDrag !== '0.5', fracAfterDrag);
+
+    await page.reload();
+    await page.waitForSelector('.file-row');
+    const fracAfterReload = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--diff-old-frac').trim());
+    check('resize: the old/new split persists after a reload', fracAfterReload === fracAfterDrag, `${fracAfterDrag} vs ${fracAfterReload}`);
+
+    await selectFileAndMeasure(page, 'fn.go');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    await page.dblclick('#diff-split-resizer');
+    await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--diff-old-frac').trim() === '0.5', { timeout: 2000 }).catch(() => {});
+    const fracAfterReset = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--diff-old-frac').trim());
+    check('resize: double-clicking the split handle resets it to 50/50', fracAfterReset === '0.5', fracAfterReset);
+
+    /* ======================== diff layout toggle: unified / side-by-side ======================== */
+    /* 30 -- switching to unified reshapes fn.go's one "change" row (a
+       same-position edit, see render.pairBlock) into a deleted line directly
+       above its paired added line, each with its own old/new line numbers
+       and a single code column -- not two. */
+    await selectFileAndMeasure(page, 'fn.go');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    // fnHunkId: declared earlier (check 12) -- fn.go's content, and so its
+    // one hunk's id, has not changed since.
+    await page.click('#layout-toggle');
+    await page.waitForFunction(() => document.body.classList.contains('diff-unified'), { timeout: 2000 });
+    await page.waitForSelector('#diff-rows [data-hunk]');
+
+    const unifiedRows = await page.evaluate((hunkId) => {
+      const diffRows = [...document.querySelectorAll('#diff-rows .diff-row')];
+      return diffRows.map((dr) => {
+        const codeCells = [...dr.querySelectorAll('.code')];
+        const code = codeCells.find((c) => c.dataset.hunk === hunkId);
+        if (!code) return null;
+        const linenos = [...dr.querySelectorAll('.lineno')];
+        return {
+          codeCellCount: codeCells.length,
+          oldNo: linenos[0] ? linenos[0].dataset.line : '',
+          newNo: linenos[1] ? linenos[1].dataset.line : '',
+          side: code.dataset.side,
+          isDel: code.classList.contains('bg-del'),
+          isAdd: code.classList.contains('bg-add'),
+        };
+      }).filter(Boolean);
+    }, fnHunkId);
+    check('unified: every row has exactly one code column', unifiedRows.every((r) => r.codeCellCount === 1), JSON.stringify(unifiedRows));
+
+    const delIdx = unifiedRows.findIndex((r) => r.isDel);
+    const addIdx = unifiedRows.findIndex((r) => r.isAdd);
+    check('unified: the changed hunk has both a deleted and an added row', delIdx >= 0 && addIdx >= 0, JSON.stringify(unifiedRows));
+    check('unified: the deleted row renders above its paired added row', delIdx >= 0 && addIdx >= 0 && delIdx < addIdx, `del at ${delIdx}, add at ${addIdx}`);
+    if (delIdx >= 0) {
+      const delRow = unifiedRows[delIdx];
+      check('unified: the deleted row carries an old line number and no new one',
+        !!delRow.oldNo && !delRow.newNo && delRow.side === 'old', JSON.stringify(delRow));
+    }
+    if (addIdx >= 0) {
+      const addRow = unifiedRows[addIdx];
+      check('unified: the added row carries a new line number and no old one',
+        !!addRow.newNo && !addRow.oldNo && addRow.side === 'new', JSON.stringify(addRow));
+    }
+    check('unified: the old/new split handle is hidden', !(await page.isVisible('#diff-split-resizer')));
+
+    /* 31 -- n/p hunk navigation and the reviewed toggle still work in
+       unified (big.js's ~100 scattered hunks exercise this the same way
+       checks 6/12 did in side-by-side). */
+    await selectFileAndMeasure(page, 'big.js');
+    const uBeforeN = await diffScrollTop();
+    await page.keyboard.press('n');
+    await page.waitForFunction((prev) => document.getElementById('diff').scrollTop > prev, uBeforeN, { timeout: 3000 }).catch(() => {});
+    const uAfterN = await diffScrollTop();
+    check('unified: n jumps forward to a hunk', uAfterN > uBeforeN, `${uBeforeN} -> ${uAfterN}`);
+    await page.keyboard.press('p');
+    await page.waitForFunction((prev) => document.getElementById('diff').scrollTop === prev, uBeforeN, { timeout: 3000 }).catch(() => {});
+    const uAfterP = await diffScrollTop();
+    check('unified: p jumps back to the previous hunk', uAfterP === uBeforeN, `${uAfterN} -> ${uAfterP}`);
+
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    const uCountBefore = await page.textContent('#topbar-count');
+    await page.keyboard.press('r');
+    await page.waitForFunction((before) => document.getElementById('topbar-count').textContent !== before, uCountBefore, { timeout: 2000 }).catch(() => {});
+    const uCountAfter = await page.textContent('#topbar-count');
+    check('unified: r toggles the current hunk\'s reviewed state', uCountAfter !== uCountBefore, `${uCountBefore} -> ${uCountAfter}`);
+    await page.keyboard.press('r'); // revert, so it does not leak into a re-run of this file
+    await page.waitForFunction((before) => document.getElementById('topbar-count').textContent === before, uCountBefore, { timeout: 2000 }).catch(() => {});
+
+    /* 32 -- an inline comment focused on a deleted line anchors to side
+       "old" even though unified shows it in the same single code column a
+       context/added line would use. */
+    await selectFileAndMeasure(page, 'fn.go');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    await page.locator(`#diff-rows .code.bg-del[data-hunk="${fnHunkId}"]`).first().click();
+    await page.click('.comment-btn');
+    await page.waitForSelector('#comment-new textarea');
+    const unifiedDelAnchorSide = await page.evaluate(() => state.composing && state.composing.anchor && state.composing.anchor.side);
+    check('unified: commenting on a deleted line anchors to side "old"', unifiedDelAnchorSide === 'old', String(unifiedDelAnchorSide));
+    await page.click('#comment-new [data-action="cancel"]');
+
+    /* 33 -- toggling back restores side-by-side's two code columns and the
+       split handle. */
+    await page.click('#layout-toggle');
+    await page.waitForFunction(() => !document.body.classList.contains('diff-unified'), { timeout: 2000 });
+    const oldCodeCellsAfterToggleBack = await page.locator(`#diff-rows [data-hunk="${fnHunkId}"][data-side="old"].code`).count();
+    const newCodeCellsAfterToggleBack = await page.locator(`#diff-rows [data-hunk="${fnHunkId}"][data-side="new"].code`).count();
+    check('layout: toggling back to side-by-side restores both code columns',
+      oldCodeCellsAfterToggleBack >= 1 && newCodeCellsAfterToggleBack >= 1,
+      `old=${oldCodeCellsAfterToggleBack} new=${newCodeCellsAfterToggleBack}`);
+    check('layout: the old/new split handle reappears in side-by-side', await page.isVisible('#diff-split-resizer'));
   } finally {
     await browser.close();
     proc.kill();

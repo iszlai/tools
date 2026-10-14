@@ -58,18 +58,87 @@ body {
 
 #app {
   display: grid;
-  grid-template-columns: 230px 1fr 240px;
+  /* grid-template-columns is owned by app.js's applyPaneLayout from here on
+     (collapsible + resizable file list/sidebar, persisted in localStorage)
+     -- this is just the pre-JS initial layout. files-resizer/side-resizer
+     are permanent 18px tracks (app.js's PANES_RESIZER_W): unlike #files/#side
+     themselves, they are never collapsed, so a pane's own toggle button
+     stays reachable even at 0 width (see index.html's own comment on them).
+     18px, not a thinner hit area: the embedded 16px button is centered in
+     this track via `left: 50%; transform: translateX(-50%)` -- any narrower
+     and the button would overflow the track into the page's own edge when
+     the pane it belongs to is the first/last grid column, which breaks
+     click hit-testing there (nothing to do with this app's own CSS -- the
+     browser only renders a half-offscreen element, it does not reflow). */
+  grid-template-columns: 230px 18px 1fr 18px 240px;
   flex: 1;
   min-height: 0;
 }
 
 #files, #side {
   overflow-y: auto;
+  overflow-x: hidden; /* collapsing shrinks the grid track to 0, not display:none (see app.js's applyPaneLayout) -- clip, don't let content spill into the diff pane */
   padding: 8px;
 }
 
 #files { border-right: 1px solid var(--border); }
 #side { border-left: 1px solid var(--border); }
+
+/* A collapsed pane's grid track is 0 width, but `* { box-sizing: border-box }`
+   alone can't shrink padding/border below their own declared size -- an
+   0px-wide box with 8px padding + 1px border still paints 17px wide. Zero
+   both here, only while collapsed, so the pane truly disappears. */
+#files.pane-collapsed, #side.pane-collapsed {
+  padding: 0;
+  border: none;
+}
+
+/* ======================== collapsible + resizable panes ======================== */
+/* Drag handle between two panes: a thin hit area (col-resize cursor is the
+   primary affordance) with a subtle centered line via ::before, brightening
+   on hover/drag -- not the handle's own opacity, which would also dim its
+   embedded button. */
+.pane-resizer {
+  position: relative;
+  cursor: col-resize;
+}
+.pane-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--border);
+}
+.pane-resizer:hover::before, .pane-resizer.dragging::before {
+  width: 3px;
+  margin-left: -1px;
+  background: var(--accent);
+}
+
+/* Each resizer embeds its pane's collapse/expand button (index.html), always
+   reachable at the track's fixed position even when the pane itself has
+   collapsed to zero width -- the one visible, clickable control FR's own
+   convention (every shortcut needs a button) requires for this action. */
+.pane-resizer button {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  font: 10px inherit;
+  line-height: 1;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--header-bg); /* a shade off var(--bg) -- stays visible when the pane it belongs to is collapsed to 0 width, same page background behind it */
+  color: var(--fg);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); /* same convention as .help-card/.fr-summary-popover-card's own shadows */
+}
+.pane-resizer button:hover { background: var(--hover); }
 
 /* FR-17: a flow group's title, between runs of file-rows in #files. */
 .file-group-title {
@@ -152,17 +221,63 @@ body {
   visibility: hidden;
 }
 
+/* The old/new column split: both code columns read --diff-old-frac (a plain
+   0..1 number, set by dragging #diff-split-resizer below) so the two always
+   size in lockstep -- one old-side column, one new-side column, split
+   exactly where the handle sits, no matter which rows (or the hunk header,
+   itself `grid-column: 1 / -1` so it ignores column count entirely) happen
+   to be rendered. */
 #diff-rows {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   display: grid;
-  grid-template-columns: var(--lineno-w) 1fr var(--lineno-w) 1fr;
+  grid-template-columns:
+    var(--lineno-w)
+    calc((100% - 2 * var(--lineno-w)) * var(--diff-old-frac, 0.5))
+    var(--lineno-w)
+    calc((100% - 2 * var(--lineno-w)) * (1 - var(--diff-old-frac, 0.5)));
   font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+/* Unified layout: one code column instead of two, fed by app.js's
+   deriveUnifiedRows (see its own header comment) -- a context row carries
+   both line numbers, a del/add row only one, the way `git diff` reads. */
+body.diff-unified #diff-rows {
+  grid-template-columns: var(--lineno-w) var(--lineno-w) 1fr;
+}
+
 .diff-row { display: contents; }
+
+/* The old/new split handle only means something in side-by-side, unwrapped
+   mode -- wrap mode's columns size to content (max-content, below), not to
+   --diff-old-frac, so the handle would float over nothing meaningful. */
+#diff-split-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  margin-left: -3px;
+  left: calc(var(--lineno-w) + (100% - 2 * var(--lineno-w)) * var(--diff-old-frac, 0.5));
+  cursor: col-resize;
+  z-index: 5;
+}
+#diff-split-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--border);
+}
+#diff-split-resizer:hover::before, #diff-split-resizer.dragging::before {
+  width: 3px;
+  margin-left: -1px;
+  background: var(--accent);
+}
+body.diff-unified #diff-split-resizer, body.wrap-lines #diff-split-resizer { display: none; }
 
 .cell {
   height: 20px; /* must match ROW_HEIGHT in app.js */
@@ -757,6 +872,9 @@ body.wrap-lines #diff { overflow-x: auto; }
 body.wrap-lines #diff-rows {
   right: auto; /* let the grid's own content width win over "stretch to #diff" */
   grid-template-columns: var(--lineno-w) max-content var(--lineno-w) max-content;
+}
+body.wrap-lines.diff-unified #diff-rows {
+  grid-template-columns: var(--lineno-w) var(--lineno-w) max-content;
 }
 body.wrap-lines .cell.code { overflow-x: visible; }
 
