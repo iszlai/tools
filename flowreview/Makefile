@@ -9,13 +9,23 @@ endif
 # The window shim and the tree-sitter grammars are C/Objective-C.
 export CGO_ENABLED := 1
 
+# Set once third_party/llama/dist/ has been populated by `make fetch-llama`,
+# so a plain `make build` embeds the real llama-server and `go build ./...`
+# elsewhere (make check, go vet) keeps working from a fresh checkout, which
+# has no dist/ and falls back to the stub provider.
+LLAMA_DIST := third_party/llama/dist
+LLAMA_TAGS := $(if $(wildcard $(LLAMA_DIST)/llama-server),-tags llama_embed,)
+
 .DEFAULT_GOAL := help
 
 help: ## show this help
 	@grep -hE '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | expand -t22
 
-build: ## build bin/flowreview
-	go build -trimpath -ldflags "-X main.version=$(VERSION)" -o $(BIN) ./cmd/flowreview
+build: ## build bin/flowreview (embeds llama-server if third_party/llama/dist/ is populated)
+	go build -trimpath $(LLAMA_TAGS) -ldflags "-X main.version=$(VERSION)" -o $(BIN) ./cmd/flowreview
+
+fetch-llama: ## download the pinned llama-server build into third_party/llama/dist/
+	third_party/llama/fetch.sh
 
 test: ## run unit and end-to-end tests (no network, no browser)
 	go test ./...
@@ -42,4 +52,4 @@ release: ## build the darwin/arm64 release binary into dist/
 clean: ## remove build output
 	rm -rf bin dist
 
-.PHONY: help build test check fmt vet smoke install release clean
+.PHONY: help build fetch-llama test check fmt vet smoke install release clean
