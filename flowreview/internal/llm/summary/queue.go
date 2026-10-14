@@ -22,9 +22,14 @@ type job struct {
 	key      string
 	input    Input
 	priority int // lower runs sooner
-	seq      int // tie-breaker: insertion order, for a stable sort among equal priorities
-	state    jobState
-	index    int // heap.Interface bookkeeping; -1 when not in the heap
+	// bgPriority is the priority Prefetch gave this job (0: never
+	// prefetched). A client Request can raise priority above it; when the
+	// client stops wanting the hunk, the job drops back to bgPriority
+	// instead of being cancelled.
+	bgPriority int
+	seq        int // tie-breaker: insertion order, for a stable sort among equal priorities
+	state      jobState
+	index      int // heap.Interface bookkeeping; -1 when not in the heap
 }
 
 // jobQueue is a container/heap min-heap of *job, ordered by priority then by

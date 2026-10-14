@@ -58,6 +58,7 @@ func (s *Server) handleSummaries(w http.ResponseWriter, r *http.Request) {
 
 	items := s.buildSummaryItems(r.Context(), ids)
 	result := pipeline.Request(items)
+	s.maybePrefetch()
 	if result.Ready == nil {
 		result.Ready = map[string]model.SnippetSummary{}
 	}

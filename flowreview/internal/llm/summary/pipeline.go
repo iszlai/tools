@@ -108,6 +108,46 @@ func (p *Pipeline) Request(items []Item) Result {
 	return Result{Ready: ready, Pending: pending}
 }
 
+// BackgroundPriority is where Prefetch's jobs start: behind anything a
+// client asks for (client priorities are positions in a viewport-sized
+// list), so prefetching never delays what is on screen.
+const BackgroundPriority = 1 << 20
+
+// Prefetch queues every item not already cached as background work, in the
+// order given (BackgroundPriority + Item.Priority), so summaries for hunks
+// the reviewer has not reached yet are ready when they get there.
+// Background jobs survive Request's cancellation: a hunk the client wanted
+// and then scrolled past drops back to its background place, not out of the
+// queue.
+func (p *Pipeline) Prefetch(items []Item) {
+	for _, it := range items {
+		key := model.SummaryKey(p.modelID, PromptVersion, it.Input.Hunk, it.Input.EnclosingFunction, "")
+		if _, ok := p.cache.Get(key); ok {
+			continue
+		}
+		it.Priority += BackgroundPriority
+		p.enqueueBackground(it, key)
+	}
+}
+
+// enqueueBackground is enqueue for Prefetch: a hunk already queued keeps its
+// (better) client priority but remembers its background place.
+func (p *Pipeline) enqueueBackground(item Item, key string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if j, ok := p.byHunk[item.HunkID]; ok {
+		if j.bgPriority == 0 || item.Priority < j.bgPriority {
+			j.bgPriority = item.Priority
+		}
+		return
+	}
+	p.seq++
+	j := &job{hunkID: item.HunkID, key: key, input: item.Input, priority: item.Priority, bgPriority: item.Priority, seq: p.seq, state: stateQueued}
+	heap.Push(&p.pq, j)
+	p.byHunk[item.HunkID] = j
+	p.cond.Signal()
+}
+
 // Regenerate forces a fresh run for item, bypassing whatever is cached under
 // its key: the existing cache entry (if any) is left in place until the new
 // run completes and overwrites it, so a concurrent reader never sees a gap.
@@ -117,12 +157,20 @@ func (p *Pipeline) Regenerate(item Item) {
 }
 
 // cancelUnwanted removes every queued (not running) job whose hunk id is not
-// in wanted.
+// in wanted, except prefetched ones, which drop back to their background
+// priority.
 func (p *Pipeline) cancelUnwanted(wanted map[string]bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for id, j := range p.byHunk {
 		if wanted[id] || j.state != stateQueued {
+			continue
+		}
+		if j.bgPriority != 0 {
+			if j.priority != j.bgPriority {
+				j.priority = j.bgPriority
+				heap.Fix(&p.pq, j.index)
+			}
 			continue
 		}
 		heap.Remove(&p.pq, j.index)

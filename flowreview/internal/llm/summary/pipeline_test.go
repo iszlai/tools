@@ -310,3 +310,57 @@ func TestPipelineRegenerateOverwritesCache(t *testing.T) {
 	}
 	t.Fatal("timed out waiting for Regenerate's fresh answer to replace the cached one")
 }
+
+// TestPipelinePrefetchRunsBehindClientAndSurvivesCancellation checks the
+// background prefetch: prefetched hunks run only after what the client asks
+// for, and a prefetched hunk the client asked for and then stopped wanting
+// still runs (from its background place) instead of being cancelled.
+func TestPipelinePrefetchRunsBehindClientAndSurvivesCancellation(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	first := true
+
+	g := &gate{}
+	p := stub.New()
+	p.CompleteJSONFunc = func(ctx context.Context, r llm.Request, schema json.RawMessage) (llm.Response, error) {
+		id := hunkIDFromContent(r)
+		if first {
+			first = false
+			close(started)
+			<-release
+		}
+		g.record(id)
+		return llm.Response{Content: jsonSummary("behavior", "x")}, nil
+	}
+
+	pipeline := NewPipeline(NewCache(""), p, "test-model", 1)
+	defer pipeline.Close()
+
+	pipeline.Request([]Item{{HunkID: "blocker", Priority: 0, Input: inputFor("blocker")}})
+	<-started
+
+	pipeline.Prefetch([]Item{
+		{HunkID: "bg1", Priority: 0, Input: inputFor("bg1")},
+		{HunkID: "bg2", Priority: 1, Input: inputFor("bg2")},
+	})
+	// The client looks at bg2, then scrolls on to "visible": bg2 must not be
+	// cancelled, and "visible" must run before both prefetched hunks.
+	pipeline.Request([]Item{{HunkID: "bg2", Priority: 0, Input: inputFor("bg2")}})
+	pipeline.Request([]Item{{HunkID: "visible", Priority: 0, Input: inputFor("visible")}})
+	close(release)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && len(g.snapshot()) < 4 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	got := g.snapshot()
+	want := []string{"blocker", "visible", "bg1", "bg2"}
+	if len(got) != len(want) {
+		t.Fatalf("processed %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("processed %v, want %v", got, want)
+		}
+	}
+}
