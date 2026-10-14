@@ -1,0 +1,11 @@
+callgraph.example/flowreviewtest/direct.Top
+
+Callers (0):
+  none
+
+Callees (1):
+  [static]
+    callgraph.example/flowreviewtest/direct.Middle (direct/direct.go:14:31)
+
+Implementations (0):
+  none

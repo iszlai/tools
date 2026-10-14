@@ -2,6 +2,7 @@ package golang
 
 import (
 	"context"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -15,18 +16,25 @@ import (
 // from syntax alone (go/parser, no type information — matching FR-8's "no
 // type checking" requirement, and meaning they need no Load to have
 // completed, let alone succeeded). Callers, Callees and Implementations need
-// the call graph FR-15 builds on top of a Loader and return lang.ErrUnsupported
-// until then; Definition, which does need a Load result, is not part of the
-// LanguageProvider interface at all (it takes a *Result, a go/packages-specific
-// shape no other language has) — call golang.Definition directly.
+// the call graph FR-15 builds on top of a Loader: when loader is nil (the
+// zero-ish Provider FunctionAt/Outline-only callers construct) they return
+// lang.ErrUnsupported, since there is no Loader to ask for a Result at all;
+// otherwise they fetch the loader's current Result with Get (see resolve) —
+// Warm/Load must already have been called by whoever drives this Provider, or
+// Get's own "called before Warm" error surfaces. Definition, which does need
+// a Load result, is not part of the LanguageProvider interface at all (it
+// takes a *Result, a go/packages-specific shape no other language has) — call
+// golang.Definition directly.
 //
 // Because FunctionAt/Outline are syntax-only, their CodeSymbol.ID uses the
 // structural-tier convention ("path#Name", see structuralID) even though
 // Capabilities reports TierExact: Symbols/ChangedSymbols (which do have a
 // type-checked *Result) use the semantic "pkgpath.Name" form instead. A
 // symbol looked up through Provider and the same symbol looked up through
-// Symbols(res) therefore carry different ID strings until FR-15 unifies the
-// two paths; this is a deliberate, documented seam, not an oversight.
+// Symbols(res) therefore carry different ID strings; resolve reconciles the
+// two by re-finding the symbol at its own Path/Range.StartLine in the
+// type-checked Result (SymbolAt) before querying the call graph, so a caller
+// holding either ID form gets the same answer.
 type Provider struct {
 	loader *Loader
 }
@@ -34,19 +42,21 @@ type Provider struct {
 var _ lang.LanguageProvider = (*Provider)(nil)
 
 // NewProvider wraps loader as a lang.LanguageProvider. loader is unused by
-// FunctionAt/Outline (they parse src directly) and is accepted now so FR-15
-// can wire Callers/Callees/Implementations through it without changing this
-// constructor's signature.
+// FunctionAt/Outline (they parse src directly); Callers/Callees/Implementations
+// use it (see resolve).
 func NewProvider(loader *Loader) *Provider {
 	return &Provider{loader: loader}
 }
 
 func (p *Provider) Capabilities() lang.Capabilities {
 	return lang.Capabilities{
-		Name:        "golang",
-		Tier:        lang.TierExact,
-		Languages:   []string{"go"},
-		Definitions: true,
+		Name:            "golang",
+		Tier:            lang.TierExact,
+		Languages:       []string{"go"},
+		Definitions:     true,
+		Callers:         true,
+		Callees:         true,
+		Implementations: true,
 	}
 }
 
@@ -94,15 +104,54 @@ func (p *Provider) Outline(ctx context.Context, path string, src []byte) ([]mode
 }
 
 func (p *Provider) Callers(ctx context.Context, sym model.CodeSymbol) ([]model.NavigationEdge, error) {
-	return nil, lang.ErrUnsupported
+	res, id, err := p.resolve(ctx, sym)
+	if err != nil {
+		return nil, err
+	}
+	return Callers(res, id)
 }
 
 func (p *Provider) Callees(ctx context.Context, sym model.CodeSymbol) ([]model.NavigationEdge, error) {
-	return nil, lang.ErrUnsupported
+	res, id, err := p.resolve(ctx, sym)
+	if err != nil {
+		return nil, err
+	}
+	return Callees(res, id)
 }
 
 func (p *Provider) Implementations(ctx context.Context, sym model.CodeSymbol) ([]model.NavigationEdge, error) {
-	return nil, lang.ErrUnsupported
+	res, id, err := p.resolve(ctx, sym)
+	if err != nil {
+		return nil, err
+	}
+	return Implementations(res, id)
+}
+
+// resolve fetches p.loader's current Result and reconciles sym to the
+// exact-tier symbol ID the call graph is keyed by (see Provider's doc
+// comment): FunctionAt/Outline only ever had syntax, so they stamped the
+// structural-tier "path#Name" form on sym.ID even though Capabilities reports
+// TierExact. Looking sym back up by its own Path and Range.StartLine in the
+// type-checked Result — SymbolAt, the same lookup symbols.go itself uses —
+// finds the matching exact-tier symbol when the Result has that file loaded
+// at all; otherwise sym.ID is used as given, which is correct when it already
+// is an exact-tier ID (e.g. one a caller got from Symbols(res) itself).
+//
+// A nil loader (the FunctionAt/Outline-only construction) has no Result to
+// ask for at all, so it is lang.ErrUnsupported rather than a panic or a
+// confusing "Get called before Warm".
+func (p *Provider) resolve(ctx context.Context, sym model.CodeSymbol) (*Result, string, error) {
+	if p.loader == nil {
+		return nil, "", lang.ErrUnsupported
+	}
+	res, err := p.loader.Get(ctx)
+	if err != nil {
+		return nil, "", fmt.Errorf("golang: %w", err)
+	}
+	if exact := SymbolAt(res, sym.Path, sym.Range.StartLine); exact != nil {
+		return res, exact.ID, nil
+	}
+	return res, sym.ID, nil
 }
 
 // declSymbol builds a syntax-only CodeSymbol for d, reported at path under

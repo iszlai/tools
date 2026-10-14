@@ -98,3 +98,30 @@ Given neither mitigation pays for itself, `NeedDeps` stays on and reverse import
 unbounded/transitive, matching FR-15's eventual need for the full in-module blast radius. The
 two-level cache (disk graph + in-memory `Result`) is the mitigation that matters, and it already
 turns every same-session query after the first into single-digit milliseconds.
+
+# FR-15: SSA + VTA call graph build
+
+Same machine, same ledger checkout, same 3 changed files as the FR-13 numbers above
+(`services/booking/booking-service/server/{jobs,server}.go`,
+`services/booking/booking-service/internal/v2/operation_types.go`) — i.e. the same 151-package
+load set FR-13 already measured. Harness: `TestBenchmarkCallGraph` in `callgraph_benchmark_test.go`,
+gated the same way as `TestBenchmarkRepo` (`FLOWREVIEW_BENCH_REPO`/`FLOWREVIEW_BENCH_FILES`; unset
+⇒ skipped, never runs in `make check`). Timed phases: `ssautil.Packages` + `Program.Build()` (SSA
+construction), then `buildWithFallback` (CHA, then VTA seeded with it — see callgraph.go), then
+`buildImplementsEdges` (the `go/types`-only implementations index, unrelated to SSA).
+
+| Phase | Time (run 1) | Time (run 2) | Notes |
+|---|---|---|---|
+| SSA build (`ssautil.Packages` + `Build()`) | 108 ms | 121 ms | over the same 151 `*packages.Package` FR-13 loaded |
+| Call graph (VTA, CHA seed included) | 650 ms | 535 ms | 74,327 SSA functions reachable (`ssautil.AllFunctions`) |
+| Implements index (`buildImplementsEdges`) | 77 ms | 69 ms | 5,342 `EdgeImplements` edges (type- and method-level) found across the 151-package scope |
+| **SSA + VTA + implements, total** | **835 ms** | **725 ms** | excludes the FR-13 Load phase (2.3–2.4 s, already budgeted separately) |
+
+Acceptance target: flag VTA as too slow (>5 s) and make CHA the default for large loads if so.
+
+**Result: VTA ran to completion on ledger's full reverse-closure scope in both runs, at well under
+10% of the 5 s threshold.** VTA is kept as the default for every load size; CHA remains the
+documented fallback for a build that panics (see `buildWithFallback`'s doc comment), not a
+performance-driven default. The call graph itself (74k SSA functions, ledger's whole 151-package
+reverse closure) is large, but VTA's seeded-CHA construction is still sub-second on this machine —
+the earlier concern that VTA might not scale to a ledger-sized load set did not materialize.

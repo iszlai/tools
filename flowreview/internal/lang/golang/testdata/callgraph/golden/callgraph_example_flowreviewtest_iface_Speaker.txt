@@ -1,0 +1,12 @@
+callgraph.example/flowreviewtest/iface.Speaker
+
+Callers (0):
+  none
+
+Callees (0):
+  none
+
+Implementations (2):
+  [static]
+    callgraph.example/flowreviewtest/iface.Cat
+    callgraph.example/flowreviewtest/iface.Dog

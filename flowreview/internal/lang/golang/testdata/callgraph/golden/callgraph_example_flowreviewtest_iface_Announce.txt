@@ -1,0 +1,14 @@
+callgraph.example/flowreviewtest/iface.Announce
+
+Callers (2):
+  [static]
+    callgraph.example/flowreviewtest/iface.Demo (iface/iface.go:42:10)
+    callgraph.example/flowreviewtest/iface.Demo (iface/iface.go:43:10)
+
+Callees (2):
+  [interface-dispatch]
+    callgraph.example/flowreviewtest/iface.(Cat).Speak (iface/iface.go:24:49)
+    callgraph.example/flowreviewtest/iface.(Dog).Speak (iface/iface.go:24:49)
+
+Implementations (0):
+  none
