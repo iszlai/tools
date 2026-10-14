@@ -1,0 +1,11 @@
+entrypoints:
+  patterns:
+    - func_regex: "^OnEvent$"
+      reason: "custom event name pattern"
+    - signature: "func(context.Context, *Event) error"
+      reason: "event handler"
+
+# FR-35 will add a checks: section here later; FR-16's Config must tolerate
+# it (and anything else), which this unknown key exercises.
+checks:
+  future: true
