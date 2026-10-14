@@ -48,6 +48,8 @@ func main() {
 	modelsFlag := flag.String("models", "", "comma-separated catalog model names to evaluate (required)")
 	casesDir := flag.String("cases", "eval/cases", "directory of eval.Case JSON files")
 	out := flag.String("out", "", "markdown report path (default eval/reports/<date>.md)")
+	promptsFlag := flag.String("prompts", "v1", "comma-separated prompt variants (internal/llm/summary.Variants); \"all\" runs every one")
+	dump := flag.String("dump", "", "write raw model outputs as JSON lines to this file")
 	llamaDist := flag.String("llama-dist", "third_party/llama/dist", "directory with the fetched llama-server build (run `make fetch-llama`)")
 	flag.Parse()
 
@@ -58,6 +60,30 @@ func main() {
 	if _, err := os.Stat(filepath.Join(*llamaDist, "llama-server")); err != nil {
 		fmt.Fprintf(os.Stderr, "flowreview-eval: no llama-server at %s; run `make fetch-llama` first\n", *llamaDist)
 		os.Exit(1)
+	}
+
+	var variants []summary.Variant
+	names := strings.Split(*promptsFlag, ",")
+	if *promptsFlag == "all" {
+		names = summary.VariantNames()
+	}
+	for _, n := range names {
+		v, ok := summary.Variants[strings.TrimSpace(n)]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "flowreview-eval: unknown prompt variant %q (have %s)\n", n, strings.Join(summary.VariantNames(), ", "))
+			os.Exit(2)
+		}
+		variants = append(variants, v)
+	}
+
+	if *dump != "" {
+		f, err := os.Create(*dump)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "flowreview-eval:", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		dumpFile = f
 	}
 
 	cases, err := eval.LoadCases(*casesDir)
@@ -88,14 +114,17 @@ func main() {
 			continue
 		}
 
-		agg, results, err := runModel(ctx, name, cases, *llamaDist)
+		dumpModel = name
+		runs, err := runModel(ctx, name, cases, variants, *llamaDist)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "flowreview-eval: %s: %v\n", name, err)
 			continue
 		}
-		report.Models = append(report.Models, name)
-		report.Aggregates[name] = agg
-		report.Results[name] = results
+		for _, r := range runs {
+			report.Models = append(report.Models, r.agg.ModelName)
+			report.Aggregates[r.agg.ModelName] = r.agg
+			report.Results[r.agg.ModelName] = r.results
+		}
 	}
 
 	if len(report.Models) == 0 {
@@ -118,10 +147,19 @@ func main() {
 	fmt.Println("flowreview-eval: wrote", outPath)
 }
 
-// runModel installs name (if needed), runs every case against it, and
-// returns the aggregate and per-case results. It always stops the sidecar
-// before returning, even on error.
-func runModel(ctx context.Context, name string, cases []eval.Case, llamaDist string) (eval.Aggregate, []eval.CaseResult, error) {
+// variantRun is one (model, prompt variant) pair's results. agg.ModelName
+// is the model name, suffixed " @ <variant>" when more than one variant ran.
+type variantRun struct {
+	agg     eval.Aggregate
+	results []eval.CaseResult
+}
+
+// runModel installs name (if needed), runs every case against it once per
+// prompt variant on one sidecar, and returns each run's aggregate and
+// per-case results. Peak RSS is sampled over the whole sidecar lifetime, so
+// every variant reports the same figure. It always stops the sidecar before
+// returning, even on error.
+func runModel(ctx context.Context, name string, cases []eval.Case, variants []summary.Variant, llamaDist string) ([]variantRun, error) {
 	dataRoot := models.DefaultDataRoot()
 	mgr := &models.Manager{Root: filepath.Join(dataRoot, "models")}
 	mgr.Confirm = func(d models.Disclosure) bool {
@@ -136,7 +174,7 @@ func runModel(ctx context.Context, name string, cases []eval.Case, llamaDist str
 
 	fmt.Printf("== %s: ensuring installed ==\n", name)
 	if err := mgr.Install(ctx, name, progressPrinter(name)); err != nil {
-		return eval.Aggregate{}, nil, fmt.Errorf("install: %w", err)
+		return nil, fmt.Errorf("install: %w", err)
 	}
 	modelPath := filepath.Join(mgr.Root, name+".gguf")
 
@@ -147,7 +185,7 @@ func runModel(ctx context.Context, name string, cases []eval.Case, llamaDist str
 		BinDir:    llamaDist,
 	})
 	if err != nil {
-		return eval.Aggregate{}, nil, fmt.Errorf("start sidecar: %w", err)
+		return nil, fmt.Errorf("start sidecar: %w", err)
 	}
 
 	stopRSS := make(chan struct{})
@@ -155,21 +193,29 @@ func runModel(ctx context.Context, name string, cases []eval.Case, llamaDist str
 	go sampleRSS(dataRoot, stopRSS, peakRSS)
 
 	provider := sc.Provider(name)
-	results := make([]eval.CaseResult, len(cases))
-	sem := make(chan struct{}, maxInFlight)
-	var wg sync.WaitGroup
-	for i, c := range cases {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(i int, c eval.Case) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			results[i] = runCase(ctx, provider, c)
-			fmt.Printf("== %s: %s score=%.2f kind=%s/%s latency=%s\n",
-				name, c.ID, results[i].Score, results[i].KindExpected, results[i].KindGot, results[i].Latency.Round(time.Millisecond))
-		}(i, c)
+	allResults := make([][]eval.CaseResult, len(variants))
+	for vi, v := range variants {
+		label := name
+		if len(variants) > 1 {
+			label = name + " @ " + v.Name
+		}
+		results := make([]eval.CaseResult, len(cases))
+		sem := make(chan struct{}, maxInFlight)
+		var wg sync.WaitGroup
+		for i, c := range cases {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(i int, c eval.Case) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				results[i] = runCase(ctx, provider, v, c)
+				fmt.Printf("== %s: %s score=%.2f kind=%s/%s latency=%s\n",
+					label, c.ID, results[i].Score, results[i].KindExpected, results[i].KindGot, results[i].Latency.Round(time.Millisecond))
+			}(i, c)
+		}
+		wg.Wait()
+		allResults[vi] = results
 	}
-	wg.Wait()
 
 	close(stopRSS)
 	rss := <-peakRSS
@@ -177,30 +223,49 @@ func runModel(ctx context.Context, name string, cases []eval.Case, llamaDist str
 		fmt.Fprintf(os.Stderr, "flowreview-eval: %s: stop: %v\n", name, err)
 	}
 
-	return eval.Summarize(name, results, rss), results, nil
+	runs := make([]variantRun, len(variants))
+	for vi, v := range variants {
+		label := name
+		if len(variants) > 1 {
+			label = name + " @ " + v.Name
+		}
+		runs[vi] = variantRun{agg: eval.Summarize(label, allResults[vi], rss), results: allResults[vi]}
+	}
+	return runs, nil
 }
 
 // runCase sends one case through the real FR-28 prompt and schema and scores
 // the response. A request error (including a timeout) scores as invalid
 // JSON, same as a malformed response — both mean no usable summary came
 // back.
-func runCase(ctx context.Context, provider *sidecar.Provider, c eval.Case) eval.CaseResult {
+func runCase(ctx context.Context, provider *sidecar.Provider, v summary.Variant, c eval.Case) eval.CaseResult {
 	reqCtx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 
-	msgs := summary.Messages(summary.Input{
+	msgs := v.Messages(summary.Input{
 		Path:              c.Path,
 		Language:          lang.Detect(c.Path),
 		Hunk:              c.Hunk,
 		EnclosingFunction: c.EnclosingFunction,
 	})
-	resp, err := provider.CompleteJSON(reqCtx, llm.Request{Messages: msgs, MaxTokens: 400, Temperature: 0.2, Slot: -1}, summary.Schema)
+	resp, err := provider.CompleteJSON(reqCtx, llm.Request{Messages: msgs, MaxTokens: 400, Temperature: 0.2, Slot: -1}, v.Schema)
 	if err != nil {
 		return eval.Score(c, model.SnippetSummary{}, false)
 	}
 
+	raw := cleanJSON(resp.Content)
 	var sum model.SnippetSummary
-	validJSON := json.Unmarshal([]byte(cleanJSON(resp.Content)), &sum) == nil
+	validJSON := json.Unmarshal([]byte(raw), &sum) == nil
+	if validJSON {
+		// Behavior-first variants (summary.Variants "b*") have no "what";
+		// score their prose in its place so grounding and recall still apply.
+		var b struct{ Behavior, Before, After, Change string }
+		_ = json.Unmarshal([]byte(raw), &b)
+		if prose := strings.TrimSpace(strings.Join([]string{b.Behavior, b.Before, b.After, b.Change}, " ")); prose != "" {
+			sum.What = prose
+		}
+	}
+	dumpRaw(v.Name, c.ID, raw)
 
 	res := eval.Score(c, sum, validJSON)
 	res.Latency = resp.Duration
@@ -210,6 +275,25 @@ func runCase(ctx context.Context, provider *sidecar.Provider, c eval.Case) eval.
 		res.TokensPerSecond = float64(resp.CompletionTokens) / resp.Duration.Seconds()
 	}
 	return res
+}
+
+// dump, when --dump is set, receives one JSON line per case with the raw
+// model output, for judging summary quality by reading rather than by
+// eval.Score's heuristics.
+var (
+	dumpMu    sync.Mutex
+	dumpFile  *os.File
+	dumpModel string
+)
+
+func dumpRaw(variant, caseID, raw string) {
+	if dumpFile == nil {
+		return
+	}
+	line, _ := json.Marshal(map[string]string{"model": dumpModel, "variant": variant, "case_id": caseID, "output": raw})
+	dumpMu.Lock()
+	defer dumpMu.Unlock()
+	dumpFile.Write(append(line, '\n'))
 }
 
 // cleanJSON strips a markdown code fence around resp.Content, in case a model
