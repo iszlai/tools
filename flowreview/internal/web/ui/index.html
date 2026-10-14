@@ -16,6 +16,18 @@
   <span id="topbar-title"></span>
   <div class="progress-bar" id="topbar-progress"><div></div></div>
   <span id="topbar-count"></span>
+  <!-- Every keyboard shortcut also has a clickable control here or on its
+       own row (see app.js's rowCellsHTML for the per-hunk ones) -- title
+       names the action and its key, so a glyph-only button stays legible. -->
+  <div id="toolbar" role="toolbar" aria-label="Actions">
+    <button id="tb-prev-file" type="button" title="Previous file (k)">◀</button>
+    <button id="tb-next-file" type="button" title="Next file (j)">▶</button>
+    <button id="tb-prev-hunk" type="button" title="Previous hunk (p)">▲</button>
+    <button id="tb-next-hunk" type="button" title="Next hunk (n)">▼</button>
+    <button id="tb-file-reviewed" type="button" title="Toggle whole file reviewed (R)">✓ File</button>
+    <button id="order-toggle" type="button"></button>
+    <button id="wrap-toggle" type="button"></button>
+  </div>
   <button id="help-button" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
 </header>
 <div id="app">
@@ -23,6 +35,20 @@
   <main id="diff" aria-label="Diff"></main>
   <aside id="side" aria-label="Session summary and comments">
     <div id="session-summary">Loading…</div>
+    <!-- FR-19: blast radius for the focused hunk's changed function(s) --
+         unchanged callers, call sites and implementers (see app.js's
+         renderCallersPanel). Hidden entirely when the source has nothing for
+         radius to report (non-Go diff, or a patch with no old revision). -->
+    <div id="callers-panel" hidden>
+      <h3>Callers</h3>
+      <div id="callers-content"></div>
+    </div>
+    <!-- FR-21: which tests reach the focused hunk's changed function(s),
+         plus a copyable `go test` command (see app.js's renderTestsPanel). -->
+    <div id="tests-panel" hidden>
+      <h3>Tests</h3>
+      <div id="tests-content"></div>
+    </div>
     <!-- FR-9: comment drafts live here, not inline in the virtualized diff
          rows -- see app.js's FR-9 section comment for why. -->
     <div id="comments-panel">

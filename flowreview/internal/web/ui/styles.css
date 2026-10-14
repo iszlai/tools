@@ -71,6 +71,17 @@ body {
 #files { border-right: 1px solid var(--border); }
 #side { border-left: 1px solid var(--border); }
 
+/* FR-17: a flow group's title, between runs of file-rows in #files. */
+.file-group-title {
+  margin: 10px 0 2px;
+  padding: 0 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.file-group-title:first-child { margin-top: 0; }
+
 #diff {
   position: relative;
   overflow-y: auto;
@@ -182,8 +193,11 @@ body {
   font-style: italic;
 }
 
-/* FR-8: the "expand enclosing function" control on a hunk header row. */
-.expand-btn {
+/* FR-8: the "expand enclosing function" control on a hunk header row, and
+   (same look) the mark-reviewed and comment controls beside it -- every hunk
+   header carries a clickable button for each of its row-level shortcuts
+   (e/r/c), not just expand. */
+.expand-btn, .hunk-btn {
   margin-left: 10px;
   padding: 0 6px;
   font: 11px -apple-system, BlinkMacSystemFont, sans-serif;
@@ -194,7 +208,8 @@ body {
   border-radius: 4px;
   cursor: pointer;
 }
-.expand-btn:hover { background: var(--hover); }
+.expand-btn:hover, .hunk-btn:hover { background: var(--hover); }
+.hunk-btn.reviewed-toggle.active { color: var(--added-fg); border-color: var(--added-fg); }
 
 mark.x-add, mark.x-del {
   border-radius: 2px;
@@ -234,6 +249,28 @@ mark.x-del { background: var(--mark-del-bg); }
 #topbar .progress-bar { flex: 1; margin: 0; }
 #topbar-count { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
 
+/* Every global keyboard shortcut (j/k, n/p, R, the order and wrap toggles)
+   also has a button here -- see this file's own header comment in
+   index.html. Compact glyph buttons; title carries the full label + key. */
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+#toolbar button {
+  font: inherit;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--fg);
+  border-radius: 6px;
+  padding: 2px 7px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+#toolbar button:hover { background: var(--hover); }
+
 #help-button {
   flex: none;
   border: 1px solid var(--border);
@@ -262,11 +299,11 @@ mark.x-del { background: var(--mark-del-bg); }
 .file-row.just-completed { animation: fr-complete-flash 900ms ease-out; }
 .file-row.selected.just-completed { animation: none; } /* the accent fill already reads as "selected"; don't fight it */
 
-/* A reviewed hunk's header gets a done marker and every one of its cells
-   dims -- opacity only, never a height change, so virtualization's fixed
-   ROW_HEIGHT math stays exact. */
+/* A reviewed hunk's cells all dim -- opacity only, never a height change, so
+   virtualization's fixed ROW_HEIGHT math stays exact. Its header's own
+   reviewed-toggle button (see .reviewed-toggle.active, above) carries the
+   "done" marker now, so there is no separate label to style here. */
 .cell.hunk-reviewed { opacity: 0.55; }
-.hunk-header .reviewed-check { color: var(--added-fg); font-style: normal; margin-left: 8px; }
 
 /* The current hunk (same row n/p would land on; r toggles it) gets an inset
    outline rather than a border, so it never changes the row's box size. */
@@ -463,3 +500,116 @@ mark.x-del { background: var(--mark-del-bg); }
 .publish-badge button { font: inherit; margin-left: 4px; }
 
 .comment-card.published { border-color: var(--added-fg); }
+
+/* ======================== FR-19/FR-21: callers + tests sidebar ======================== */
+
+#callers-panel, #tests-panel {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+#callers-panel h3, #tests-panel h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+
+.func-radius, .func-tests { margin-bottom: 10px; }
+.func-radius:last-child, .func-tests:last-child { margin-bottom: 0; }
+
+.func-radius-title {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.func-radius h4 {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin: 6px 0 2px;
+}
+
+/* One caller/call-site/implementer row. A clickable one (its file is part of
+   the diff -- see app.js's navEntryHTML) jumps to it; the rest render their
+   path:line as plain text, per FR-19's own "a read-only file view is out of
+   scope" note. */
+.nav-entry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 12px;
+}
+.nav-entry.clickable { cursor: pointer; color: var(--accent); }
+.nav-entry.clickable:hover { text-decoration: underline; }
+.nav-entry .nav-name { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-entry .nav-loc { color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.badge {
+  flex: none;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.badge.sig-changed { color: var(--removed-fg); border-color: var(--removed-fg); }
+
+.no-test-warning { color: var(--removed-fg); font-size: 12px; margin: 2px 0; }
+
+.test-command {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.test-command code {
+  flex: 1;
+  overflow-x: auto;
+  white-space: pre;
+  font-size: 11px;
+  background: var(--header-bg);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.test-command button {
+  flex: none;
+  font: inherit;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--fg);
+  border-radius: 6px;
+  padding: 1px 6px;
+  cursor: pointer;
+}
+.test-command button:hover { background: var(--hover); }
+
+#callers-content .placeholder, #tests-content .placeholder { color: var(--muted); font-size: 12px; margin: 0; }
+
+/* ======================== long-line wrap toggle ('w') ======================== */
+/* A long line's .cell clips at its fixed column width, with a per-cell
+   horizontal scroll underneath that has no visible affordance (scrollbar
+   hidden, above) -- effectively invisible to a reader. True line-wrapping
+   would grow that row past ROW_HEIGHT, which the virtualized grid assumes is
+   fixed for every row no matter which window of rows is rendered (see
+   app.js's header comment); doing that correctly needs per-row measured
+   heights, well beyond what this toggle calls for. Instead "wrap on" (the
+   default) lets the two code columns grow to their content's natural width
+   and gives #diff itself one shared horizontal scrollbar, so a long line is
+   fully reachable and every row's columns stay aligned; "wrap off" returns
+   to each cell's own independent, invisible-scrollbar clipping. Either way
+   every row stays exactly ROW_HEIGHT tall -- only the horizontal axis
+   changes, so virtualization's vertical math never has to know about it. */
+body.wrap-lines #diff { overflow-x: auto; }
+body.wrap-lines #diff-rows {
+  right: auto; /* let the grid's own content width win over "stretch to #diff" */
+  grid-template-columns: var(--lineno-w) max-content var(--lineno-w) max-content;
+}
+body.wrap-lines .cell.code { overflow-x: visible; }
