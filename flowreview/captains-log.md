@@ -13,3 +13,8 @@ Why things are the way they are. Append-only; written with `th log add`.
 **HunkID.** sha1(path + "\n" + body) where body is marker+text per line, no @@ header. CRLF is normalized (a trailing \r dropped) — the only normalization; whitespace and a missing final newline are content. Rename changes the id (plan says path is part of it); FR-22 must therefore match renamed hunks by body when carrying review state, if wanted.
 **Dependencies.** Not vendored during the build-out (many cgo grammar deps; the goproxy works); revisit at FR-36 release.
 **Providers.** LanguageProvider is constructed per repo root; FunctionAt/Outline take source bytes so old/new revisions both work. AgentProvider streams via an emit callback rather than a channel.
+
+## 2026-10-14 — FR-31 merged; evidence verification is substring within ±2 lines
+
+**Decision (agent, accepted).** `Verify` accepts a finding when at least one evidence excerpt is a trimmed substring of the cited line or a line within ±2 (line corrected to the match). Additive `Limits.MaxFindings` field. Schema drift is guarded by a test with `-update`, not a separate generator command.
+**Also.** Worktrees created by the agent harness were sometimes cut from a stale base (46263fd, before FR-1); agents are told to rebase onto main, and Opus imports only the slice's own package when merging such a branch (done for FR-5a's window package: its bootstrap go.mod/Makefile were discarded).

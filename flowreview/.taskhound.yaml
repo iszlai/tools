@@ -14,40 +14,40 @@ issues:
     - id: FR-2
       title: Git adapter
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       priority: high
       blocked_by:
         - FR-1
       labels:
         - M1
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:57:04Z
     - id: FR-3
       title: Unified diff parser and position map
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       priority: high
       blocked_by:
         - FR-1
       labels:
         - M1
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:57:04Z
     - id: FR-4
       title: Session store
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       priority: high
       blocked_by:
         - FR-1
       labels:
         - M1
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:57:04Z
     - id: FR-5
       title: Server, native WKWebView window and UI shell
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       priority: high
       blocked_by:
         - FR-3
@@ -55,7 +55,7 @@ issues:
       labels:
         - M1
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:47:55Z
+      updated_at: 2026-10-14T07:57:04Z
     - id: FR-6
       title: Side-by-side diff renderer
       description: 'See PLAN.md §5. Strict budget tested in smoke: <1 s first paint on 10k lines, <100 ms file switch, no long tasks while scrolling.'
@@ -270,14 +270,14 @@ issues:
     - id: FR-25
       title: Sidecar embedding and lifecycle (llama-server)
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       priority: high
       blocked_by:
         - FR-1
       labels:
         - M3
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:57:04Z
     - id: FR-26
       title: Model manager
       description: See PLAN.md §5 for scope, acceptance criteria and size.
@@ -338,23 +338,23 @@ issues:
     - id: FR-31
       title: Finding model and provider interface
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: done
       blocked_by:
         - FR-1
       labels:
         - M4
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T08:06:14Z
     - id: FR-32
       title: On-demand Go toolchain download
       description: 'See PLAN.md §5. Replaces the dropped Claude CLI provider (decision 2026-10-14: embedded model only in M4).'
-      status: todo
+      status: doing
       blocked_by:
         - FR-1
       labels:
         - M2
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:47:55Z
+      updated_at: 2026-10-14T07:57:04Z
       comments:
         - at: 2026-10-14T07:47:55Z
           author: lehel
@@ -429,14 +429,14 @@ issues:
     - id: FR-39
       title: Tree-sitter structural provider (all languages)
       description: See PLAN.md §5 FR-39.
-      status: todo
+      status: doing
       priority: high
       blocked_by:
         - FR-1
       labels:
         - M1
       created_at: 2026-10-14T07:47:55Z
-      updated_at: 2026-10-14T07:47:55Z
+      updated_at: 2026-10-14T07:57:04Z
     - id: FR-40
       title: Gherkin step linking
       description: See PLAN.md §5 FR-40.

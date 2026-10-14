@@ -49,7 +49,7 @@ Full plan: `../PLAN.md`. Board: `th next` in this folder (`.taskhound.yaml`, pre
 - [ ] Dogfood gate
 
 ## M4 — agentic review
-- [ ] FR-31 Finding model and provider interface
+- [x] FR-31 Finding model and provider interface
 - [ ] FR-33 Embedded-model provider (only agentic provider)
 - [ ] FR-34 Findings UI and approve-to-comment
 - [ ] FR-35 Read-only checks runner
