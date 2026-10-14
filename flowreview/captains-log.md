@@ -52,3 +52,12 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-26 merged; catalog of six real GGUFs, exact-tier filter
 
 **Decision (agent, accepted for now).** Catalog has six entries with sha256/size taken from the HF tree API: Qwen2.5-Coder-7B, Qwen3-8B, Llama-3.1-8B, Gemma-3-12B (large), Qwen2.5-Coder-3B (medium), Qwen2.5-Coder-1.5B (small). None recommended, eval score 0 until FR-27. `Filter(tier)` matches the tier exactly, so a 32 GB Mac is not offered the 3B model; revisit in FR-27/FR-29 if a faster small model should be offered to big machines too. `DefaultDataRoot` duplicates session.DefaultRoot to avoid a cross-area import.
+
+## 2026-10-14 — FR-27 eval set and weight downloads, decided without the user
+
+**Decision.** The committed eval set uses hunks from this personal `tools` repo only (no secrets, no employer code in a repo that may be public). The harness also accepts an uncommitted directory of exported hunks (e.g. from ledger) for private runs. To produce the ≥3-model report, the agent downloads the 1.5B, 3B and 7B Qwen2.5-Coder GGUFs (~8 GB) into the FlowReview models dir; removable with `flowreview model rm`. Which model is *recommended* stays the user's call (FR-27 is HITL): the slice stays open until they choose.
+
+## 2026-10-14 — FR-13 spike numbers on ledger
+
+**Measured.** ledger (147 pkgs): cold 4.4 s (graph 0.75 s + load 3.7 s), same-process warm 34 ms, new-process warm 2.1–2.7 s (the disk cache only skips `go list`; type-checking can't be cached cheaply). taskhound: cold 0.5 s.
+**Decision (agent, accepted).** `-mod=readonly` forced everywhere (ledger's vendor dir has drifted; and flowreview never writes a reviewed repo). No depth limit on reverse importers: it saved ~10% and would drop real callers FR-15 needs; NeedDeps off was 5.5× slower. "<1 s warm" is read as same-session. x/tools pinned v0.48.0 to stay on go 1.25.
