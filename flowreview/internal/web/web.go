@@ -130,5 +130,6 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/comments", s.handleUpsertComment)
 	s.mux.HandleFunc("DELETE /api/comments/{id}", s.handleDeleteComment)
 	s.mux.HandleFunc("POST /api/open", s.handleOpen)
+	s.mux.HandleFunc("GET /api/remote-comments", s.handleRemoteComments) // FR-12, internal/web/remote.go
 	s.mux.Handle("/", http.FileServer(http.FS(uiRoot)))
 }
