@@ -6,7 +6,7 @@ embedded local summaries (llama-server inside the binary), and GitHub publishing
 Full plan: `../PLAN.md`. Board: `th next` in this folder (`.taskhound.yaml`, prefix FR).
 
 ## M1 — daily-usable reviewer
-- [ ] FR-1 Skeleton and frozen types
+- [x] FR-1 Skeleton and frozen types
 - [ ] FR-2 Git adapter
 - [ ] FR-3 Unified diff parser and position map
 - [ ] FR-4 Session store
