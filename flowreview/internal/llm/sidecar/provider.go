@@ -54,6 +54,11 @@ type chatCompletionRequest struct {
 	// JSONSchema is llama.cpp's own top-level field, predating OpenAI's
 	// response_format; see CompleteJSON.
 	JSONSchema json.RawMessage `json:"json_schema,omitempty"`
+	// ChatTemplateKwargs turns off "thinking" for templates that have it
+	// (Qwen 3.x): a thinking model spends its token budget on reasoning
+	// before the JSON and the eval saw 0% valid output. Templates without
+	// the variable ignore it.
+	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
 }
 
 type responseFormat struct {
@@ -79,7 +84,8 @@ type chatCompletionResponse struct {
 }
 
 func requestFromLLM(r llm.Request) chatCompletionRequest {
-	req := chatCompletionRequest{Messages: r.Messages, MaxTokens: r.MaxTokens, Temperature: r.Temperature}
+	req := chatCompletionRequest{Messages: r.Messages, MaxTokens: r.MaxTokens, Temperature: r.Temperature,
+		ChatTemplateKwargs: map[string]any{"enable_thinking": false}}
 	if r.Slot >= 0 {
 		slot := r.Slot
 		req.IDSlot = &slot
