@@ -184,7 +184,14 @@ func (p *Pipeline) worker() {
 		delete(p.byHunk, j.hunkID)
 		p.mu.Unlock()
 
-		p.cache.Put(s)
+		if s.Fallback && p.provider != nil {
+			// The model was configured but failed this time: keep the
+			// fallback for this session (no retry storm while the UI polls)
+			// but off disk, so a later run gets a real summary.
+			p.cache.Remember(s)
+		} else {
+			p.cache.Put(s)
+		}
 	}
 }
 
@@ -200,8 +207,9 @@ func (p *Pipeline) run(j *job) model.SnippetSummary {
 	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 	defer cancel()
 
-	req := llm.Request{Messages: Messages(j.input), Temperature: 0.2, Slot: -1}
-	resp, err := p.provider.CompleteJSON(ctx, req, Schema)
+	v := Variants[Current]
+	req := llm.Request{Messages: v.Messages(j.input), Temperature: 0.2, Slot: -1}
+	resp, err := p.provider.CompleteJSON(ctx, req, v.Schema)
 	if err != nil {
 		return Fallback(j.key, j.hunkID, j.input)
 	}
@@ -209,12 +217,17 @@ func (p *Pipeline) run(j *job) model.SnippetSummary {
 	var parsed struct {
 		Kind        string   `json:"kind"`
 		What        string   `json:"what"`
+		Behavior    string   `json:"behavior"` // b1-prose's headline, shown as What
 		InferredWhy string   `json:"inferred_why"`
 		Impact      string   `json:"impact"`
 		RiskFlags   []string `json:"risk_flags"`
 		Confidence  float64  `json:"confidence"`
 	}
-	if err := json.Unmarshal([]byte(resp.Content), &parsed); err != nil || !validKind(parsed.Kind) || parsed.What == "" {
+	err = json.Unmarshal([]byte(resp.Content), &parsed)
+	if parsed.What == "" {
+		parsed.What = parsed.Behavior
+	}
+	if err != nil || !validKind(parsed.Kind) || parsed.What == "" {
 		return Fallback(j.key, j.hunkID, j.input)
 	}
 

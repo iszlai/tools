@@ -36,7 +36,11 @@ func (l *Lazy) ensure(ctx context.Context) (*Sidecar, error) {
 	if l.sc != nil {
 		return l.sc, nil
 	}
-	sc, err := Start(ctx, l.opts)
+	// Start ties the process to its ctx, and ctx here is one request's
+	// (with that request's timeout): the sidecar must outlive it, so only
+	// ctx's values carry over. waitHealthy bounds startup on its own; Stop
+	// ends the process.
+	sc, err := Start(context.WithoutCancel(ctx), l.opts)
 	if err != nil {
 		return nil, err
 	}

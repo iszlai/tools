@@ -49,3 +49,25 @@ func TestLazyStopBeforeUse(t *testing.T) {
 		t.Fatalf("Stop before any use: %v", err)
 	}
 }
+
+// TestLazyOutlivesFirstRequestContext checks the sidecar is not tied to the
+// context of the call that happened to start it: the pipeline gives every
+// request its own timeout context and cancels it on return, which used to
+// kill llama-server after the first summary, so every later one fell back.
+func TestLazyOutlivesFirstRequestContext(t *testing.T) {
+	l := NewLazy(Options{DataRoot: t.TempDir(), ModelPath: "fake.gguf", BinDir: fakeBinDir(t)}, "lazy-test")
+	defer l.Stop()
+
+	first, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := l.Health(first); err != nil {
+		t.Fatalf("Health (first call, starts the sidecar): %v", err)
+	}
+	cancel()
+	time.Sleep(200 * time.Millisecond)
+
+	second, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel2()
+	if err := l.Health(second); err != nil {
+		t.Fatalf("Health after the first call's context was cancelled: %v", err)
+	}
+}

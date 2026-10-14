@@ -58,6 +58,14 @@ func (c *Cache) Get(key string) (model.SnippetSummary, bool) {
 	return s, true
 }
 
+// Remember stores s in memory only: for this process's lifetime, never on
+// disk.
+func (c *Cache) Remember(s model.SnippetSummary) {
+	c.mu.Lock()
+	c.mem[s.Key] = s
+	c.mu.Unlock()
+}
+
 // Put stores s under s.Key, in memory always and on disk when Dir is set.
 // The disk write is atomic (temp file + rename), matching
 // internal/llm/models.SaveConfig's pattern, so a crash mid-write never leaves

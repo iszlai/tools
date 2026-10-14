@@ -14,10 +14,10 @@ import (
 	"github.com/iszlai/tools/flowreview/internal/llm"
 )
 
-// PromptVersion identifies this prompt and schema. It is one input to
-// model.SummaryKey: bump it whenever a change here would make a previously
-// cached summary's wording or shape stale.
-const PromptVersion = "v1"
+// PromptVersion identifies the prompt and schema the pipeline sends
+// (Variants[Current]). It is one input to model.SummaryKey: bump it whenever
+// a change would make a previously cached summary's wording or shape stale.
+const PromptVersion = "v2-behavior"
 
 // Input is what one hunk's prompt needs. EnclosingFunction is best effort —
 // empty when no LanguageProvider found one (no grammar for the file, or no

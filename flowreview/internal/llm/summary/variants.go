@@ -20,6 +20,12 @@ type Variant struct {
 	Schema   json.RawMessage
 }
 
+// Current is the variant the product pipeline uses. b1-prose won the
+// 2026-10-14 blind judgement 37 of 43 cases against v1 and b2-before-after
+// (eval/reports/2026-10-14-prompts*.md, captain's log): reviewers wanted
+// the behavior before and after in plain words, not a change-type label.
+const Current = "b1-prose"
+
 // Variants are the prompt candidates, by name.
 var Variants = map[string]Variant{
 	"v1":         {Name: "v1", Messages: Messages, Schema: Schema},
