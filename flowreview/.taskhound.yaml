@@ -47,7 +47,7 @@ issues:
     - id: FR-5
       title: Server, native WKWebView window and UI shell
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: doing
+      status: done
       priority: high
       blocked_by:
         - FR-3
@@ -55,7 +55,7 @@ issues:
       labels:
         - M1
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:57:04Z
+      updated_at: 2026-10-14T08:52:26Z
     - id: FR-6
       title: Side-by-side diff renderer
       description: 'See PLAN.md §5. Strict budget tested in smoke: <1 s first paint on 10k lines, <100 ms file switch, no long tasks while scrolling.'
@@ -153,13 +153,13 @@ issues:
     - id: FR-14
       title: Symbols and definitions
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       blocked_by:
         - FR-13
       labels:
         - M2
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T08:40:40Z
     - id: FR-15
       title: 'Call graph: callers, callees, implementations'
       description: See PLAN.md §5 for scope, acceptance criteria and size.

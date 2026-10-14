@@ -61,3 +61,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 
 **Measured.** ledger (147 pkgs): cold 4.4 s (graph 0.75 s + load 3.7 s), same-process warm 34 ms, new-process warm 2.1–2.7 s (the disk cache only skips `go list`; type-checking can't be cached cheaply). taskhound: cold 0.5 s.
 **Decision (agent, accepted).** `-mod=readonly` forced everywhere (ledger's vendor dir has drifted; and flowreview never writes a reviewed repo). No depth limit on reverse importers: it saved ~10% and would drop real callers FR-15 needs; NeedDeps off was 5.5× slower. "<1 s warm" is read as same-session. x/tools pinned v0.48.0 to stay on go 1.25.
+
+## 2026-10-14 — FR-5 merged; single instance via lock file, RepoPath resolved before handoff
+
+**Decision (agent, accepted).** The `Workspace` gains `Sync()` (disk-only refresh after a store write) and `Snapshot()` (session+files read together) so the web layer never pairs a session from before a swap with files from after it. A second invocation sends its source to `/api/open` of the running instance, with RepoPath resolved from its own cwd first (the bug it fixed: the running process otherwise resolved an empty path against its own cwd). The "diff" subcommand must precede flags until FR-12. Smoke: first paint ~50 ms.
