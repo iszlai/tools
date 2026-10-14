@@ -77,3 +77,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-12 merged; CLI exit codes and PR hook shape
 
 **Decision (agent, accepted).** Exit codes: 0 ok, 1 runtime, 2 usage, 3 not a repo / source not found (incl. GitHub 404), 4 auth/host. Flags may come before or after the positional arg (hand-written scanner). `review.FetchPR` returns the resolved Source (clone path, SHAs). Remote comments are best-effort: a failure never blocks opening the review. `FLOWREVIEW_GITHUB_API` points the binary at another API base (tests). `flowreview context` is not mounted yet; FR-15 exposes ContextText for FR-24.
+
+## 2026-10-14 — FR-16 merged; framework detection by package+type name
+
+**Decision (agent, accepted).** gin/echo/fiber/chi/cobra are matched by package name + type name, not import path (works on vendored/forked copies; fixture uses stub packages). gRPC services are found by the generated `Register*Server` + `*Server` interface pair, with `Unimplemented*Server` embedding as a hint. Entry points may repeat under several kinds; FR-17 dedupes. `.flowreview.yaml` `entrypoints.patterns` take func_regex and/or a package-relative signature.

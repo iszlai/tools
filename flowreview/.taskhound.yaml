@@ -177,13 +177,13 @@ issues:
     - id: FR-16
       title: Entry points
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: doing
+      status: done
       blocked_by:
         - FR-14
       labels:
         - M2
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T09:05:56Z
+      updated_at: 2026-10-14T09:27:01Z
     - id: FR-17
       title: Flow ordering
       description: See PLAN.md §5 for scope, acceptance criteria and size.
@@ -194,11 +194,14 @@ issues:
       labels:
         - M2
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T08:53:17Z
+      updated_at: 2026-10-14T09:27:01Z
       comments:
         - at: 2026-10-14T08:53:17Z
           author: lehel
           body: 'FR-40 deferred its ''flowreview order shows Scenario → step def → service'' acceptance here: consume gherkin.Index.EntryPoints() (scenarios as entry points) and EdgesForStep (step-def edges).'
+        - at: 2026-10-14T09:27:01Z
+          author: lehel
+          body: 'FR-16: wire golang.EntryPoints with Config.HasCallers from the FR-15 graph (enables ''exported, no in-module callers''), and set provider Capabilities.EntryPoints=true. A symbol may appear under several entry-point kinds; dedupe for ordering.'
     - id: FR-18
       title: Call-chain explorer UI
       description: See PLAN.md §5 for scope, acceptance criteria and size.
@@ -407,14 +410,14 @@ issues:
     - id: FR-36
       title: Release and upgrade
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       blocked_by:
         - FR-12
         - FR-25
       labels:
         - M5
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T09:19:46Z
     - id: FR-37
       title: .app bundle polish (window exists since FR-5)
       description: See PLAN.md §5 for scope, acceptance criteria and size.

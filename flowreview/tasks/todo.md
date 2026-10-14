@@ -26,7 +26,7 @@ Full plan: `../PLAN.md`. Board: `th next` in this folder (`.taskhound.yaml`, pre
 - [x] FR-13 Go package loader with cache (spike on ledger first)
 - [x] FR-14 Symbols and definitions
 - [ ] FR-15 Call graph: callers, callees, implementations
-- [ ] FR-16 Entry points
+- [x] FR-16 Entry points
 - [ ] FR-17 Flow ordering
 - [ ] FR-18 Call-chain explorer UI
 - [ ] FR-19 Blast radius and signature changes
