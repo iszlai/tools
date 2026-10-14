@@ -104,7 +104,7 @@ issues:
     - id: FR-10
       title: 'GitHub host: read'
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       priority: high
       blocked_by:
         - FR-2
@@ -112,7 +112,7 @@ issues:
       labels:
         - M1
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T08:22:33Z
     - id: FR-11
       title: 'GitHub host: publish'
       description: See PLAN.md §5 for scope, acceptance criteria and size.
@@ -433,14 +433,14 @@ issues:
     - id: FR-39
       title: Tree-sitter structural provider (all languages)
       description: See PLAN.md §5 FR-39.
-      status: doing
+      status: done
       priority: high
       blocked_by:
         - FR-1
       labels:
         - M1
       created_at: 2026-10-14T07:47:55Z
-      updated_at: 2026-10-14T07:57:04Z
+      updated_at: 2026-10-14T08:24:39Z
     - id: FR-40
       title: Gherkin step linking
       description: See PLAN.md §5 FR-40.

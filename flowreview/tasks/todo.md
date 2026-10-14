@@ -18,7 +18,7 @@ Full plan: `../PLAN.md`. Board: `th next` in this folder (`.taskhound.yaml`, pre
 - [ ] FR-10 GitHub host: read
 - [ ] FR-11 GitHub host: publish
 - [ ] FR-12 CLI surface M1
-- [ ] FR-39 Tree-sitter structural provider (all languages)
+- [x] FR-39 Tree-sitter structural provider (all languages)
 - [ ] Dogfood gate: review one real PR with the tool
 
 ## M2 — flow and risk

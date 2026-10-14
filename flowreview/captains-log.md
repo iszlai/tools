@@ -31,3 +31,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-3 merged; GitHub position rule verified
 
 **Verified, not assumed.** Position 1 is the first line after a file's first @@; every later @@ line and every "\ No newline at end of file" marker also consumes a position. Header lines are kept verbatim so Emit never re-quotes a path; mode-only changes are FileModified (no separate status).
+
+## 2026-10-14 — FR-39 merged; SQL grammar dropped, Gherkin hand-parsed
+
+**Decision (agent, accepted).** No Go-bindable tree-sitter SQL grammar ships its generated parser.c (DerekStride lacks it; m-novikov has no Go binding), so SQL is out of the structural tier for now; re-adding is one grammar entry + a query file. Gherkin has no Go binding either and uses a small hand-written line parser (Feature/Background/Rule/Scenario + steps). Added SymFeature/SymBackground/SymRule to model (additive). Closures get position-based ids and are omitted from Outline.
