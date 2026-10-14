@@ -24,6 +24,11 @@ const state = {
   hunkRows: [], // indices into `rows` where kind === "hunk", for n/p
 };
 
+// expandedHunks tracks FR-8's "expand enclosing function": hunk_id -> the
+// exact rows and scroll position to restore on collapse. See the dedicated
+// section below selectFile.
+const expandedHunks = new Map();
+
 // selectToken guards against a slow fetch from an earlier selectFile call
 // landing after a newer one: each call takes the next token and, after its
 // fetch resolves, applies the response only if it is still the latest call
@@ -115,7 +120,8 @@ function cellHTML(cls, fileId, side, lineNo, hunkID, position, inner) {
 
 function rowCellsHTML(fileId, row) {
   if (row.kind === 'hunk') {
-    return cellHTML('cell hunk-header', fileId, '', '', row.hunk_id, '', row.old_html || '');
+    const content = (row.old_html || '') + expandButtonHTML(row.hunk_id);
+    return cellHTML('cell hunk-header', fileId, '', '', row.hunk_id, '', content);
   }
   const oldBg = sideBgClass(row.kind, 'old');
   const newBg = sideBgClass(row.kind, 'new');
@@ -136,6 +142,10 @@ function ensureDiffDOM() {
     diff.dataset.virtualized = '1';
     diff.innerHTML = '<div id="diff-spacer"></div><div id="diff-rows"></div>';
     diff.addEventListener('scroll', onDiffScroll, { passive: true });
+    // Delegated, not bound per-row: renderVisibleRows replaces #diff-rows's
+    // content wholesale on every scroll, which would otherwise tear down a
+    // per-button listener as soon as it scrolled out of view once.
+    diff.addEventListener('click', onDiffClick);
   }
   return diff;
 }
@@ -190,6 +200,116 @@ function jumpHunk(delta) {
   renderVisibleRows();
 }
 
+// --- FR-8: enclosing-function expansion -------------------------------
+// Expanding a hunk fetches GET /api/file/{id}/expand, which returns the
+// hunk's own rows (identical to what GET .../rows already served -- same
+// HunkID, positions and HTML) with render.ContextRows context spliced in
+// before and after, and replaces the hunk's row range in state.rows with
+// that response. Collapsing puts back the exact rows that were there before
+// expanding, which is why hunkRowRange re-derives the range from hunk_id on
+// every call rather than reusing a stored index: once other hunks above it
+// have themselves been expanded or collapsed, a stored index would point at
+// the wrong row.
+
+// expandButtonHTML renders the control on a hunk header row's cell. Its
+// label reflects expandedHunks so a collapsed hunk always reads "expand"
+// and an expanded one "collapse", even though renderVisibleRows rebuilds
+// this markup from scratch on every scroll.
+function expandButtonHTML(hunkId) {
+  const expanded = expandedHunks.has(hunkId);
+  return ` <button type="button" class="expand-btn" data-hunk="${escapeAttr(hunkId)}" ` +
+    `title="expand enclosing function (e)">${expanded ? '▾ collapse' : '▸ expand'}</button>`;
+}
+
+function onDiffClick(e) {
+  const btn = e.target.closest('.expand-btn');
+  if (!btn) return;
+  e.stopPropagation();
+  toggleExpand(btn.dataset.hunk);
+}
+
+// hunkRowRange finds the contiguous run of state.rows carrying hunk_id ===
+// hunkId -- the half-open range applyRowSplice replaces to expand or
+// collapse it. This works unchanged in both states: collapsed, it is just
+// the hunk's header + body rows; expanded, the context rows ContextRows
+// spliced in before and after carry the same hunk_id (see expand.go's
+// handleExpandHunk), so the run also covers them -- in particular, the
+// prepended "before" rows, which come *ahead of* the header row itself, so
+// scanning forward from the header alone would miss them. Returns null when
+// hunkId is not currently in state.rows at all.
+function hunkRowRange(hunkId) {
+  const start = state.rows.findIndex((r) => r.hunk_id === hunkId);
+  if (start === -1) return null;
+  let end = start + 1;
+  while (end < state.rows.length && state.rows[end].hunk_id === hunkId) end++;
+  return [start, end];
+}
+
+// applyRowSplice replaces state.rows[start:end] with newRows, then
+// recomputes everything that depends on row positions: state.hunkRows (n/p),
+// the spacer height and the currently visible window.
+function applyRowSplice(start, end, newRows) {
+  state.rows.splice(start, end - start, ...newRows);
+  state.hunkRows = [];
+  for (let i = 0; i < state.rows.length; i++) {
+    if (state.rows[i].kind === 'hunk') state.hunkRows.push(i);
+  }
+  document.getElementById('diff-spacer').style.height = `${state.rows.length * ROW_HEIGHT}px`;
+  renderVisibleRows();
+}
+
+async function expandHunk(hunkId) {
+  if (!hunkId || expandedHunks.has(hunkId)) return;
+  const range = hunkRowRange(hunkId);
+  if (!range) return;
+  const [start, end] = range;
+  const diff = document.getElementById('diff');
+  const scrollTop = diff.scrollTop;
+  const originalRows = state.rows.slice(start, end);
+
+  let expandedRows;
+  try {
+    expandedRows = await getJSON(`/api/file/${encodeURIComponent(state.selected)}/expand?hunk=${encodeURIComponent(hunkId)}`);
+  } catch {
+    return; // no enclosing function found, or the request failed -- stay collapsed
+  }
+  if (expandedHunks.has(hunkId)) return; // a second 'e'/click landed while the fetch was in flight
+
+  expandedHunks.set(hunkId, { originalRows, scrollTop });
+  applyRowSplice(start, end, expandedRows);
+}
+
+function collapseHunk(hunkId) {
+  const saved = expandedHunks.get(hunkId);
+  if (!saved) return;
+  const range = hunkRowRange(hunkId);
+  if (!range) return;
+  expandedHunks.delete(hunkId);
+  applyRowSplice(range[0], range[1], saved.originalRows);
+  document.getElementById('diff').scrollTop = saved.scrollTop;
+}
+
+function toggleExpand(hunkId) {
+  if (!hunkId) return;
+  if (expandedHunks.has(hunkId)) collapseHunk(hunkId);
+  else expandHunk(hunkId);
+}
+
+// currentHunkId is jumpHunk's "which hunk is at/above the viewport's top"
+// logic, reused for the 'e' shortcut's "current hunk" -- kept separate
+// rather than factored out of jumpHunk, which FR-6 already owns.
+function currentHunkId() {
+  const hunks = state.hunkRows;
+  if (!hunks.length) return null;
+  const diff = document.getElementById('diff');
+  const topRow = Math.floor(diff.scrollTop / ROW_HEIGHT);
+  let cur = 0;
+  for (let i = 0; i < hunks.length; i++) {
+    if (hunks[i] <= topRow) cur = i;
+  }
+  return state.rows[hunks[cur]].hunk_id;
+}
+
 async function selectFile(id) {
   state.selected = id;
   renderFiles();
@@ -202,6 +322,7 @@ async function selectFile(id) {
   for (let i = 0; i < rows.length; i++) {
     if (rows[i].kind === 'hunk') state.hunkRows.push(i);
   }
+  expandedHunks.clear(); // a freshly fetched file has nothing expanded yet
 
   const diff = ensureDiffDOM();
   diff.scrollTop = 0;
@@ -244,6 +365,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'k') moveSelection(-1);
   if (e.key === 'n') jumpHunk(1);
   if (e.key === 'p') jumpHunk(-1);
+  if (e.key === 'e') toggleExpand(currentHunkId());
 });
 
 (async function init() {
