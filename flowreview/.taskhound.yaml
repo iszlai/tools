@@ -187,14 +187,14 @@ issues:
     - id: FR-17
       title: Flow ordering
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       blocked_by:
         - FR-15
         - FR-16
       labels:
         - M2
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T09:27:01Z
+      updated_at: 2026-10-14T09:31:01Z
       comments:
         - at: 2026-10-14T08:53:17Z
           author: lehel
@@ -216,14 +216,14 @@ issues:
     - id: FR-19
       title: Blast radius and signature changes
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       blocked_by:
         - FR-15
         - FR-14
       labels:
         - M2
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T09:31:01Z
     - id: FR-20
       title: Co-change companions and hotspots
       description: See PLAN.md §5 for scope, acceptance criteria and size.
@@ -237,13 +237,13 @@ issues:
     - id: FR-21
       title: Test reach
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       blocked_by:
         - FR-15
       labels:
         - M2
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T09:31:01Z
     - id: FR-22
       title: Delta re-review
       description: See PLAN.md §5 for scope, acceptance criteria and size.
@@ -326,7 +326,11 @@ issues:
       labels:
         - M3
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T09:32:49Z
+      comments:
+        - at: 2026-10-14T09:32:49Z
+          author: lehel
+          body: 'Release binary is 10.6 MB: nothing in cmd/flowreview imports internal/llm/sidecar yet, so the embedded llama-server is not linked. Wiring the summary pipeline into the app links it (check the release size jumps ~28 MB).'
     - id: FR-29
       title: Summary UI
       description: See PLAN.md §5 for scope, acceptance criteria and size.
@@ -410,14 +414,14 @@ issues:
     - id: FR-36
       title: Release and upgrade
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: doing
+      status: done
       blocked_by:
         - FR-12
         - FR-25
       labels:
         - M5
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T09:19:46Z
+      updated_at: 2026-10-14T09:32:49Z
     - id: FR-37
       title: .app bundle polish (window exists since FR-5)
       description: See PLAN.md §5 for scope, acceptance criteria and size.

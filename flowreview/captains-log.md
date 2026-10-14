@@ -91,3 +91,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 
 **Measured.** ledger, FR-13's 3-file load set: SSA 0.12 s + VTA 0.6 s + implements index 0.07 s; under the 5 s bar, so VTA (with CHA fallback on panic) is the default.
 **Decision (agent, accepted).** Closures attribute edges to the enclosing named func; generic instantiations to their origin. Implementations search only the in-module load set, not stdlib. Structural ids are mapped to exact ones via path+line. ContextText is ready for `flowreview context` (FR-24 mounts it).
+
+## 2026-10-14 — FR-36 merged; release pipeline ready, first tag is the user's
+
+**Decision (agent, accepted).** `make release` depends on fetch-llama and writes a .sha256; `flowreview upgrade` verifies the published .sha256 before ever executing the download (absent checksum: proceeds, like taskhound). Workflow `.github/workflows/flowreview-release.yml` builds on macos-14 for `flowreview-v*` tags. Not done without the user: pushing the first tag (publishes a public release).

@@ -55,7 +55,7 @@ Full plan: `../PLAN.md`. Board: `th next` in this folder (`.taskhound.yaml`, pre
 - [ ] FR-35 Read-only checks runner
 
 ## M5 — distribution
-- [ ] FR-36 Release and upgrade
+- [x] FR-36 Release and upgrade
 - [ ] FR-37 .app bundle polish
 - [ ] FR-38 Signing and notarization (HITL)
 
