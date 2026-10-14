@@ -5,6 +5,8 @@
 // Implemented in window_darwin.go (//export); called when the user picks
 // Preferences… (⌘,) from the app menu.
 extern void flowreviewPreferencesCallback(void);
+// Implemented in window_darwin.go (//export); called just before exit().
+extern void flowreviewWillTerminateCallback(void);
 
 // The window and webview live for the process's whole life, so they are
 // simple globals: this tool never has more than one of either, and nothing
@@ -25,6 +27,10 @@ static WKWebView *gWebView;
 // rather than leave a menu-bar-only process behind.
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
     return YES;
+}
+
+- (void)applicationWillTerminate:(NSNotification *)notification {
+    flowreviewWillTerminateCallback();
 }
 
 @end

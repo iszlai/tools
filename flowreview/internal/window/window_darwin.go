@@ -28,6 +28,7 @@ func init() {
 var (
 	mu            sync.Mutex
 	onPreferences func()
+	onQuit        func()
 )
 
 // Run creates NSApplication, one window with a WKWebView loading opts.URL,
@@ -40,6 +41,7 @@ func Run(opts Options) error {
 
 	mu.Lock()
 	onPreferences = opts.OnPreferences
+	onQuit = opts.OnQuit
 	mu.Unlock()
 
 	title := opts.Title
@@ -90,6 +92,16 @@ func Quit() {
 func flowreviewPreferencesCallback() {
 	mu.Lock()
 	cb := onPreferences
+	mu.Unlock()
+	if cb != nil {
+		cb()
+	}
+}
+
+//export flowreviewWillTerminateCallback
+func flowreviewWillTerminateCallback() {
+	mu.Lock()
+	cb := onQuit
 	mu.Unlock()
 	if cb != nil {
 		cb()

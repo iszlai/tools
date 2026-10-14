@@ -13,9 +13,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/iszlai/tools/flowreview/internal/core/review"
 	"github.com/iszlai/tools/flowreview/internal/core/session"
@@ -287,9 +289,14 @@ func run(args []string, stdout, stderr io.Writer) error {
 		}
 	default:
 		srv.SetWindow(windowController{})
-		return window.Run(window.Options{Title: ws.Session.Title, URL: url})
+		return window.Run(window.Options{Title: ws.Session.Title, URL: url, OnQuit: stopSummaries})
 	}
-	select {} // no-open and browser modes: served until the process is killed
+	// no-open and browser modes: served until the process is killed. Stop
+	// the summary sidecar on the way out, since a signal skips deferred calls.
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	<-sig
+	return nil
 }
 
 // windowController adapts internal/window's package-level Focus/Navigate to

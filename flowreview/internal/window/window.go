@@ -29,4 +29,9 @@ type Options struct {
 	// OnPreferences is called when the user picks Preferences… (⌘,) from
 	// the app menu. Nil leaves the menu item with no effect.
 	OnPreferences func()
+	// OnQuit is called on the main thread just before the app exits.
+	// AppKit's terminate: ends the process with exit(), so deferred calls
+	// in main never run: cleanup that must happen (stopping child
+	// processes) goes here.
+	OnQuit func()
 }

@@ -98,6 +98,7 @@ func (l *Lazy) Health(ctx context.Context) error {
 func (l *Lazy) Stop() error {
 	l.mu.Lock()
 	sc := l.sc
+	l.sc = nil // a second Stop (quit hook, then a deferred call) is a no-op
 	l.mu.Unlock()
 	if sc == nil {
 		return nil
