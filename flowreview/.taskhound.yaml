@@ -285,13 +285,13 @@ issues:
     - id: FR-26
       title: Model manager
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: doing
+      status: done
       blocked_by:
         - FR-25
       labels:
         - M3
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T08:25:34Z
+      updated_at: 2026-10-14T08:37:31Z
     - id: FR-27
       title: Eval harness and model choice (HITL)
       description: See PLAN.md §5 for scope, acceptance criteria and size.

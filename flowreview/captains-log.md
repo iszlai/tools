@@ -48,3 +48,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-10 merged; PR clone fetches pull/N/head plus origin
 
 **Decision (agent, accepted).** Token order: GITHUB_TOKEN, GH_TOKEN, then `gh auth token`. A PR is reviewed in the local clone when origin matches (only `git fetch`, never a checkout), else in a blobless `gh repo clone` cache under the data root. Outdated review comments (`line: null`) are kept and flagged. Verified read-only against cli/cli#14679.
+
+## 2026-10-14 — FR-26 merged; catalog of six real GGUFs, exact-tier filter
+
+**Decision (agent, accepted for now).** Catalog has six entries with sha256/size taken from the HF tree API: Qwen2.5-Coder-7B, Qwen3-8B, Llama-3.1-8B, Gemma-3-12B (large), Qwen2.5-Coder-3B (medium), Qwen2.5-Coder-1.5B (small). None recommended, eval score 0 until FR-27. `Filter(tier)` matches the tier exactly, so a 32 GB Mac is not offered the 3B model; revisit in FR-27/FR-29 if a faster small model should be offered to big machines too. `DefaultDataRoot` duplicates session.DefaultRoot to avoid a cross-area import.

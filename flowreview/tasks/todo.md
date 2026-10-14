@@ -41,7 +41,7 @@ Full plan: `../PLAN.md`. Board: `th next` in this folder (`.taskhound.yaml`, pre
 
 ## M3 — embedded summaries
 - [x] FR-25 Sidecar embedding and lifecycle
-- [ ] FR-26 Model manager
+- [x] FR-26 Model manager
 - [ ] FR-27 Eval harness and catalog ranking (HITL; user picks at first run)
 - [ ] FR-28 Summary pipeline
 - [ ] FR-29 Summary UI
