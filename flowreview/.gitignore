@@ -4,3 +4,4 @@ pw-browsers/
 node_modules/
 third_party/llama/*.zip
 third_party/llama/*.tar.gz
+third_party/llama/dist/
