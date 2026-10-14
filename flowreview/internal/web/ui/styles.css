@@ -172,6 +172,20 @@ html, body {
   font-style: italic;
 }
 
+/* FR-8: the "expand enclosing function" control on a hunk header row. */
+.expand-btn {
+  margin-left: 10px;
+  padding: 0 6px;
+  font: 11px -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.expand-btn:hover { background: var(--hover); }
+
 mark.x-add, mark.x-del {
   border-radius: 2px;
   color: inherit;

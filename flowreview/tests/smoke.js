@@ -36,10 +36,24 @@ function git(dir, env, ...args) {
   execFileSync('git', args, { cwd: dir, env: { ...process.env, ...env } });
 }
 
+// goFnSource builds a Go file with one 23-line function whose body statement
+// v10 is tenValue: 10 for the fixture's committed revision, 100 for its
+// worktree-edited one. A default 3-line-context diff only shows a handful of
+// lines around v10, leaving real, unchanged body on both sides for FR-8's
+// "expand enclosing function" to splice in -- unlike a.txt's one-word edit,
+// which is small enough that the whole file is already the hunk.
+function goFnSource(tenValue) {
+  const lines = ['package main', '', 'func Compute() int {'];
+  for (let i = 0; i < 20; i++) lines.push(`\tv${i} := ${i === 10 ? tenValue : i}`);
+  lines.push('\treturn v0', '}');
+  return lines.join('\n') + '\n';
+}
+
 // buildRepo makes a repo with: a modified tracked file and a new untracked
 // one (so the file queue has more than one entry and WorktreeDiff exercises
-// both its tracked and untracked-synthesis paths), plus a 10k-line file with
-// changes scattered through it, for the performance budget below.
+// both its tracked and untracked-synthesis paths), a 10k-line file with
+// changes scattered through it for the performance budget below, and a small
+// Go file whose one hunk sits in the middle of a function for FR-8.
 function buildRepo() {
   const dir = mkdtempSync(path.join(tmpdir(), 'flowreview-smoke-'));
   const env = {
@@ -54,11 +68,13 @@ function buildRepo() {
   const bigLines = [];
   for (let i = 0; i < BIG_FILE_LINES; i++) bigLines.push(`const line${i} = ${i};`);
   writeFileSync(path.join(dir, 'big.js'), bigLines.join('\n') + '\n');
-  git(dir, env, 'add', 'a.txt', 'big.js');
+  writeFileSync(path.join(dir, 'fn.go'), goFnSource(10));
+  git(dir, env, 'add', 'a.txt', 'big.js', 'fn.go');
   git(dir, env, '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'init');
 
   writeFileSync(path.join(dir, 'a.txt'), 'line one\nline TWO\nline three\n');
   writeFileSync(path.join(dir, 'b.txt'), 'a brand new file\n');
+  writeFileSync(path.join(dir, 'fn.go'), goFnSource(100));
   // Scatter ~100 single-line edits through the big file -- enough hunks to
   // make virtualization matter across the whole scroll, not so many that
   // every line is a hunk (which no real diff looks like).
@@ -124,6 +140,7 @@ async function selectFileAndMeasure(page, pathSubstr) {
     check('files: the modified file is listed', paths.includes('a.txt'), paths.join(','));
     check('files: the added file is listed', paths.includes('b.txt'), paths.join(','));
     check('files: the 10k-line file is listed', paths.includes('big.js'), paths.join(','));
+    check('files: the go function file is listed', paths.includes('fn.go'), paths.join(','));
 
     /* 2 -- the session panel shows real progress, not a placeholder */
     const summary = await page.textContent('#session-summary');
@@ -266,6 +283,43 @@ async function selectFileAndMeasure(page, pathSubstr) {
     console.log(`scrolling big.js: ${longTasks.length} long task(s), worst ${worstLongTask.toFixed(1)}ms (budget ${LONGTASK_BUDGET_MS}ms)`);
     check('performance: no long task over budget while scrolling the 10k-line file',
       longTasks.every((d) => d <= LONGTASK_BUDGET_MS), JSON.stringify(longTasks));
+
+    /* 12 -- FR-8: expanding a hunk's enclosing function splices extra
+       context rows in without touching the hunk's own row anchors, and
+       collapsing restores both the original rows and the scroll position. */
+    await selectFileAndMeasure(page, 'fn.go');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    const fnHunkId = await page.getAttribute('#diff-rows [data-hunk]', 'data-hunk');
+    const changeCellSelector = `#diff-rows [data-hunk="${fnHunkId}"][data-side="new"].code.bg-add`;
+
+    await page.evaluate(() => { document.getElementById('diff').scrollTop = 40; });
+    const scrollBeforeExpand = await diffScrollTop();
+    const rowCountBefore = await page.evaluate(() => state.rows.length);
+    const anchorBefore = await page.locator(changeCellSelector).first().evaluate((el) => ({ ...el.dataset }));
+
+    await page.locator(`.expand-btn[data-hunk="${fnHunkId}"]`).click();
+    await page.waitForFunction((before) => state.rows.length > before, rowCountBefore, { timeout: 2000 });
+    const rowCountExpanded = await page.evaluate(() => state.rows.length);
+    check('expand: expanding a hunk adds context rows', rowCountExpanded > rowCountBefore,
+      `${rowCountBefore} -> ${rowCountExpanded}`);
+
+    const anchorExpanded = await page.locator(changeCellSelector).first().evaluate((el) => ({ ...el.dataset }));
+    check('expand: the hunk\'s change-row anchor is unchanged after expanding',
+      anchorExpanded.line === anchorBefore.line && anchorExpanded.position === anchorBefore.position &&
+      anchorExpanded.hunk === anchorBefore.hunk,
+      `before=${JSON.stringify(anchorBefore)} after=${JSON.stringify(anchorExpanded)}`);
+
+    await page.locator(`.expand-btn[data-hunk="${fnHunkId}"]`).click();
+    await page.waitForFunction((before) => state.rows.length === before, rowCountBefore, { timeout: 2000 });
+    const scrollAfterCollapse = await diffScrollTop();
+    check('expand: collapsing restores the original scroll position',
+      scrollAfterCollapse === scrollBeforeExpand, `${scrollBeforeExpand} -> ${scrollAfterCollapse}`);
+
+    const anchorCollapsed = await page.locator(changeCellSelector).first().evaluate((el) => ({ ...el.dataset }));
+    check('expand: the hunk\'s change-row anchor is unchanged after collapsing',
+      anchorCollapsed.line === anchorBefore.line && anchorCollapsed.position === anchorBefore.position &&
+      anchorCollapsed.hunk === anchorBefore.hunk,
+      `before=${JSON.stringify(anchorBefore)} collapsed=${JSON.stringify(anchorCollapsed)}`);
   } finally {
     await browser.close();
     proc.kill();

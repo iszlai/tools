@@ -27,7 +27,11 @@ const (
 // diffed with <mark class="x-add"|"x-del"> around the changed span. Old/New
 // Position is that side's line's model.DiffLine.Position -- the GitHub diff
 // position a published comment anchors to -- zero when the row has nothing
-// on that side.
+// on that side. Expanded marks a row FR-8's function expansion spliced in
+// around a hunk rather than one File itself produced: it always carries
+// both line numbers but zero for both positions, since it names no position
+// in the diff a comment could anchor to (see ContextRows and FR-9's
+// publishability check).
 type Row struct {
 	Kind        string `json:"kind"`
 	OldNo       int    `json:"old_no,omitempty"`
@@ -37,6 +41,7 @@ type Row struct {
 	HunkID      string `json:"hunk_id,omitempty"`
 	OldPosition int    `json:"old_position,omitempty"`
 	NewPosition int    `json:"new_position,omitempty"`
+	Expanded    bool   `json:"expanded,omitempty"`
 }
 
 // File renders every hunk of f into side-by-side rows.

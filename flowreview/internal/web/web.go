@@ -128,6 +128,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/session", s.handleSession)
 	s.mux.HandleFunc("GET /api/files", s.handleFiles)
 	s.mux.HandleFunc("GET /api/file/{id}/rows", s.handleFileRows)
+	s.mux.HandleFunc("GET /api/file/{id}/expand", s.handleExpandHunk) // FR-8, internal/web/expand.go
 	s.mux.HandleFunc("GET /styles/chroma.css", s.handleChromaCSS)
 	s.mux.HandleFunc("POST /api/state", s.handleState)
 	s.mux.HandleFunc("POST /api/comments", s.handleUpsertComment)
