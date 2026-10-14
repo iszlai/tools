@@ -14,7 +14,7 @@ import (
 // newGoFixtureRepo builds a one-package Go module on "main" (Add, called by
 // TestAdd), then dirties Add's body uncommitted, so a worktree review's diff
 // has exactly one changed function for handleTests to find.
-func newGoFixtureRepo(t *testing.T) string {
+func newTestReachFixtureRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	clock := &fixtureTime{t: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)}
@@ -37,7 +37,7 @@ func newGoFixtureRepo(t *testing.T) string {
 
 func newGoTestWorkspace(t *testing.T) (*review.Workspace, *session.Store) {
 	t.Helper()
-	dir := newGoFixtureRepo(t)
+	dir := newTestReachFixtureRepo(t)
 	store := session.New(t.TempDir())
 	ws, err := review.Open(context.Background(), store, model.Source{
 		Kind:     model.SourceWorktree,
