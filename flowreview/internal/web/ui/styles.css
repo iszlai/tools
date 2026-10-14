@@ -151,11 +151,79 @@ body {
 }
 .file-group-title:first-child { margin-top: 0; }
 
+/* FR-18: #diff-pane is the actual grid item in #app's third column now
+   (index.html); #diff itself is an ordinary flex child inside it, stacked
+   under #blob-breadcrumb, so the breadcrumb takes its own row without
+   disturbing #app's grid-column layout at all. min-height/min-width: 0 on
+   both are required for a flex/grid child to actually shrink to fit instead
+   of growing to its content's size (the classic flexbox/grid overflow trap
+   -- #diff needs this to keep scrolling internally rather than pushing
+   #diff-pane taller than #app allows). */
+#diff-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 #diff {
   position: relative;
   overflow-y: auto;
   overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
 }
+
+/* FR-18's read-only file view breadcrumb: shown only while state.view ===
+   'blob' (app.js's renderBreadcrumb/setView). */
+#blob-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--header-bg);
+  font-size: 12px;
+  flex: none;
+}
+#blob-breadcrumb[hidden] { display: none; }
+
+.breadcrumb-label {
+  flex: none;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.breadcrumb-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, Menlo, monospace;
+}
+
+#blob-back-to-diff {
+  flex: none;
+  padding: 2px 8px;
+  font: 11px -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+#blob-back-to-diff:hover { background: var(--hover); }
+
+/* The read-only file view's own two-column grid (line number + code) is
+   defined at the very end of this file, !important -- see that rule's own
+   comment for why. */
 
 .file-row {
   display: flex;
@@ -326,6 +394,25 @@ body.diff-unified #diff-split-resizer, body.wrap-lines #diff-split-resizer { dis
 .expand-btn:hover, .hunk-btn:hover { background: var(--hover); }
 .hunk-btn.reviewed-toggle.active { color: var(--added-fg); border-color: var(--added-fg); }
 
+/* FR-18: the inline "callers & callees" button on a function/method
+   declaration row (declNavButtonHTML) and, identically, on a read-only
+   blob-view row. Sits inline at the very start of the code cell's own text
+   (not absolutely positioned), smaller than .expand-btn/.hunk-btn since one
+   can appear on every declaration line in a file, not just a hunk header. */
+.decl-nav-btn {
+  margin-right: 4px;
+  padding: 0 4px;
+  font: 10px -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+.decl-nav-btn:hover { background: var(--hover); }
+
 mark.x-add, mark.x-del {
   border-radius: 2px;
   color: inherit;
@@ -385,6 +472,10 @@ mark.x-del { background: var(--mark-del-bg); }
   line-height: 1.4;
 }
 #toolbar button:hover { background: var(--hover); }
+/* FR-18's history buttons are disabled (not hidden) when there is nothing to
+   go back/forward to -- updateHistoryButtons toggles this. */
+#toolbar button:disabled { opacity: 0.4; cursor: default; }
+#toolbar button:disabled:hover { background: none; }
 
 #help-button {
   flex: none;
@@ -447,6 +538,89 @@ mark.x-del { background: var(--mark-del-bg); }
 #help-overlay dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; }
 #help-overlay dt { font-family: ui-monospace, Menlo, monospace; font-weight: 600; }
 #help-overlay dd { margin: 0; color: var(--muted); }
+
+/* ======================== FR-18: call-chain explorer popover ======================== */
+/* Same backdrop-card look as #help-overlay (a slightly higher z-index: it
+   can be opened while the diff itself has focused rows underneath, and
+   should always read as the topmost thing on screen). */
+#callchain-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+#callchain-overlay[hidden] { display: none; }
+
+.callchain-card {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 18px;
+  min-width: 320px;
+  max-width: 480px;
+  max-height: 70vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+}
+
+.callchain-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.callchain-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.callchain-close {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: none;
+  color: var(--fg);
+  cursor: pointer;
+}
+.callchain-close:hover { background: var(--hover); }
+
+.callchain-symbol {
+  margin: 0 0 8px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.callchain-card h4 {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin: 10px 0 2px;
+}
+.callchain-card h4:first-of-type { margin-top: 0; }
+
+.callchain-error { color: var(--removed-fg); font-size: 12px; margin: 0; }
+
+.badge.in-diff { color: var(--added-fg); border-color: var(--added-fg); }
+.badge.out-diff { color: var(--muted); }
+.badge.heuristic-tier { color: var(--muted); }
 
 /* ======================== FR-9: comment drafts ======================== */
 
@@ -880,3 +1054,14 @@ body.wrap-lines .cell.code { overflow-x: visible; }
 
 /* Request-level publish failure (renderPublishPanel). */
 .publish-error { color: var(--removed-fg); }
+
+/* ======================== FR-18: read-only file view layout ======================== */
+/* The blob view's own two-column grid (line number + code), and no old/new
+   split handle (there is no old side). !important, deliberately: this must
+   win over body.wrap-lines/.diff-unified's own #diff-rows overrides above
+   even when the user toggled wrap or unified layout while last in the diff
+   (those classes stay set -- they are the diff's own persisted preferences,
+   not reset on leaving it) and has no reason to combine specificity-raising
+   selectors with those two-class combinations just to out-rank them. */
+body.view-blob #diff-rows { grid-template-columns: var(--lineno-w) 1fr !important; }
+body.view-blob #diff-split-resizer { display: none !important; }

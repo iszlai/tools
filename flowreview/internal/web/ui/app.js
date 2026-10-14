@@ -81,6 +81,19 @@ const state = {
   // table; 'unified' derives single-column git-diff-style rows from it (see
   // deriveUnifiedRows). Persisted in localStorage like every other toggle here.
   layout: localStorage.getItem('flowreview.diffLayout') === 'unified' ? 'unified' : 'sbs',
+
+  // FR-18: call-chain explorer. declLines is the selected file's decl-line
+  // Sets (GET /api/file/{id}/symbols), used to mark function/method
+  // declaration rows with a nav button -- see declNavButtonHTML. view is
+  // 'diff' (the normal three-pane view) or 'blob' (the read-only file view
+  // for a navigation target outside the diff, see the "FR-18" section
+  // below); blob holds that view's own content once loaded.
+  declLines: { old: new Set(), new: new Set() },
+  view: 'diff',
+  blob: null, // { path, language, rows, declLines: Set, focusLine } once openBlob has loaded one
+  lastDiffState: null, // { fileId, scrollTop } captured the moment the user first leaves the diff for a blob, so "back to diff" always returns to where this excursion started
+  history: { back: [], forward: [] }, // captureViewState() snapshots; ◀/▶ (Alt+←/→) walk these
+  callchain: { open: false, loading: false, report: null, error: '' }, // GET /api/symbol's last answer, shown in #callchain-overlay
 };
 
 // panes: collapsible/resizable file list and sidebar widths, and the diff's
@@ -536,6 +549,26 @@ function hunkHeaderHTML(fileId, row, isCurrent) {
   return cellHTML(cls, fileId, '', '', row.hunk_id, '', (row.old_html || '') + controls);
 }
 
+// declNavButtonHTML (FR-18) renders the inline "callers & callees" button on
+// a function/method declaration row: side/lineNo looked up against
+// state.declLines (GET /api/file/{id}/symbols, fetched once per selected
+// file -- see loadDeclLines), so this never needs a request of its own. Like
+// every anchor in this file (see anchorFromDataset), it keys off
+// state.selectedPath regardless of side -- a rename's distinct old path is
+// the one existing gap this shares with FR-9's own comment anchors, not a
+// new one. The button sits at the very start of the code cell's own HTML,
+// inline with the text it's prepended to -- not absolutely positioned -- so
+// it never changes the row's fixed ROW_HEIGHT and scrolls away with the rest
+// of a long, unwrapped line exactly like the code itself (an accepted
+// tradeoff for staying inside the existing virtualization; a declaration
+// line is usually indented little enough that this rarely matters in
+// practice).
+function declNavButtonHTML(side, lineNo) {
+  if (!lineNo || !state.declLines[side] || !state.declLines[side].has(lineNo)) return '';
+  return `<button type="button" class="decl-nav-btn" data-side="${side}" data-line="${lineNo}" ` +
+    'title="Callers &amp; callees (g)">ƒ↗</button>';
+}
+
 // sbsRowCellsHTML is the original side-by-side row renderer: four cells
 // (old lineno, old code, new lineno, new code) per row, matching
 // render.Row's own shape one for one.
@@ -549,9 +582,9 @@ function sbsRowCellsHTML(fileId, row, isCurrent) {
   const newFocus = focusedClass('new', row.new_no);
   return (
     cellHTML(`cell lineno ${oldBg}${dim}${oldFocus}`, fileId, 'old', row.old_no, row.hunk_id, row.old_position, lineGutterInner(row.old_no, 'old')) +
-    cellHTML(`cell code chroma ${oldBg}${dim}${oldFocus}`, fileId, 'old', row.old_no, row.hunk_id, row.old_position, row.old_html || '') +
+    cellHTML(`cell code chroma ${oldBg}${dim}${oldFocus}`, fileId, 'old', row.old_no, row.hunk_id, row.old_position, declNavButtonHTML('old', row.old_no) + (row.old_html || '')) +
     cellHTML(`cell lineno ${newBg}${dim}${newFocus}`, fileId, 'new', row.new_no, row.hunk_id, row.new_position, lineGutterInner(row.new_no, 'new')) +
-    cellHTML(`cell code chroma ${newBg}${dim}${newFocus}`, fileId, 'new', row.new_no, row.hunk_id, row.new_position, row.new_html || '')
+    cellHTML(`cell code chroma ${newBg}${dim}${newFocus}`, fileId, 'new', row.new_no, row.hunk_id, row.new_position, declNavButtonHTML('new', row.new_no) + (row.new_html || ''))
   );
 }
 
@@ -593,7 +626,7 @@ function unifiedRowCellsHTML(fileId, row, isCurrent) {
   return (
     cellHTML(`cell lineno ${oldGutterBg}${dim}${oldFocus}`, fileId, 'old', row.old_no, row.hunk_id, row.old_position, lineGutterInner(row.old_no, 'old')) +
     cellHTML(`cell lineno ${newGutterBg}${dim}${newFocus}`, fileId, 'new', row.new_no, row.hunk_id, row.new_position, lineGutterInner(row.new_no, 'new')) +
-    cellHTML(`cell code chroma ${codeBg}${dim}${codeFocus}`, fileId, codeSide, codeLine, row.hunk_id, codePos, codeHTML)
+    cellHTML(`cell code chroma ${codeBg}${dim}${codeFocus}`, fileId, codeSide, codeLine, row.hunk_id, codePos, declNavButtonHTML(codeSide, codeLine) + codeHTML)
   );
 }
 
@@ -691,6 +724,10 @@ function currentHunkIndex() {
 }
 
 function renderVisibleRows() {
+  if (state.view === 'blob') {
+    renderBlobVisibleRows();
+    return;
+  }
   const diff = document.getElementById('diff');
   const rowsEl = document.getElementById('diff-rows');
   // #diff-rows only exists once ensureDiffDOM has run (selectFile's first
@@ -806,6 +843,29 @@ function onHunkButtonClick(e) {
   return false;
 }
 
+// onDeclNavClick (FR-18) handles declNavButtonHTML's inline button; checked
+// first by onDiffClick regardless of view, same pattern as
+// onExpandClick/onHunkButtonClick (stop the click from also falling through
+// to the cell's own comment-anchor handling, or to onBlobClick's focus-line
+// handling, below).
+function onDeclNavClick(e) {
+  const btn = e.target.closest('.decl-nav-btn');
+  if (!btn) return false;
+  e.stopPropagation();
+  const path = state.view === 'blob' && state.blob ? state.blob.path : state.selectedPath;
+  openCallChain(path, btn.dataset.side, Number(btn.dataset.line));
+  return true;
+}
+
+// onBlobClick is onDiffClick's blob-view counterpart: no comments, no hunks,
+// just focus-the-line for `g` (currentPosition reads state.blob.focusLine).
+function onBlobClick(e) {
+  const cell = e.target.closest('.cell');
+  if (!cell || !cell.dataset.line) return;
+  state.blob.focusLine = Number(cell.dataset.line);
+  renderVisibleRows();
+}
+
 // hunkRowRange finds the contiguous run of state.sbsRows carrying hunk_id
 // === hunkId -- the half-open range applyRowSplice replaces to expand or
 // collapse it. Always against the canonical side-by-side rows, never
@@ -895,6 +955,8 @@ async function selectFile(id) {
   const f = state.files.find((x) => x.id === id);
   state.selectedPath = f ? f.path : null; // FR-9: comment anchors key off the path, not the file id
   state.focusedAnchor = null; // FR-9: a focused line belongs to the file it was focused in
+  state.declLines = { old: new Set(), new: new Set() }; // FR-18: reset until this file's own GET .../symbols answers below
+  setView('diff');
   renderFiles();
   const token = ++selectToken;
   const rows = await getJSON(`/api/file/${encodeURIComponent(id)}/rows`);
@@ -906,6 +968,24 @@ async function selectFile(id) {
   const diff = ensureDiffDOM();
   diff.scrollTop = 0;
   rebuildActiveRows();
+  loadDeclLines(id, token);
+}
+
+// loadDeclLines is FR-18's per-file decl-line fetch: a background request
+// (synchronous on the server -- see handleFileSymbols's own doc comment --
+// but still not awaited here, so it never delays the diff's own first
+// paint) that fills in state.declLines once it answers, redrawing whatever
+// rows are on screen so their nav button appears.
+async function loadDeclLines(id, token) {
+  let view;
+  try {
+    view = await getJSON(`/api/file/${encodeURIComponent(id)}/symbols`);
+  } catch {
+    return;
+  }
+  if (token !== selectToken) return; // selection moved on while this was in flight
+  state.declLines = { old: new Set(view.old || []), new: new Set(view.new || []) };
+  renderVisibleRows();
 }
 
 // ======================== FR-7: review queue, reviewed state, progress ========================
@@ -1049,6 +1129,8 @@ const HELP_KEYS = [
   ['u', 'toggle unified / side-by-side diff layout'],
   ['[', 'collapse/expand the file list'],
   [']', 'collapse/expand the sidebar'],
+  ['g', 'show callers & callees of the focused line'],
+  ['Alt+← / Alt+→', 'back / forward through call-chain navigation'],
   ['?', 'toggle this help'],
 ];
 
@@ -1138,11 +1220,21 @@ function existingDraftAt(anchor) {
 }
 
 // onDiffClick is the diff pane's one click handler (delegated, bound once in
-// ensureDiffDOM): while re-anchoring a stale comment any line click re-homes
-// it; otherwise clicking a line-number gutter cell opens (or re-opens, if one
-// is already there) a compose card for that exact anchor, and clicking a
-// code cell just focuses the line for the `c` shortcut.
+// ensureDiffDOM, shared by both FR-18's read-only blob view and the diff
+// itself -- they're the same #diff element, see ensureDiffDOM's own
+// comment): while re-anchoring a stale comment any line click re-homes it;
+// otherwise clicking a line-number gutter cell opens (or re-opens, if one is
+// already there) a compose card for that exact anchor, and clicking a code
+// cell just focuses the line for the `c` shortcut. None of that applies in
+// the blob view (no comments, no hunks there), which onBlobClick handles
+// instead -- decl-nav is the one control both views share, so it is checked
+// first, before the dispatch.
 function onDiffClick(e) {
+  if (onDeclNavClick(e)) return;
+  if (state.view === 'blob') {
+    onBlobClick(e);
+    return;
+  }
   if (onExpandClick(e)) return;
   if (onHunkButtonClick(e)) return;
   const cell = e.target.closest('.cell');
@@ -1709,6 +1801,354 @@ function forceSidebarRedraw() {
   renderTestsPanel();
 }
 
+// ======================== FR-18: call-chain explorer ========================
+// GET /api/symbol answers the function or method enclosing (path, side,
+// line) plus every caller, callee and implementation it could find, each
+// with a resolved (path, line) to jump to where one exists -- see
+// symbol.Target in internal/core/symbol. Opened by declNavButtonHTML's
+// inline button on a declaration row, or by `g` acting on whatever line is
+// currently focused (currentPosition). Clicking an entry (navigateTo) either
+// jumps to it in the diff, if that line happens to be rendered there, or
+// opens FR-18's read-only file view (openBlob) for it -- see that section
+// below. Go's exact tier can answer {"pending": true} while FR-17's shared
+// background analysis is still loading, same as the callers/tests sidebar
+// (pollUntilReady, defined in the FR-17 section above, handles that here
+// too).
+
+function currentPosition() {
+  if (state.view === 'blob') {
+    if (!state.blob || !state.blob.focusLine) return null;
+    return { path: state.blob.path, side: 'new', line: state.blob.focusLine };
+  }
+  if (!state.focusedAnchor) return null;
+  return { path: state.selectedPath, side: state.focusedAnchor.side, line: state.focusedAnchor.line };
+}
+
+async function openCallChain(path, side, line) {
+  if (!path || !line) return;
+  state.callchain = { open: true, loading: true, report: null, error: '' };
+  renderCallChainPopover();
+  let body;
+  try {
+    body = await pollUntilReady(() => getJSON(`/api/symbol?path=${encodeURIComponent(path)}&side=${side}&line=${line}`));
+  } catch (err) {
+    body = null;
+  }
+  if (!state.callchain.open) return; // closed while the request was in flight
+  state.callchain.loading = false;
+  if (!body) {
+    state.callchain.error = 'Could not load callers and callees.';
+  } else if (body.error) {
+    state.callchain.error = body.error;
+  } else {
+    state.callchain.report = body.report || null;
+  }
+  renderCallChainPopover();
+}
+
+function closeCallChain() {
+  if (!state.callchain.open) return;
+  state.callchain = { open: false, loading: false, report: null, error: '' };
+  renderCallChainPopover();
+}
+
+function callchainTitle(sym) {
+  const name = sym.receiver ? `${sym.receiver}.${sym.name}` : sym.name;
+  return `${name} — ${sym.path}:${sym.range.start_line}`;
+}
+
+// callchainEntryHTML mirrors FR-19's own navEntryHTML (short name, path:line,
+// confidence badge), plus the "in diff"/"not in diff" badge PLAN.md's FR-18
+// acceptance criteria asks for on every entry, not just the clickable ones --
+// an unresolved entry (no Path at all, see symbol.Target's own doc comment)
+// gets neither badge nor a click handler: there is nowhere to jump to.
+function callchainEntryHTML(t) {
+  const loc = t.path ? `${t.path}:${t.line}` : '—';
+  const clickable = !!t.path;
+  const attrs = clickable ? ` data-action="goto" data-path="${escapeAttr(t.path)}" data-line="${t.line}"` : '';
+  const diffBadge = t.path
+    ? `<span class="badge ${t.in_diff ? 'in-diff' : 'out-diff'}">${t.in_diff ? 'in diff' : 'not in diff'}</span>`
+    : '';
+  return `<div class="nav-entry${clickable ? ' clickable' : ''}"${attrs}>` +
+    `<span class="nav-name" title="${escapeAttr(t.name)}">${escapeHTML(t.name)}</span>` +
+    `<span class="nav-loc">${escapeHTML(loc)}</span>${confBadgeHTML(t.confidence)}${diffBadge}</div>`;
+}
+
+function callchainSectionHTML(title, targets) {
+  if (!targets || !targets.length) return '';
+  return `<h4>${escapeHTML(title)}</h4>${targets.map(callchainEntryHTML).join('')}`;
+}
+
+function callchainCardHTML(bodyHTML, tierBadge) {
+  return `<div class="callchain-card">
+    <div class="callchain-header">
+      <span class="callchain-title">Callers &amp; callees</span>${tierBadge || ''}
+      <button type="button" class="callchain-close" data-action="close" title="Close (Esc)">×</button>
+    </div>
+    ${bodyHTML}
+  </div>`;
+}
+
+function renderCallChainPopover() {
+  const el = document.getElementById('callchain-overlay');
+  if (!el) return;
+  if (!state.callchain.open) {
+    el.hidden = true;
+    return;
+  }
+  el.hidden = false;
+
+  if (state.callchain.loading) {
+    el.innerHTML = callchainCardHTML('<p class="placeholder">Computing…</p>');
+    return;
+  }
+  if (state.callchain.error) {
+    el.innerHTML = callchainCardHTML(`<p class="callchain-error">${escapeHTML(state.callchain.error)}</p>`);
+    return;
+  }
+  const rep = state.callchain.report;
+  if (!rep) {
+    el.innerHTML = callchainCardHTML('<p class="placeholder">Not on a function or method.</p>');
+    return;
+  }
+
+  const tierBadge = rep.tier === 'structural'
+    ? ' <span class="badge heuristic-tier" title="Heuristic name search over the repo, not a resolved call graph">heuristic</span>'
+    : '';
+  const sections = callchainSectionHTML('Callers', rep.callers) +
+    callchainSectionHTML('Callees', rep.callees) +
+    callchainSectionHTML('Implementations', rep.implementations);
+  const body = sections || '<p class="placeholder">No callers, callees or implementations found.</p>';
+  el.innerHTML = callchainCardHTML(
+    `<p class="callchain-symbol" title="${escapeAttr(callchainTitle(rep.symbol))}">${escapeHTML(callchainTitle(rep.symbol))}</p>${body}`,
+    tierBadge,
+  );
+}
+
+function onCallChainOverlayClick(e) {
+  if (e.target.id === 'callchain-overlay') {
+    closeCallChain(); // backdrop click
+    return;
+  }
+  if (e.target.closest('[data-action="close"]')) {
+    closeCallChain();
+    return;
+  }
+  const gotoEl = e.target.closest('[data-action="goto"]');
+  if (gotoEl) navigateTo(gotoEl.dataset.path, Number(gotoEl.dataset.line));
+}
+
+// navigateTo is what clicking a callers/callees/implementations entry does:
+// jump to line in path if that line is already part of the rendered diff
+// (works in both diff layouts -- it reads state.rows, whichever of
+// sbsRows/deriveUnifiedRows is currently active, exactly like jumpToLocation
+// already does for FR-19/21), otherwise open the read-only file view for it.
+// Always pushes the view being left onto the back-history stack first, so ◀
+// can undo any number of these in a row.
+async function navigateTo(path, line) {
+  pushHistory();
+  closeCallChain();
+
+  const f = state.files.find((x) => x.path === path);
+  if (f) {
+    // state.view !== 'diff' matters even when state.selected already names
+    // f.id: coming from a blob view that id was never changed away from (see
+    // openBlob), but state.declLines now holds the blob's own decl lines --
+    // selectFile is what refreshes both that and the view.
+    if (state.view !== 'diff' || state.selected !== f.id) await selectFile(f.id);
+    const rowIdx = state.rows.findIndex((r) => r.new_no === line);
+    if (rowIdx !== -1) {
+      document.getElementById('diff').scrollTop = rowIdx * ROW_HEIGHT;
+      state.focusedAnchor = { path, side: 'new', line };
+      renderVisibleRows();
+      return;
+    }
+  }
+  await openBlob(path, line);
+}
+
+// --- FR-18: read-only file view (navigation targets outside the diff) ----
+// Reuses #diff's own virtualization scaffold (ensureDiffDOM, #diff-spacer/
+// #diff-rows, ROW_HEIGHT/OVERSCAN) so a large file scrolls exactly as
+// smoothly as the diff itself; renderVisibleRows and onDiffClick each branch
+// to this section's own renderer/handler whenever state.view is 'blob'
+// (see their own doc comments). state.declLines doubles as the blob's own
+// decl-line set (its "new" side -- a blob has no old side at all), so
+// declNavButtonHTML keeps working unmodified inside this view too.
+
+// setView records the mode switch and, the moment the diff is first left for
+// a blob, remembers exactly where to come back to (state.lastDiffState) for
+// the breadcrumb's "Back to diff" button -- captured once, not on every
+// further blob-to-blob hop, so backToDiff always returns to where this
+// excursion actually started.
+function setView(view) {
+  if (view === 'blob' && state.view !== 'blob') {
+    const diff = document.getElementById('diff');
+    state.lastDiffState = { fileId: state.selected, scrollTop: diff ? diff.scrollTop : 0 };
+  }
+  state.view = view;
+  document.body.classList.toggle('view-blob', view === 'blob');
+  renderBreadcrumb();
+  updateHistoryButtons();
+}
+
+function renderBreadcrumb() {
+  const el = document.getElementById('blob-breadcrumb');
+  if (!el) return;
+  if (state.view !== 'blob' || !state.blob) {
+    el.hidden = true;
+    return;
+  }
+  el.hidden = false;
+  el.innerHTML = '<span class="breadcrumb-label">Read-only</span>' +
+    `<span class="breadcrumb-path" title="${escapeAttr(state.blob.path)}">${escapeHTML(state.blob.path)}</span>` +
+    '<button type="button" id="blob-back-to-diff" title="Back to diff">← Back to diff</button>';
+}
+
+function onBreadcrumbClick(e) {
+  if (e.target.closest('#blob-back-to-diff')) backToDiff();
+}
+
+// backToDiff is the breadcrumb's own button: a fixed bookmark back to
+// wherever this blob-hopping excursion started, independent of the ◀/▶
+// history stack below (which keeps every intermediate hop, not just the
+// start and end of the trip).
+async function backToDiff() {
+  const last = state.lastDiffState;
+  if (!last || !last.fileId) {
+    setView('diff');
+    return;
+  }
+  // Always re-selects: state.selected never changes while hopping through
+  // blob views (openBlob doesn't touch it), so it almost always already
+  // names last.fileId -- but selectFile is also what refetches
+  // state.declLines, which the blob excursion overwrote with its own file's
+  // decl lines (see restoreViewState's identical reasoning).
+  await selectFile(last.fileId);
+  document.getElementById('diff').scrollTop = last.scrollTop;
+  renderVisibleRows();
+}
+
+// openBlob fetches GET /api/blob and switches to the read-only view,
+// scrolled to focusLine when one of the rows it got back actually has it (a
+// navigation target's own resolved line always does; a bare `g` with no
+// particular line, e.g. restoreViewState's blob case, passes null and lands
+// at the top instead).
+async function openBlob(path, focusLine) {
+  const body = await getJSON(`/api/blob?path=${encodeURIComponent(path)}&rev=new`);
+  state.blob = { path: body.path, language: body.language, rows: body.rows || [], focusLine: focusLine || null };
+  state.declLines = { old: new Set(), new: new Set(body.decl_lines || []) };
+  setView('blob');
+
+  const diff = ensureDiffDOM();
+  const spacer = document.getElementById('diff-spacer');
+  if (spacer) spacer.style.height = `${state.blob.rows.length * ROW_HEIGHT}px`;
+
+  let scrollTop = 0;
+  if (focusLine) {
+    const idx = state.blob.rows.findIndex((r) => r.new_no === focusLine);
+    if (idx !== -1) scrollTop = idx * ROW_HEIGHT;
+  }
+  diff.scrollTop = scrollTop;
+  renderVisibleRows();
+}
+
+// blobRowHTML renders one blob row: a line-number cell and a code cell, the
+// same cellHTML every diff row uses (so the same .cell/.lineno/.code CSS
+// applies), but with no file/hunk/position data attributes -- a blob row
+// anchors no comment and belongs to no hunk, only `g`/decl-nav need its line
+// number, which onBlobClick/declNavButtonHTML read straight from the cell's
+// own data-line.
+function blobRowHTML(row) {
+  const focus = state.blob.focusLine === row.new_no ? ' focused-line' : '';
+  return (
+    cellHTML(`cell lineno${focus}`, '', 'new', row.new_no, '', '', row.new_no || '') +
+    cellHTML(`cell code chroma${focus}`, '', 'new', row.new_no, '', '', declNavButtonHTML('new', row.new_no) + (row.new_html || ''))
+  );
+}
+
+function renderBlobVisibleRows() {
+  const diff = document.getElementById('diff');
+  const rowsEl = document.getElementById('diff-rows');
+  if (!rowsEl || !diff) return;
+  const rows = (state.blob && state.blob.rows) || [];
+  if (!rows.length) {
+    rowsEl.innerHTML = '';
+    return;
+  }
+  const scrollTop = diff.scrollTop;
+  const viewportHeight = diff.clientHeight;
+  const first = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
+  const last = Math.min(rows.length, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN);
+
+  let html = '';
+  for (let i = first; i < last; i++) {
+    html += `<div class="diff-row">${blobRowHTML(rows[i])}</div>`;
+  }
+  rowsEl.innerHTML = html;
+  rowsEl.style.transform = `translateY(${first * ROW_HEIGHT}px)`;
+}
+
+// --- FR-18: back/forward navigation history -------------------------------
+// Every navigateTo hop pushes the view it is leaving onto history.back
+// first, so ◀ (Alt+←) always returns to the exact row and scroll position
+// the hop was made from, however many hops deep; ▶ (Alt+→) then redoes it.
+
+function captureViewState() {
+  const diff = document.getElementById('diff');
+  const scrollTop = diff ? diff.scrollTop : 0;
+  if (state.view === 'blob' && state.blob) {
+    return { view: 'blob', path: state.blob.path, scrollTop };
+  }
+  return { view: 'diff', fileId: state.selected, scrollTop };
+}
+
+async function restoreViewState(snap) {
+  if (snap.view === 'blob') {
+    await openBlob(snap.path, null);
+  } else {
+    // Always re-selects, even if state.selected already names fileId: an
+    // intervening blob hop (openBlob) overwrites state.declLines with the
+    // blob's own decl lines, and selectFile is what refetches the diff
+    // file's -- skipping it when "nothing changed" would leave those stale.
+    await selectFile(snap.fileId);
+  }
+  const diff = document.getElementById('diff');
+  diff.scrollTop = snap.scrollTop;
+  renderVisibleRows();
+}
+
+function pushHistory() {
+  state.history.back.push(captureViewState());
+  state.history.forward = [];
+  updateHistoryButtons();
+}
+
+async function goBack() {
+  if (!state.history.back.length) return;
+  const current = captureViewState();
+  const prev = state.history.back.pop();
+  state.history.forward.push(current);
+  await restoreViewState(prev);
+  updateHistoryButtons();
+}
+
+async function goForward() {
+  if (!state.history.forward.length) return;
+  const current = captureViewState();
+  const next = state.history.forward.pop();
+  state.history.back.push(current);
+  await restoreViewState(next);
+  updateHistoryButtons();
+}
+
+function updateHistoryButtons() {
+  const back = document.getElementById('tb-history-back');
+  const fwd = document.getElementById('tb-history-forward');
+  if (back) back.disabled = state.history.back.length === 0;
+  if (fwd) fwd.disabled = state.history.forward.length === 0;
+}
+
 // ======================== long-line wrap toggle ('w') ========================
 function applyWrapMode() {
   document.body.classList.toggle('wrap-lines', state.wrap);
@@ -1761,16 +2201,30 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' || e.key === '?') toggleHelp();
     return; // swallow every other key while the help overlay is open
   }
+  // FR-18: the call-chain popover is reading context, like the help overlay
+  // -- Escape closes it, every other key is swallowed rather than acting on
+  // whatever diff row happens to be behind it.
+  if (state.callchain.open) {
+    if (e.key === 'Escape') closeCallChain();
+    return;
+  }
 
   if (e.key === '?') { toggleHelp(); return; }
   if (e.key === 'j') moveSelection(1);
   if (e.key === 'k') moveSelection(-1);
-  if (e.key === 'n') jumpHunk(1);
-  if (e.key === 'p') jumpHunk(-1);
-  if (e.key === 'e') toggleExpand(currentHunkId());
-  if (e.key === 'r') toggleCurrentHunk();
-  if (e.key === 'R') toggleCurrentFile();
-  if (e.key === 'c') openComposeForFocused();
+  if (e.key === 'g') { const pos = currentPosition(); if (pos) openCallChain(pos.path, pos.side, pos.line); }
+  if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); goBack(); }
+  if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); goForward(); }
+  // n/p/r/R/e/c all act on "the current hunk" or "the focused line of the
+  // diff", neither of which exists in FR-18's read-only file view.
+  if (state.view === 'diff') {
+    if (e.key === 'n') jumpHunk(1);
+    if (e.key === 'p') jumpHunk(-1);
+    if (e.key === 'e') toggleExpand(currentHunkId());
+    if (e.key === 'r') toggleCurrentHunk();
+    if (e.key === 'R') toggleCurrentFile();
+    if (e.key === 'c') openComposeForFocused();
+  }
   if (e.key === 'w') toggleWrap();
   if (e.key === 'u') toggleDiffLayout();
   if (e.key === '[') toggleFilesCollapsed();
@@ -1800,12 +2254,26 @@ document.addEventListener('keydown', (e) => {
   document.getElementById('order-toggle').addEventListener('click', toggleOrderMode);
   document.getElementById('wrap-toggle').addEventListener('click', toggleWrap);
   document.getElementById('layout-toggle').addEventListener('click', toggleDiffLayout);
+  // FR-18: history + call-chain toolbar buttons.
+  document.getElementById('tb-history-back').addEventListener('click', goBack);
+  document.getElementById('tb-history-forward').addEventListener('click', goForward);
+  document.getElementById('tb-callchain').addEventListener('click', () => {
+    const pos = currentPosition();
+    if (pos) openCallChain(pos.path, pos.side, pos.line);
+  });
 
   // FR-19/FR-21 sidebar panels: one click handler per panel, bound once
   // (funcRadiusHTML/renderTestsPanel replace each panel's content wholesale
   // on every redraw, same reasoning as onCommentsPanelClick above).
   document.getElementById('callers-panel').addEventListener('click', onFlowPanelClick);
   document.getElementById('tests-panel').addEventListener('click', onFlowPanelClick);
+
+  // FR-18: the call-chain popover and the blob view's breadcrumb -- each
+  // rebuilds its own content wholesale on every redraw, same reasoning as
+  // onCommentsPanelClick above.
+  document.getElementById('callchain-overlay').addEventListener('click', onCallChainOverlayClick);
+  document.getElementById('blob-breadcrumb').addEventListener('click', onBreadcrumbClick);
+  updateHistoryButtons();
 
   // Collapsible/resizable panes and the diff layout toggle: see their own
   // "collapsible + resizable panes" / "diff layout toggle" sections above.

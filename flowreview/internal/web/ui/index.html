@@ -28,6 +28,11 @@
     <button id="order-toggle" type="button"></button>
     <button id="wrap-toggle" type="button"></button>
     <button id="layout-toggle" type="button"></button>
+    <!-- FR-18: call-chain explorer -- show callers/callees/implementations
+         of the focused line, and undo/redo every hop the popover makes. -->
+    <button id="tb-callchain" type="button" title="Callers & callees of the focused line (g)">ƒ↗</button>
+    <button id="tb-history-back" type="button" title="Back (Alt+←)">↶</button>
+    <button id="tb-history-forward" type="button" title="Forward (Alt+→)">↷</button>
   </div>
   <button id="help-button" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
 </header>
@@ -39,7 +44,15 @@
   <div id="files-resizer" class="pane-resizer" title="Drag to resize the file list (double-click to reset)">
     <button id="files-toggle" type="button" title="Collapse file list ([)">«</button>
   </div>
-  <main id="diff" aria-label="Diff"></main>
+  <!-- FR-18: #diff-pane wraps the breadcrumb (shown only in the read-only
+       file view, see app.js's renderBreadcrumb) and #diff itself in a flex
+       column, so the breadcrumb takes its own row above the diff without
+       disturbing #app's own grid-column layout -- #diff-pane is the grid
+       item here, #diff is an ordinary flex child inside it. -->
+  <div id="diff-pane">
+    <div id="blob-breadcrumb" hidden></div>
+    <main id="diff" aria-label="Diff"></main>
+  </div>
   <div id="side-resizer" class="pane-resizer" title="Drag to resize the sidebar (double-click to reset)">
     <button id="side-toggle" type="button" title="Collapse sidebar (])">»</button>
   </div>
@@ -94,6 +107,10 @@
   </aside>
 </div>
 <div id="help-overlay" hidden></div>
+<!-- FR-18: callers/callees/implementations of the symbol under the cursor
+     (app.js's renderCallChainPopover), opened by a declaration row's inline
+     button, the toolbar's ƒ↗ button, or the `g` shortcut. -->
+<div id="callchain-overlay" hidden></div>
 <script src="md.js"></script>
 <script src="app.js"></script>
 <script src="summary.js"></script>
