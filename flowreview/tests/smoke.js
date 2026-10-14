@@ -16,7 +16,7 @@
 
 const { chromium } = require('playwright-core');
 const { execFileSync, spawn } = require('child_process');
-const { mkdtempSync, writeFileSync } = require('fs');
+const { mkdtempSync, mkdirSync, writeFileSync } = require('fs');
 const { tmpdir } = require('os');
 const path = require('path');
 
@@ -86,11 +86,13 @@ function buildRepo() {
 }
 
 // serve starts flowreview --no-open against repoDir and resolves once it has
-// printed its URL (the first line on stdout, per FR-5's contract).
-function serve(repoDir, home) {
-  const proc = spawn(BIN, ['--no-open', '--port', '0'], {
+// printed its URL (the first line on stdout, per FR-5's contract). args are
+// prepended before --no-open --port 0 (e.g. ['pr', 'o/r#1'] for FR-11's PR
+// scenario below); extraEnv is merged in on top of FLOWREVIEW_HOME.
+function serve(repoDir, home, args = [], extraEnv = {}) {
+  const proc = spawn(BIN, [...args, '--no-open', '--port', '0'], {
     cwd: repoDir,
-    env: { ...process.env, FLOWREVIEW_HOME: home },
+    env: { ...process.env, FLOWREVIEW_HOME: home, ...extraEnv },
   });
   return new Promise((resolve, reject) => {
     let buf = '';
@@ -134,7 +136,7 @@ async function waitForCondition(fn, timeoutMs = 2000, intervalMs = 25) {
   }
 }
 
-(async () => {
+async function runWorktreeSmoke() {
   const repoDir = buildRepo();
   const home = mkdtempSync(path.join(tmpdir(), 'flowreview-home-'));
   // let, not const: the FR-7 process-restart check below replaces both with
@@ -525,7 +527,160 @@ async function waitForCondition(fn, timeoutMs = 2000, intervalMs = 25) {
     await browser.close();
     proc.kill();
   }
+}
 
+// ======================== FR-11: GitHub host publish ========================
+// A second, independent scenario: a fake GitHub HTTP server (plain Node
+// http, not a browser mock -- FLOWREVIEW_GITHUB_API points flowreview's own
+// github client at it) plus a local bare "origin" with refs/pull/1/head,
+// exactly the fixture approach cmd/flowreview/e2e_test.go's newPRFixture
+// uses for the Go-level PR test. This is the part only a real browser can
+// confirm: the "Submit review" panel's Preview/Submit/confirm flow and the
+// published badge it leaves on the comment card.
+
+const http = require('http');
+
+// buildPRFixtureRepo lays out a bare repo under ".../o/r" (so the "origin"
+// URL's last two path segments are literally "o" and "r", which is what
+// flowreview's clone resolution needs to recognize this as o/r without
+// shelling out to `gh`) with one base commit on main and one PR commit
+// pushed to refs/pull/1/head -- a one-line edit to a.txt, so the PR has
+// exactly one file and one hunk to comment on.
+function buildPRFixtureRepo() {
+  const root = mkdtempSync(path.join(tmpdir(), 'flowreview-pr-smoke-'));
+  const bareDir = path.join(root, 'o', 'r');
+  mkdirSync(bareDir, { recursive: true });
+  git(bareDir, {}, 'init', '-q', '--bare', '-b', 'main', '.');
+
+  const dir = mkdtempSync(path.join(tmpdir(), 'flowreview-pr-smoke-work-'));
+  const env = {
+    GIT_AUTHOR_NAME: 'Smoke', GIT_AUTHOR_EMAIL: 'smoke@example.com',
+    GIT_COMMITTER_NAME: 'Smoke', GIT_COMMITTER_EMAIL: 'smoke@example.com',
+  };
+  git(dir, env, 'init', '-q', '-b', 'main', '.');
+  git(dir, env, 'config', 'user.name', 'Smoke');
+  git(dir, env, 'config', 'user.email', 'smoke@example.com');
+  git(dir, env, 'remote', 'add', 'origin', 'file://' + bareDir);
+
+  writeFileSync(path.join(dir, 'a.txt'), 'line one\nline two\n');
+  git(dir, env, 'add', 'a.txt');
+  git(dir, { ...env, GIT_AUTHOR_DATE: '2021-01-01T00:00:00Z', GIT_COMMITTER_DATE: '2021-01-01T00:00:00Z' },
+    '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'root: add a.txt');
+  git(dir, env, 'push', '-q', 'origin', 'main');
+  const baseSHA = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir }).toString().trim();
+
+  git(dir, env, 'checkout', '-q', '-b', 'pr-branch');
+  writeFileSync(path.join(dir, 'a.txt'), 'line one\nline TWO\n');
+  git(dir, env, 'add', 'a.txt');
+  git(dir, { ...env, GIT_AUTHOR_DATE: '2021-01-01T00:01:00Z', GIT_COMMITTER_DATE: '2021-01-01T00:01:00Z' },
+    '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'pr: edit a.txt');
+  git(dir, env, 'push', '-q', 'origin', 'pr-branch:refs/pull/1/head');
+  const headSHA = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir }).toString().trim();
+  git(dir, env, 'checkout', '-q', 'main');
+
+  const diffText = execFileSync('git', ['diff', baseSHA, headSHA], { cwd: dir }).toString();
+  return { dir, baseSHA, headSHA, diffText };
+}
+
+// startFakeGitHub answers exactly the requests flowreview's github client
+// makes while opening this PR and then submitting a review for it: the PR
+// resource (as JSON, or as the v3 diff when Accept asks for it), its two
+// comment-list endpoints (empty -- nothing to reconcile against), and
+// POST .../reviews, which always succeeds here (the 422-fallback path is
+// already covered by the recorded-HTTP Go tests in internal/host/github).
+function startFakeGitHub(prJSON, diffText) {
+  const server = http.createServer((req, res) => {
+    if (req.url === '/repos/o/r/pulls/1' && req.method === 'GET') {
+      if (req.headers.accept === 'application/vnd.github.v3.diff') {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end(diffText);
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(prJSON));
+      }
+      return;
+    }
+    if ((req.url.startsWith('/repos/o/r/pulls/1/comments') || req.url.startsWith('/repos/o/r/issues/1/comments')) && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('[]');
+      return;
+    }
+    if (req.url === '/repos/o/r/pulls/1/reviews' && req.method === 'POST') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ id: 555, html_url: 'https://github.example/o/r/pull/1#pullrequestreview-555' }));
+      return;
+    }
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ message: 'not found in fake GitHub: ' + req.method + ' ' + req.url }));
+  });
+  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)));
+}
+
+async function runPRPublishSmoke() {
+  const { dir, baseSHA, headSHA, diffText } = buildPRFixtureRepo();
+  const prJSON = {
+    number: 1, title: 'Smoke PR title', body: '', state: 'open', merged: false, draft: false,
+    html_url: 'https://github.example/o/r/pull/1',
+    user: { login: 'smoke' },
+    base: { ref: 'main', sha: baseSHA },
+    head: { ref: 'pr-branch', sha: headSHA, repo: { clone_url: 'https://github.example/o/r.git' } },
+  };
+  const fakeGitHub = await startFakeGitHub(prJSON, diffText);
+  const home = mkdtempSync(path.join(tmpdir(), 'flowreview-pr-home-'));
+  const { proc, url } = await serve(dir, home, ['pr', 'o/r#1'], {
+    FLOWREVIEW_GITHUB_API: `http://127.0.0.1:${fakeGitHub.address().port}`,
+    GITHUB_TOKEN: 'smoke-test-token',
+  });
+
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
+  try {
+    await page.goto(url);
+    await page.waitForSelector('.file-row');
+
+    /* draft -- an inline comment on a.txt's one changed line */
+    await page.locator('.file-row', { hasText: 'a.txt' }).click();
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    await page.locator('#diff-rows [data-side="new"][data-line="2"].lineno').click();
+    await page.waitForSelector('#comment-new textarea');
+    await page.fill('#comment-new textarea', 'needs a look before merge');
+    await page.click('#comment-new [data-action="save"]');
+    await page.waitForSelector('#comment-list .comment-card');
+
+    /* preview -- the panel is visible (PR session) and reports the draft */
+    const panelVisible = await page.isVisible('#publish-panel');
+    check('FR-11: the submit-review panel is shown for a PR session', panelVisible);
+    await page.click('#publish-preview');
+    await page.waitForFunction(() => document.getElementById('publish-preflight').textContent.trim() !== '');
+    const preflightText = await page.textContent('#publish-preflight');
+    check('FR-11: preview reports exactly one inline comment, no general, none excluded',
+      /1 inline, 0 general/.test(preflightText), preflightText);
+
+    /* submit -- with its own confirm step before anything is sent */
+    await page.fill('#publish-body', 'Looks good overall.');
+    await page.click('#publish-submit');
+    await page.waitForSelector('#publish-confirm:not([hidden])');
+    const confirmText = await page.textContent('#publish-confirm-summary');
+    check('FR-11: the confirm step summarizes what will be submitted',
+      /1 inline and 0 general/.test(confirmText), confirmText);
+    await page.click('#publish-confirm-yes');
+
+    /* badge shows published */
+    await page.waitForSelector('#comment-list .comment-card.published', { timeout: 5000 });
+    const badgeText = await page.textContent('#comment-list .comment-card .publish-badge.published');
+    check('FR-11 accept: submitting marks the draft published', /Published/.test(badgeText), badgeText);
+    const stillEditable = await page.locator('#comment-list .comment-card.published [data-action="edit"]').count();
+    check('FR-11: a published comment renders read-only (no Edit button)', stillEditable === 0, String(stillEditable));
+  } finally {
+    await browser.close();
+    proc.kill();
+    fakeGitHub.close();
+  }
+}
+
+(async () => {
+  await runWorktreeSmoke();
+  await runPRPublishSmoke();
   console.log(failures ? `\n${failures} failure(s)` : '\nall checks passed');
   process.exit(failures ? 1 : 0);
 })().catch((err) => {

@@ -403,3 +403,63 @@ mark.x-del { background: var(--mark-del-bg); }
 /* While picking a new line for a stale comment, every line in the open file
    invites a click. */
 .cell.lineno { cursor: pointer; }
+
+/* ======================== FR-11: GitHub host publish ======================== */
+
+#publish-panel { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
+#publish-panel h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+#publish-body {
+  width: 100%;
+  min-height: 48px;
+  font: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+#publish-event {
+  width: 100%;
+  margin-top: 6px;
+  font: inherit;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+}
+#publish-panel .actions { display: flex; gap: 6px; margin-top: 6px; }
+#publish-panel .actions button {
+  font: inherit;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--fg);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+#publish-panel .actions button:hover { background: var(--hover); }
+#publish-preflight { font-size: 12px; color: var(--muted); margin-top: 6px; }
+#publish-preflight ul { margin: 4px 0 0; padding-left: 16px; }
+#publish-confirm {
+  margin-top: 6px;
+  padding: 6px;
+  border: 1px dashed var(--accent);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.publish-badge { font-size: 11px; margin: 4px 0; }
+.publish-badge.published { color: var(--added-fg); }
+.publish-badge.failed { color: var(--removed-fg); }
+.publish-badge button { font: inherit; margin-left: 4px; }
+
+.comment-card.published { border-color: var(--added-fg); }

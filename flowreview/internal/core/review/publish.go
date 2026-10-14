@@ -75,7 +75,15 @@ func (w *Workspace) Preflight(ctx context.Context, draftIDs []string) (*PublishP
 
 	sess, _, _ := w.Snapshot()
 	want := draftIDSet(draftIDs)
-	plan := &PublishPlan{HeadSHA: sess.Source.HeadSHA}
+	// Non-nil, not just non-empty: encoding/json renders a nil slice as JSON
+	// null, and the UI (and these JSON fields' own doc comments) expect an
+	// always-present array, same as handleRemoteComments does.
+	plan := &PublishPlan{
+		HeadSHA:  sess.Source.HeadSHA,
+		Inline:   []model.CommentDraft{},
+		General:  []model.CommentDraft{},
+		Excluded: []ExcludedDraft{},
+	}
 	for _, c := range sess.Comments {
 		if !eligibleToPublish(c, want) {
 			continue
@@ -155,7 +163,7 @@ func (w *Workspace) Publish(ctx context.Context, ev host.ReviewEvent, body strin
 	}
 	ref := *sess.Source.PR
 
-	out := &PublishResult{Excluded: plan.Excluded}
+	out := &PublishResult{Excluded: plan.Excluded, Results: []host.CommentResult{}}
 	if isRetry(plan) {
 		if PublishComment == nil {
 			return nil, errHostNotWired

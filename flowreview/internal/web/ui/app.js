@@ -33,6 +33,13 @@ const state = {
   focusedAnchor: null, // the last code-cell click, target of the `c` shortcut
   composing: null, // {id: string|null, anchor: Anchor|null, body: string} -- the one open compose card, or null
   reanchorCommentId: null, // set while picking a new line for a stale comment
+
+  // FR-11
+  source: null, // SessionView.source, so the publish panel knows this is a PR session
+  publish: {
+    plan: null, // last PublishPreflight response (inline/general/excluded/head_sha), or null
+    confirming: false, // true once Submit has been clicked, before the user confirms
+  },
 };
 
 // expandedHunks tracks FR-8's "expand enclosing function": hunk_id -> the
@@ -437,8 +444,10 @@ async function selectFile(id) {
 function applySessionView(sess) {
   state.hunkStates = sess.hunk_states || {};
   state.comments = sess.comments || [];
+  state.source = sess.source;
   renderSessionSummary(sess);
   renderComments();
+  renderPublishPanel();
   renderVisibleRows();
 }
 
@@ -754,22 +763,43 @@ function composeFormHTML(id, body) {
     </div>`;
 }
 
+// FR-11: publishStatusHTML renders the small badge a draft carries once a
+// publish attempt has recorded an outcome on it -- a link to the comment on
+// the host when it published, or the error plus a one-click Retry (which
+// resubmits just this draft, see retryDraft) when it failed. Both read
+// straight off the model.CommentDraft fields handleUpsertComment never
+// touches and Publish's applyPublishResults is the only thing that sets.
+function publishStatusHTML(c) {
+  if (c.status === 'published') {
+    return `<div class="publish-badge published">Published ✓${c.remote_url ? ` <a href="${escapeAttr(c.remote_url)}" target="_blank" rel="noopener">view</a>` : ''}</div>`;
+  }
+  if (c.status === 'failed') {
+    return `<div class="publish-badge failed">Failed to publish: ${escapeHTML(c.error || '')} <button type="button" data-action="retry" data-id="${escapeAttr(c.id)}">Retry</button></div>`;
+  }
+  return '';
+}
+
 function commentCardHTML(c) {
   const stale = c.status === 'stale';
+  const published = c.status === 'published';
   const reanchoring = state.reanchorCommentId === c.id;
   const composingHere = !!(state.composing && state.composing.id === c.id);
-  const body = composingHere ? composeFormHTML(c.id, state.composing.body) : `<div class="body-view">${md(c.body)}</div>`;
+  // Published drafts render read-only -- re-opening a compose card on
+  // something already sent to the host would invite an edit nothing resends.
+  const body = composingHere && !published ? composeFormHTML(c.id, state.composing.body) : `<div class="body-view">${md(c.body)}</div>`;
   return `
-    <div class="comment-card${stale ? ' stale' : ''}${reanchoring ? ' reanchoring' : ''}" id="comment-${escapeAttr(c.id)}">
+    <div class="comment-card${stale ? ' stale' : ''}${published ? ' published' : ''}${reanchoring ? ' reanchoring' : ''}" id="comment-${escapeAttr(c.id)}">
       <div class="meta"><span>${commentMeta(c)}</span>${c.publishable === false ? '<span title="not on a diff line; cannot be published">local only</span>' : ''}</div>
       ${stale ? `<div class="stale-warning">This line changed since you drafted this comment.${reanchoring ? ' Click a line in the diff to re-anchor.' : ''}</div>` : ''}
+      ${publishStatusHTML(c)}
       ${body}
+      ${published ? '' : `
       <div class="actions">
         ${composingHere ? '' : `<button type="button" data-action="edit" data-id="${escapeAttr(c.id)}">Edit</button>`}
         ${stale && c.anchor && !reanchoring ? `<button type="button" data-action="reanchor" data-id="${escapeAttr(c.id)}">Re-anchor</button>` : ''}
         ${reanchoring ? '<button type="button" data-action="cancel-reanchor">Cancel re-anchor</button>' : ''}
         <button type="button" data-action="delete" data-id="${escapeAttr(c.id)}">Delete</button>
-      </div>
+      </div>`}
     </div>`;
 }
 
@@ -820,6 +850,8 @@ function onCommentsPanelClick(e) {
     const card = btn.closest('.comment-card');
     const ta = card.querySelector('textarea[data-draft-body]');
     saveCompose(id || null, state.composing.anchor, ta.value);
+  } else if (action === 'retry') {
+    retryDraft(id);
   }
 }
 
@@ -833,6 +865,72 @@ function onCommentsPanelInput(e) {
   if (preview && preview.classList.contains('preview')) {
     preview.innerHTML = e.target.value.trim() ? md(e.target.value) : '<em>preview</em>';
   }
+}
+
+// ======================== FR-11: GitHub host publish ========================
+// "Submit review" lives in its own panel below the comment list, visible only
+// for a PR session (state.source.kind === 'pr' -- set by applySessionView).
+// Preview and Submit both call POST /api/publish/preflight, which re-fetches
+// the PR's current diff and classifies every eligible draft (inline, general,
+// or excluded as stale); Submit additionally shows a confirm step built from
+// that same plan before actually calling POST /api/publish. Per-draft
+// outcomes come back on the comments themselves (status/error/remote_url,
+// see publishStatusHTML) through the refreshSession() that follows.
+
+function renderPublishPanel() {
+  const panel = document.getElementById('publish-panel');
+  const isPR = !!(state.source && state.source.kind === 'pr');
+  panel.hidden = !isPR;
+  if (!isPR) return;
+
+  const pf = document.getElementById('publish-preflight');
+  const plan = state.publish.plan;
+  pf.innerHTML = plan
+    ? `<p>${plan.inline.length} inline, ${plan.general.length} general${plan.excluded.length ? `, ${plan.excluded.length} excluded` : ''}</p>` +
+      (plan.excluded.length ? `<ul>${plan.excluded.map((x) => `<li>${escapeHTML(x.reason)}</li>`).join('')}</ul>` : '')
+    : '';
+
+  const confirm = document.getElementById('publish-confirm');
+  confirm.hidden = !state.publish.confirming;
+  if (state.publish.confirming && plan) {
+    const event = document.getElementById('publish-event').value;
+    document.getElementById('publish-confirm-summary').textContent =
+      `Submit ${plan.inline.length} inline and ${plan.general.length} general comment(s) as ${event.toLowerCase()}?`;
+  }
+}
+
+async function previewPublish() {
+  state.publish.plan = await postJSON('/api/publish/preflight', { draft_ids: [] });
+  renderPublishPanel();
+}
+
+async function startSubmitConfirm() {
+  state.publish.plan = await postJSON('/api/publish/preflight', { draft_ids: [] });
+  state.publish.confirming = true;
+  renderPublishPanel();
+}
+
+function cancelSubmitConfirm() {
+  state.publish.confirming = false;
+  renderPublishPanel();
+}
+
+async function confirmSubmit() {
+  const event = document.getElementById('publish-event').value;
+  const body = document.getElementById('publish-body').value;
+  await postJSON('/api/publish', { event, body, draft_ids: [] });
+  state.publish.confirming = false;
+  state.publish.plan = null;
+  await refreshSession();
+}
+
+// retryDraft re-submits exactly one previously-failed draft: the server
+// recognizes a request scoped to a single already-failed, anchored draft as a
+// retry and publishes it alone (no new review object), see
+// review.Workspace.Publish's isRetry.
+async function retryDraft(id) {
+  await postJSON('/api/publish', { event: 'COMMENT', body: '', draft_ids: [id] });
+  await refreshSession();
 }
 
 document.addEventListener('keydown', (e) => {
@@ -864,6 +962,10 @@ document.addEventListener('keydown', (e) => {
   document.getElementById('add-general-comment').addEventListener('click', startGeneralComment);
   document.getElementById('comments-panel').addEventListener('click', onCommentsPanelClick);
   document.getElementById('comments-panel').addEventListener('input', onCommentsPanelInput);
+  document.getElementById('publish-preview').addEventListener('click', previewPublish);
+  document.getElementById('publish-submit').addEventListener('click', startSubmitConfirm);
+  document.getElementById('publish-confirm-yes').addEventListener('click', confirmSubmit);
+  document.getElementById('publish-confirm-no').addEventListener('click', cancelSubmitConfirm);
 
   await refreshSession();
   await loadFiles();
