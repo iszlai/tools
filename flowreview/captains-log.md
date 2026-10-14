@@ -158,3 +158,8 @@ Why things are the way they are. Append-only; written with `th log add`.
 
 **Context.** The user asked (via the layout agent) for a button on function/method lines to jump to callers and callees. The FR-18 trim had shipped only the sidebar panel for changed functions.
 **Decision.** One Sonnet agent builds the rest of FR-18: inline ⇅ button on declaration lines, popover with callers/callees/implementations for any visible function (Go precise, other languages tree-sitter heuristic), read-only file view for targets outside the diff, back/forward history. Reuse the cached Go analysis instead of a third package load.
+
+## 2026-10-14 — FR-18: Go analysis: repo-relative paths for nested modules, build tags from changed files
+
+**Found while checking FR-18 by hand.** The call-chain popover showed nothing on this repo: the Go module is flowreview/ inside tools/, and golang.relPath made paths module-relative while the diff is repo-relative, so nothing matched (flow order, radius, tests and symbol all fell back silently; the smoke fixture has go.mod at its root, so no test caught it). On toknapp/fx (go.mod at root) the SetupSuite hunk had no analysis because cucumber_test.go is behind //go:build cucumber_test.
+**Decision.** Loader takes the repo root and picks the module holding most changed files (a multi-module diff only analyzes one; noted, not solved); Result.Root keeps paths repo-relative. Positive non-platform //go:build tags of the changed files go to go list and packages.Load. Call-chain targets outside the repo are dropped.
