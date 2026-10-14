@@ -274,14 +274,14 @@ issues:
     - id: FR-25
       title: Sidecar embedding and lifecycle (llama-server)
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: doing
+      status: done
       priority: high
       blocked_by:
         - FR-1
       labels:
         - M3
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:57:04Z
+      updated_at: 2026-10-14T08:25:13Z
     - id: FR-26
       title: Model manager
       description: See PLAN.md §5 for scope, acceptance criteria and size.
@@ -444,13 +444,13 @@ issues:
     - id: FR-40
       title: Gherkin step linking
       description: See PLAN.md §5 FR-40.
-      status: todo
+      status: doing
       blocked_by:
         - FR-39
       labels:
         - M2
       created_at: 2026-10-14T07:47:55Z
-      updated_at: 2026-10-14T07:47:55Z
+      updated_at: 2026-10-14T08:25:01Z
     - id: FR-41
       title: Java and JS/TS structural flow
       description: See PLAN.md §5 FR-41.

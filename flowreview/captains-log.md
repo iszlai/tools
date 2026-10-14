@@ -35,3 +35,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-39 merged; SQL grammar dropped, Gherkin hand-parsed
 
 **Decision (agent, accepted).** No Go-bindable tree-sitter SQL grammar ships its generated parser.c (DerekStride lacks it; m-novikov has no Go binding), so SQL is out of the structural tier for now; re-adding is one grammar entry + a query file. Gherkin has no Go binding either and uses a small hand-written line parser (Feature/Background/Rule/Scenario + steps). Added SymFeature/SymBackground/SymRule to model (additive). Closures get position-based ids and are omitted from Outline.
+
+## 2026-10-14 — FR-25 merged; llama.cpp b11609 pinned
+
+**Decision (agent, accepted).** Pinned llama.cpp release b11609 (macOS arm64 tar.gz; sha256 committed in third_party/llama/SHA256SUMS). `make fetch-llama` copies the 11 files llama-server needs (otool closure, symlinks dereferenced) into the gitignored dist/; `make build` adds `-tags llama_embed` when dist/ exists, otherwise builds use the stub provider. CompleteJSON uses `response_format: json_schema`, retrying once with the bare `json_schema` field if the server rejects it. Verified end to end with SmolLM2-135M (20 tokens in 75 ms).
