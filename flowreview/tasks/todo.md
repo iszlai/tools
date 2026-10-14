@@ -22,7 +22,7 @@ Full plan: `../PLAN.md`. Board: `th next` in this folder (`.taskhound.yaml`, pre
 - [ ] Dogfood gate: review one real PR with the tool
 
 ## M2 — flow and risk
-- [ ] FR-32 On-demand Go toolchain download
+- [x] FR-32 On-demand Go toolchain download
 - [ ] FR-13 Go package loader with cache (spike on ledger first)
 - [ ] FR-14 Symbols and definitions
 - [ ] FR-15 Call graph: callers, callees, implementations

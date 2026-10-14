@@ -352,13 +352,13 @@ issues:
     - id: FR-32
       title: On-demand Go toolchain download
       description: 'See PLAN.md §5. Replaces the dropped Claude CLI provider (decision 2026-10-14: embedded model only in M4).'
-      status: doing
+      status: done
       blocked_by:
         - FR-1
       labels:
         - M2
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:57:04Z
+      updated_at: 2026-10-14T08:07:17Z
       comments:
         - at: 2026-10-14T07:47:55Z
           author: lehel

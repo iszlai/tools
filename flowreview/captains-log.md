@@ -23,3 +23,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 
 **Decision (agent, accepted).** `Refresh` marks a vanished reviewed hunk `needs-re-review` when its file still has any hunk, else `stale`. A path-level proxy for "overlapping location": ReviewState has no line range. FR-22 must refine this (match by location/body similarity) — noted on FR-22.
 **Session ids** derive from the source identity (`pr-owner-repo-N`, `range-<hash>`, `worktree`) and `FindBySource` ignores SHAs, so reopening an updated PR resumes the same session.
+
+## 2026-10-14 — FR-32 merged; x/mod pinned to stay on go 1.25
+
+**Decision (agent, accepted).** `golang.org/x/mod` pinned at v0.28.0 because latest requires go 1.26 and would bump the module's go directive. Scratch files under the toolchain root are dot-prefixed so `List` can ignore them. `flowreview toolchain list|rm` CLI wiring deferred to the CLI slice.
