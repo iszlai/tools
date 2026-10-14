@@ -61,21 +61,37 @@ body {
   /* grid-template-columns is owned by app.js's applyPaneLayout from here on
      (collapsible + resizable file list/sidebar, persisted in localStorage)
      -- this is just the pre-JS initial layout. files-resizer/side-resizer
-     are permanent 6px tracks: unlike #files/#side themselves, they are never
-     collapsed, so a pane's own toggle button stays reachable even at 0
-     width (see index.html's own comment on them). */
-  grid-template-columns: 230px 6px 1fr 6px 240px;
+     are permanent 18px tracks (app.js's PANES_RESIZER_W): unlike #files/#side
+     themselves, they are never collapsed, so a pane's own toggle button
+     stays reachable even at 0 width (see index.html's own comment on them).
+     18px, not a thinner hit area: the embedded 16px button is centered in
+     this track via `left: 50%; transform: translateX(-50%)` -- any narrower
+     and the button would overflow the track into the page's own edge when
+     the pane it belongs to is the first/last grid column, which breaks
+     click hit-testing there (nothing to do with this app's own CSS -- the
+     browser only renders a half-offscreen element, it does not reflow). */
+  grid-template-columns: 230px 18px 1fr 18px 240px;
   flex: 1;
   min-height: 0;
 }
 
 #files, #side {
   overflow-y: auto;
+  overflow-x: hidden; /* collapsing shrinks the grid track to 0, not display:none (see app.js's applyPaneLayout) -- clip, don't let content spill into the diff pane */
   padding: 8px;
 }
 
 #files { border-right: 1px solid var(--border); }
 #side { border-left: 1px solid var(--border); }
+
+/* A collapsed pane's grid track is 0 width, but `* { box-sizing: border-box }`
+   alone can't shrink padding/border below their own declared size -- an
+   0px-wide box with 8px padding + 1px border still paints 17px wide. Zero
+   both here, only while collapsed, so the pane truly disappears. */
+#files.pane-collapsed, #side.pane-collapsed {
+  padding: 0;
+  border: none;
+}
 
 /* ======================== collapsible + resizable panes ======================== */
 /* Drag handle between two panes: a thin hit area (col-resize cursor is the
@@ -117,9 +133,10 @@ body {
   line-height: 1;
   border: 1px solid var(--border);
   border-radius: 50%;
-  background: var(--bg);
+  background: var(--header-bg); /* a shade off var(--bg) -- stays visible when the pane it belongs to is collapsed to 0 width, same page background behind it */
   color: var(--fg);
   cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); /* same convention as .help-card/.fr-summary-popover-card's own shadows */
 }
 .pane-resizer button:hover { background: var(--hover); }
 

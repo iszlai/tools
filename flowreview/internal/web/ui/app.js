@@ -92,6 +92,7 @@ const PANES_MIN_W = 160;
 const PANES_MAX_W = 480;
 const PANES_DEFAULT_FILES_W = 230; // matches the pre-JS grid-template-columns in styles.css
 const PANES_DEFAULT_SIDE_W = 240;
+const PANES_RESIZER_W = 18; // px; must match styles.css's own 18px tracks and comment on why
 const DIFF_FRAC_MIN = 0.15;
 const DIFF_FRAC_MAX = 0.85;
 const DIFF_FRAC_DEFAULT = 0.5;
@@ -116,9 +117,10 @@ const panes = {
 
 // ======================== collapsible + resizable panes ========================
 // #app's grid-template-columns is owned entirely from here once init() runs
-// applyPaneLayout once: files-resizer/side-resizer are permanent 6px tracks
-// (see styles.css) that keep each pane's collapse/expand button reachable
-// even at 0 width. The diff's own old/new split is a CSS custom property
+// applyPaneLayout once: files-resizer/side-resizer are permanent
+// PANES_RESIZER_W tracks (see styles.css) that keep each pane's
+// collapse/expand button reachable even at 0 width. The diff's own old/new
+// split is a CSS custom property
 // (--diff-old-frac, a plain 0..1 number) that #diff-rows' grid-template and
 // #diff-split-resizer's own position both read, so dragging never has to
 // keep two things in sync by hand.
@@ -150,13 +152,20 @@ function makeDraggable(handleEl, startDrag) {
 
 // applyPaneLayout redraws everything panes.* controls: the grid itself, each
 // pane's visibility, and its toggle button's glyph/tooltip (always both
-// state and the key it mirrors, per this file's own convention).
+// state and the key it mirrors, per this file's own convention). Collapsing
+// shrinks a pane's own grid track to 0 width -- it deliberately does NOT set
+// `display: none` on #files/#side: that would remove the element from
+// Grid's item list entirely, shifting every later sibling (files-resizer,
+// #diff, side-resizer, the other pane) one track to the left/right and
+// wrecking the whole layout. The `pane-collapsed` class (styles.css) zeroes
+// the pane's own padding/border too -- box-sizing: border-box alone cannot
+// shrink a 0-width box below its padding+border's own declared size.
 function applyPaneLayout() {
   const filesW = panes.filesCollapsed ? '0px' : `${panes.filesWidth}px`;
   const sideW = panes.sideCollapsed ? '0px' : `${panes.sideWidth}px`;
-  document.getElementById('app').style.gridTemplateColumns = `${filesW} 6px 1fr 6px ${sideW}`;
-  document.getElementById('files').style.display = panes.filesCollapsed ? 'none' : '';
-  document.getElementById('side').style.display = panes.sideCollapsed ? 'none' : '';
+  document.getElementById('app').style.gridTemplateColumns = `${filesW} ${PANES_RESIZER_W}px 1fr ${PANES_RESIZER_W}px ${sideW}`;
+  document.getElementById('files').classList.toggle('pane-collapsed', panes.filesCollapsed);
+  document.getElementById('side').classList.toggle('pane-collapsed', panes.sideCollapsed);
 
   const filesBtn = document.getElementById('files-toggle');
   filesBtn.textContent = panes.filesCollapsed ? '»' : '«';
