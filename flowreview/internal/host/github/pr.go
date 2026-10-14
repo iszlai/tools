@@ -8,9 +8,9 @@ import (
 	"github.com/iszlai/tools/flowreview/internal/model"
 )
 
-// Capabilities reports this client as read-capable only until FR-11 lands.
+// Capabilities reports this client as both read- and publish-capable.
 func (c *Client) Capabilities() host.Capabilities {
-	return host.Capabilities{Name: "github", Read: true, Publish: false}
+	return host.Capabilities{Name: "github", Read: true, Publish: true}
 }
 
 // prResponse is the subset of GitHub's pull request object this client uses.

@@ -29,6 +29,29 @@
       <h3>Comments</h3>
       <button id="add-general-comment" type="button">+ General comment</button>
       <div id="comment-list"></div>
+      <!-- FR-11: submit the session's own drafts as a GitHub review. Only
+           shown for a PR session (toggled in app.js's renderPublishPanel). -->
+      <div id="publish-panel" hidden>
+        <h3>Submit review</h3>
+        <textarea id="publish-body" placeholder="Review summary (optional)"></textarea>
+        <select id="publish-event">
+          <option value="COMMENT">Comment</option>
+          <option value="APPROVE">Approve</option>
+          <option value="REQUEST_CHANGES">Request changes</option>
+        </select>
+        <div class="actions">
+          <button id="publish-preview" type="button">Preview</button>
+          <button id="publish-submit" type="button">Submit</button>
+        </div>
+        <div id="publish-preflight"></div>
+        <div id="publish-confirm" hidden>
+          <p id="publish-confirm-summary"></p>
+          <div class="actions">
+            <button id="publish-confirm-yes" type="button">Yes, submit</button>
+            <button id="publish-confirm-no" type="button">Cancel</button>
+          </div>
+        </div>
+      </div>
       <h3>Outdated remote comments</h3>
       <div id="remote-comment-list"></div>
     </div>

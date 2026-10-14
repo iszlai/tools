@@ -1,8 +1,23 @@
 # internal/host/github
 
-GitHub implementation of `internal/host.Host` (FR-10 read; FR-11 publish is
-stubbed — `SubmitReview` and `PublishComment` return an error until that
-slice lands).
+GitHub implementation of `internal/host.Host`: fetching PRs, diffs, comments
+and reviews (FR-10), and submitting a review or a single comment (FR-11,
+`publish.go`).
+
+## Publishing (FR-11)
+
+`SubmitReview` submits a batch as one GitHub review (`COMMENT`, `APPROVE` or
+`REQUEST_CHANGES`) via `POST .../pulls/{n}/reviews`, placing inline comments
+with the new `line`/`side` API (`old` → `LEFT`, `new` → `RIGHT`; the older
+`position` field is not used). GitHub rejects the whole review with 422 if
+any one comment's line no longer resolves against `commit_id`'s diff, with no
+way to tell which from the response, so on 422 this falls back to submitting
+the review body alone and then publishing every comment individually via
+`PublishComment` (`POST .../pulls/{n}/comments`), giving each one its own
+success/failure result. `internal/core/review` runs a preflight (re-fetching
+the PR's current diff and excluding any comment whose anchor no longer maps)
+before ever calling either method, so publishing never silently moves a
+comment to the wrong line.
 
 ## Token resolution
 
