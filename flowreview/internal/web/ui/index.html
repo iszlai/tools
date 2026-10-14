@@ -27,12 +27,22 @@
     <button id="tb-file-reviewed" type="button" title="Toggle whole file reviewed (R)">✓ File</button>
     <button id="order-toggle" type="button"></button>
     <button id="wrap-toggle" type="button"></button>
+    <button id="layout-toggle" type="button"></button>
   </div>
   <button id="help-button" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
 </header>
 <div id="app">
   <nav id="files" aria-label="Changed files"></nav>
+  <!-- Drag to resize the file list; the embedded button collapses/expands it
+       (persisted in localStorage, see app.js's applyPaneLayout) -- a visible
+       control for the pane-edge action, not just a drag gesture. -->
+  <div id="files-resizer" class="pane-resizer" title="Drag to resize the file list (double-click to reset)">
+    <button id="files-toggle" type="button" title="Collapse file list ([)">«</button>
+  </div>
   <main id="diff" aria-label="Diff"></main>
+  <div id="side-resizer" class="pane-resizer" title="Drag to resize the sidebar (double-click to reset)">
+    <button id="side-toggle" type="button" title="Collapse sidebar (])">»</button>
+  </div>
   <aside id="side" aria-label="Session summary and comments">
     <div id="session-summary">Loading…</div>
     <!-- FR-19: blast radius for the focused hunk's changed function(s) --

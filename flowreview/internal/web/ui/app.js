@@ -8,11 +8,21 @@
 // height is rows.length * ROW_HEIGHT (so the browser gives #diff a correctly
 // sized scrollbar), and #diff-rows, a CSS grid holding only the rows
 // currently in or near the viewport, shifted into place with `transform:
-// translateY(...)`. Every row's four cells (old line number, old code, new
-// line number, new code) are grid items of #diff-rows itself -- the row div
-// is `display: contents`, so it contributes no box of its own and every
-// row's cells share one set of column tracks, which keeps columns aligned
-// however small a slice of the file happens to be rendered.
+// translateY(...)`. Every row's cells are grid items of #diff-rows itself --
+// the row div is `display: contents`, so it contributes no box of its own
+// and every row's cells share one set of column tracks, which keeps columns
+// aligned however small a slice of the file happens to be rendered.
+//
+// Side-by-side vs. unified (layout toggle, 'u'): state.sbsRows is always the
+// canonical side-by-side rows the server rendered (what used to be the only
+// `rows`); state.rows is whichever of those -- or, in unified mode,
+// deriveUnifiedRows's reshaping of them -- is actually on screen right now,
+// with state.hunkRows indexing into *that*. Everything that scrolls, jumps
+// hunks, or expands/collapses (currentHunkIndex, jumpHunk, applyRowSplice,
+// etc.) reads/writes state.rows/hunkRows and so works unchanged in either
+// layout; only rowCellsHTML's two renderers (sbsRowCellsHTML,
+// unifiedRowCellsHTML) and deriveUnifiedRows itself know the difference. See
+// rebuildActiveRows, just below expandedHunks.
 
 const ROW_HEIGHT = 20; // px; must match .cell's height in styles.css
 const OVERSCAN = 15; // extra rows rendered above/below the viewport
@@ -21,7 +31,8 @@ const state = {
   files: [],
   selected: null,
   selectedPath: null, // FR-9: path of the selected file, for comment anchors and remote-comment matching
-  rows: [], // render.Row from GET /api/file/{id}/rows, for the selected file
+  sbsRows: [], // render.Row from GET /api/file/{id}/rows, for the selected file -- always side-by-side shape
+  rows: [], // the rows actually rendered right now: sbsRows itself, or deriveUnifiedRows(sbsRows) in unified layout -- see rebuildActiveRows
   hunkRows: [], // indices into `rows` where kind === "hunk", for n/p
 
   // FR-7
@@ -64,7 +75,183 @@ const state = {
   // one horizontal scrollbar (true soft wrap would break the fixed row
   // height virtualization relies on), which pushes the new side off screen.
   wrap: localStorage.getItem('flowreview.wrap') === '1',
+
+  // Diff layout toggle ('u'): 'sbs' (default) is the original two-column
+  // table; 'unified' derives single-column git-diff-style rows from it (see
+  // deriveUnifiedRows). Persisted in localStorage like every other toggle here.
+  layout: localStorage.getItem('flowreview.diffLayout') === 'unified' ? 'unified' : 'sbs',
 };
+
+// panes: collapsible/resizable file list and sidebar widths, and the diff's
+// old/new column split -- all persisted in localStorage, all applied through
+// applyPaneLayout/applyDiffSplit (see the "collapsible + resizable panes"
+// section below). Kept out of `state` itself: nothing here is part of a
+// file's or session's data, it is pure UI chrome that outlives file
+// selection, session reload, everything.
+const PANES_MIN_W = 160;
+const PANES_MAX_W = 480;
+const PANES_DEFAULT_FILES_W = 230; // matches the pre-JS grid-template-columns in styles.css
+const PANES_DEFAULT_SIDE_W = 240;
+const DIFF_FRAC_MIN = 0.15;
+const DIFF_FRAC_MAX = 0.85;
+const DIFF_FRAC_DEFAULT = 0.5;
+
+function loadPx(key, fallback) {
+  const n = Number(localStorage.getItem(key));
+  return Number.isFinite(n) && n >= PANES_MIN_W && n <= PANES_MAX_W ? n : fallback;
+}
+
+function loadFrac(key, fallback) {
+  const n = Number(localStorage.getItem(key));
+  return Number.isFinite(n) && n >= DIFF_FRAC_MIN && n <= DIFF_FRAC_MAX ? n : fallback;
+}
+
+const panes = {
+  filesWidth: loadPx('flowreview.filesWidth', PANES_DEFAULT_FILES_W),
+  sideWidth: loadPx('flowreview.sideWidth', PANES_DEFAULT_SIDE_W),
+  filesCollapsed: localStorage.getItem('flowreview.filesCollapsed') === '1',
+  sideCollapsed: localStorage.getItem('flowreview.sideCollapsed') === '1',
+  diffOldFrac: loadFrac('flowreview.diffOldFrac', DIFF_FRAC_DEFAULT),
+};
+
+// ======================== collapsible + resizable panes ========================
+// #app's grid-template-columns is owned entirely from here once init() runs
+// applyPaneLayout once: files-resizer/side-resizer are permanent 6px tracks
+// (see styles.css) that keep each pane's collapse/expand button reachable
+// even at 0 width. The diff's own old/new split is a CSS custom property
+// (--diff-old-frac, a plain 0..1 number) that #diff-rows' grid-template and
+// #diff-split-resizer's own position both read, so dragging never has to
+// keep two things in sync by hand.
+
+// makeDraggable wires one pointer-drag gesture on handleEl: on pointerdown
+// (primary button, not on an embedded button -- see files-toggle/side-toggle,
+// which must get a plain click instead), startDrag(e) runs once and either
+// returns an onMove(e) callback (drag begins: pointer capture, a `dragging`
+// class for styles.css's hover-brightened line, cleanup on pointerup) or
+// null (nothing to drag right now, e.g. a collapsed pane -- see its callers).
+function makeDraggable(handleEl, startDrag) {
+  handleEl.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    const onMove = startDrag(e);
+    if (!onMove) return;
+    e.preventDefault();
+    handleEl.classList.add('dragging');
+    handleEl.setPointerCapture(e.pointerId);
+    const onUp = () => {
+      handleEl.classList.remove('dragging');
+      handleEl.releasePointerCapture(e.pointerId);
+      handleEl.removeEventListener('pointermove', onMove);
+      handleEl.removeEventListener('pointerup', onUp);
+    };
+    handleEl.addEventListener('pointermove', onMove);
+    handleEl.addEventListener('pointerup', onUp);
+  });
+}
+
+// applyPaneLayout redraws everything panes.* controls: the grid itself, each
+// pane's visibility, and its toggle button's glyph/tooltip (always both
+// state and the key it mirrors, per this file's own convention).
+function applyPaneLayout() {
+  const filesW = panes.filesCollapsed ? '0px' : `${panes.filesWidth}px`;
+  const sideW = panes.sideCollapsed ? '0px' : `${panes.sideWidth}px`;
+  document.getElementById('app').style.gridTemplateColumns = `${filesW} 6px 1fr 6px ${sideW}`;
+  document.getElementById('files').style.display = panes.filesCollapsed ? 'none' : '';
+  document.getElementById('side').style.display = panes.sideCollapsed ? 'none' : '';
+
+  const filesBtn = document.getElementById('files-toggle');
+  filesBtn.textContent = panes.filesCollapsed ? '»' : '«';
+  filesBtn.title = panes.filesCollapsed ? 'Expand file list ([)' : 'Collapse file list ([)';
+
+  const sideBtn = document.getElementById('side-toggle');
+  sideBtn.textContent = panes.sideCollapsed ? '«' : '»';
+  sideBtn.title = panes.sideCollapsed ? 'Expand sidebar (])' : 'Collapse sidebar (])';
+}
+
+function toggleFilesCollapsed() {
+  panes.filesCollapsed = !panes.filesCollapsed;
+  localStorage.setItem('flowreview.filesCollapsed', panes.filesCollapsed ? '1' : '0');
+  applyPaneLayout();
+}
+
+function toggleSideCollapsed() {
+  panes.sideCollapsed = !panes.sideCollapsed;
+  localStorage.setItem('flowreview.sideCollapsed', panes.sideCollapsed ? '1' : '0');
+  applyPaneLayout();
+}
+
+function setupFilesResizer() {
+  const handle = document.getElementById('files-resizer');
+  makeDraggable(handle, () => {
+    if (panes.filesCollapsed) return null; // the button expands it; nothing to drag yet
+    const appLeft = document.getElementById('app').getBoundingClientRect().left;
+    return (e) => {
+      panes.filesWidth = Math.min(PANES_MAX_W, Math.max(PANES_MIN_W, e.clientX - appLeft));
+      localStorage.setItem('flowreview.filesWidth', String(panes.filesWidth));
+      applyPaneLayout();
+    };
+  });
+  handle.addEventListener('dblclick', () => {
+    panes.filesWidth = PANES_DEFAULT_FILES_W;
+    localStorage.setItem('flowreview.filesWidth', String(panes.filesWidth));
+    applyPaneLayout();
+  });
+}
+
+function setupSideResizer() {
+  const handle = document.getElementById('side-resizer');
+  makeDraggable(handle, () => {
+    if (panes.sideCollapsed) return null;
+    const appRight = document.getElementById('app').getBoundingClientRect().right;
+    return (e) => {
+      panes.sideWidth = Math.min(PANES_MAX_W, Math.max(PANES_MIN_W, appRight - e.clientX));
+      localStorage.setItem('flowreview.sideWidth', String(panes.sideWidth));
+      applyPaneLayout();
+    };
+  });
+  handle.addEventListener('dblclick', () => {
+    panes.sideWidth = PANES_DEFAULT_SIDE_W;
+    localStorage.setItem('flowreview.sideWidth', String(panes.sideWidth));
+    applyPaneLayout();
+  });
+}
+
+// applyDiffSplit pushes panes.diffOldFrac onto the document itself (not
+// #diff, which ensureDiffDOM may not have built yet the first time this
+// runs) so both #diff-rows' grid-template-columns and
+// #diff-split-resizer's own position (styles.css) stay in lockstep without
+// either ever recomputing the other.
+function applyDiffSplit() {
+  document.documentElement.style.setProperty('--diff-old-frac', String(panes.diffOldFrac));
+}
+
+// setupDiffSplitResizer wires dragging for the one old/new split handle,
+// created once by ensureDiffDOM alongside #diff-spacer/#diff-rows (see
+// below) -- #diff's content, unlike #files/#side, is otherwise rebuilt
+// wholesale by renderVisibleRows, so this hookup happens where that handle
+// is actually created, not in index.html.
+function setupDiffSplitResizer(handle) {
+  makeDraggable(handle, () => {
+    const rowsEl = document.getElementById('diff-rows');
+    const rect = rowsEl.getBoundingClientRect();
+    // Read the lineno column's already-resolved px width straight off the
+    // live grid rather than re-deriving it from --lineno-w's em value --
+    // one fewer unit conversion to get wrong.
+    const linenoPx = parseFloat(getComputedStyle(rowsEl).gridTemplateColumns.split(' ')[0]) || 0;
+    const innerWidth = rect.width - 2 * linenoPx;
+    if (innerWidth <= 0) return null;
+    return (e) => {
+      const oldPx = Math.min(innerWidth, Math.max(0, e.clientX - rect.left - linenoPx));
+      panes.diffOldFrac = Math.min(DIFF_FRAC_MAX, Math.max(DIFF_FRAC_MIN, oldPx / innerWidth));
+      localStorage.setItem('flowreview.diffOldFrac', String(panes.diffOldFrac));
+      applyDiffSplit();
+    };
+  });
+  handle.addEventListener('dblclick', () => {
+    panes.diffOldFrac = DIFF_FRAC_DEFAULT;
+    localStorage.setItem('flowreview.diffOldFrac', String(panes.diffOldFrac));
+    applyDiffSplit();
+  });
+}
 
 // expandedHunks tracks FR-8's "expand enclosing function": hunk_id -> the
 // exact rows and scroll position to restore on collapse. See the dedicated
@@ -325,14 +512,27 @@ function summaryStripHTML(hunkId) {
   return window.FlowReviewSummary ? window.FlowReviewSummary.stripHTML(hunkId) : '';
 }
 
-function rowCellsHTML(fileId, row, isCurrent) {
+// hunkHeaderHTML renders a hunk header row's single, full-width cell
+// (`grid-column: 1 / -1` in styles.css, so it ignores column count --
+// identical markup whether the grid underneath has side-by-side's four
+// columns or unified's three). Shared by both layouts' row renderers below
+// so the header, its controls and its FR-29 summary strip never drift
+// between them.
+function hunkHeaderHTML(fileId, row, isCurrent) {
   const reviewed = state.hunkStates[row.hunk_id] === 'reviewed';
   const dim = reviewed ? ' hunk-reviewed' : '';
-  if (row.kind === 'hunk') {
-    const cls = 'cell hunk-header' + dim + (isCurrent ? ' current' : '');
-    const controls = reviewToggleButtonHTML(row.hunk_id, reviewed) + commentButtonHTML() + expandButtonHTML(row.hunk_id) + summaryStripHTML(row.hunk_id);
-    return cellHTML(cls, fileId, '', '', row.hunk_id, '', (row.old_html || '') + controls);
-  }
+  const cls = 'cell hunk-header' + dim + (isCurrent ? ' current' : '');
+  const controls = reviewToggleButtonHTML(row.hunk_id, reviewed) + commentButtonHTML() + expandButtonHTML(row.hunk_id) + summaryStripHTML(row.hunk_id);
+  return cellHTML(cls, fileId, '', '', row.hunk_id, '', (row.old_html || '') + controls);
+}
+
+// sbsRowCellsHTML is the original side-by-side row renderer: four cells
+// (old lineno, old code, new lineno, new code) per row, matching
+// render.Row's own shape one for one.
+function sbsRowCellsHTML(fileId, row, isCurrent) {
+  if (row.kind === 'hunk') return hunkHeaderHTML(fileId, row, isCurrent);
+  const reviewed = state.hunkStates[row.hunk_id] === 'reviewed';
+  const dim = reviewed ? ' hunk-reviewed' : '';
   const oldBg = sideBgClass(row.kind, 'old');
   const newBg = sideBgClass(row.kind, 'new');
   const oldFocus = focusedClass('old', row.old_no);
@@ -345,6 +545,90 @@ function rowCellsHTML(fileId, row, isCurrent) {
   );
 }
 
+// unifiedLineBg mirrors sideBgClass for unified's two lineno gutters: a
+// context row's line numbers stay neutral; an add/del row tints its own
+// number bg-add/bg-del and the *other* gutter (which has no line to show)
+// bg-empty, same "no line here" distinction sideBgClass draws.
+function unifiedLineBg(kind, isOldGutter) {
+  if (kind === 'add') return isOldGutter ? 'bg-empty' : 'bg-add';
+  if (kind === 'del') return isOldGutter ? 'bg-del' : 'bg-empty';
+  return '';
+}
+
+// unifiedRowCellsHTML renders one deriveUnifiedRows row: three cells (old
+// lineno, new lineno, one code column) instead of sbsRowCellsHTML's four.
+// The single code cell's own anchor (data-side/data-line/data-position, via
+// cellHTML) is what a click or the `c` shortcut acts on: old for a deleted
+// line, new for an added or context line, matching the side a published
+// comment would need in each case. The two lineno gutters keep their own,
+// independent anchors exactly as side-by-side always has -- clicking the old
+// line number of a context row still opens a comment anchored old, clicking
+// its new number still opens one anchored new.
+function unifiedRowCellsHTML(fileId, row, isCurrent) {
+  if (row.kind === 'hunk') return hunkHeaderHTML(fileId, row, isCurrent);
+  const reviewed = state.hunkStates[row.hunk_id] === 'reviewed';
+  const dim = reviewed ? ' hunk-reviewed' : '';
+  const oldGutterBg = unifiedLineBg(row.kind, true);
+  const newGutterBg = unifiedLineBg(row.kind, false);
+  const oldFocus = focusedClass('old', row.old_no);
+  const newFocus = focusedClass('new', row.new_no);
+
+  const codeSide = row.kind === 'del' ? 'old' : 'new';
+  const codeLine = row.kind === 'del' ? row.old_no : row.new_no;
+  const codePos = row.kind === 'del' ? row.old_position : row.new_position;
+  const codeHTML = row.kind === 'del' ? (row.old_html || '') : (row.new_html || '');
+  const codeBg = row.kind === 'add' ? 'bg-add' : row.kind === 'del' ? 'bg-del' : '';
+  const codeFocus = focusedClass(codeSide, codeLine);
+
+  return (
+    cellHTML(`cell lineno ${oldGutterBg}${dim}${oldFocus}`, fileId, 'old', row.old_no, row.hunk_id, row.old_position, lineGutterInner(row.old_no, 'old')) +
+    cellHTML(`cell lineno ${newGutterBg}${dim}${newFocus}`, fileId, 'new', row.new_no, row.hunk_id, row.new_position, lineGutterInner(row.new_no, 'new')) +
+    cellHTML(`cell code chroma ${codeBg}${dim}${codeFocus}`, fileId, codeSide, codeLine, row.hunk_id, codePos, codeHTML)
+  );
+}
+
+function rowCellsHTML(fileId, row, isCurrent) {
+  return state.layout === 'unified' ? unifiedRowCellsHTML(fileId, row, isCurrent) : sbsRowCellsHTML(fileId, row, isCurrent);
+}
+
+// deriveUnifiedRows reshapes the canonical side-by-side rows into unified,
+// git-diff-style ones: a hunk header or context row passes through
+// unchanged (a context row already carries both line numbers; its single
+// code cell is built from new_html, see unifiedRowCellsHTML), an unpaired
+// add/del row passes through unchanged too, and a "change" row (render.go's
+// own del+add pairing for a same-position edit) splits back into its
+// deletion followed by its addition -- removed above added, like `git diff`
+// -- as two separate unified rows. Every row this returns still occupies
+// exactly one ROW_HEIGHT slot, so virtualization's math never has to change.
+function deriveUnifiedRows(sbsRows) {
+  const out = [];
+  for (const row of sbsRows) {
+    if (row.kind === 'change') {
+      out.push({ kind: 'del', hunk_id: row.hunk_id, old_no: row.old_no, old_html: row.old_html, old_position: row.old_position });
+      out.push({ kind: 'add', hunk_id: row.hunk_id, new_no: row.new_no, new_html: row.new_html, new_position: row.new_position });
+    } else {
+      out.push(row);
+    }
+  }
+  return out;
+}
+
+// rebuildActiveRows recomputes state.rows/hunkRows (and the spacer height)
+// from state.sbsRows for whichever layout is current, then repaints. Called
+// after every change to sbsRows (selectFile's fetch, applyRowSplice's
+// expand/collapse) and after the layout toggle itself -- the one place both
+// kinds of change funnel through, so they can never go out of sync.
+function rebuildActiveRows() {
+  state.rows = state.layout === 'unified' ? deriveUnifiedRows(state.sbsRows) : state.sbsRows;
+  state.hunkRows = [];
+  for (let i = 0; i < state.rows.length; i++) {
+    if (state.rows[i].kind === 'hunk') state.hunkRows.push(i);
+  }
+  const spacer = document.getElementById('diff-spacer');
+  if (spacer) spacer.style.height = `${state.rows.length * ROW_HEIGHT}px`;
+  renderVisibleRows();
+}
+
 // ensureDiffDOM builds #diff's virtualization scaffolding once; selectFile
 // just updates the spacer height and re-renders the visible window on every
 // later call.
@@ -352,12 +636,17 @@ function ensureDiffDOM() {
   const diff = document.getElementById('diff');
   if (!diff.dataset.virtualized) {
     diff.dataset.virtualized = '1';
-    diff.innerHTML = '<div id="diff-spacer"></div><div id="diff-rows"></div>';
+    // diff-split-resizer: the old/new column drag handle (hidden in unified
+    // or wrap-lines mode via styles.css) -- built here, not in index.html,
+    // since this innerHTML assignment would otherwise wipe it out.
+    diff.innerHTML = '<div id="diff-spacer"></div><div id="diff-rows"></div>' +
+      '<div id="diff-split-resizer" title="Drag to resize old/new columns (double-click to reset)"></div>';
     diff.addEventListener('scroll', onDiffScroll, { passive: true });
     // Delegated, not bound per-row: renderVisibleRows replaces #diff-rows's
     // content wholesale on every scroll, which would otherwise tear down a
     // per-button listener as soon as it scrolled out of view once.
     diff.addEventListener('click', onDiffClick);
+    setupDiffSplitResizer(document.getElementById('diff-split-resizer'));
   }
   return diff;
 }
@@ -444,12 +733,13 @@ function jumpHunk(delta) {
 // Expanding a hunk fetches GET /api/file/{id}/expand, which returns the
 // hunk's own rows (identical to what GET .../rows already served -- same
 // HunkID, positions and HTML) with render.ContextRows context spliced in
-// before and after, and replaces the hunk's row range in state.rows with
-// that response. Collapsing puts back the exact rows that were there before
-// expanding, which is why hunkRowRange re-derives the range from hunk_id on
-// every call rather than reusing a stored index: once other hunks above it
-// have themselves been expanded or collapsed, a stored index would point at
-// the wrong row.
+// before and after, and replaces the hunk's row range in state.sbsRows with
+// that response (rebuildActiveRows re-derives state.rows from it right
+// after, whichever layout is current). Collapsing puts back the exact rows
+// that were there before expanding, which is why hunkRowRange re-derives the
+// range from hunk_id on every call rather than reusing a stored index: once
+// other hunks above it have themselves been expanded or collapsed, a stored
+// index would point at the wrong row.
 
 // expandButtonHTML renders the control on a hunk header row's cell. Its
 // label reflects expandedHunks so a collapsed hunk always reads "expand"
@@ -506,34 +796,36 @@ function onHunkButtonClick(e) {
   return false;
 }
 
-// hunkRowRange finds the contiguous run of state.rows carrying hunk_id ===
-// hunkId -- the half-open range applyRowSplice replaces to expand or
-// collapse it. This works unchanged in both states: collapsed, it is just
-// the hunk's header + body rows; expanded, the context rows ContextRows
-// spliced in before and after carry the same hunk_id (see expand.go's
-// handleExpandHunk), so the run also covers them -- in particular, the
-// prepended "before" rows, which come *ahead of* the header row itself, so
-// scanning forward from the header alone would miss them. Returns null when
-// hunkId is not currently in state.rows at all.
+// hunkRowRange finds the contiguous run of state.sbsRows carrying hunk_id
+// === hunkId -- the half-open range applyRowSplice replaces to expand or
+// collapse it. Always against the canonical side-by-side rows, never
+// state.rows: in unified layout state.rows no longer has a stable 1:1
+// correspondence with hunk_id runs (a "change" row there became two rows,
+// del then add -- see deriveUnifiedRows), but the server's expand/collapse
+// data is still side-by-side shaped, so splicing has to happen against the
+// array that shape actually matches; rebuildActiveRows re-derives state.rows
+// afterward either way. This works unchanged in both expansion states:
+// collapsed, it is just the hunk's header + body rows; expanded, the context
+// rows ContextRows spliced in before and after carry the same hunk_id (see
+// expand.go's handleExpandHunk), so the run also covers them -- in
+// particular, the prepended "before" rows, which come *ahead of* the header
+// row itself, so scanning forward from the header alone would miss them.
+// Returns null when hunkId is not currently in state.sbsRows at all.
 function hunkRowRange(hunkId) {
-  const start = state.rows.findIndex((r) => r.hunk_id === hunkId);
+  const start = state.sbsRows.findIndex((r) => r.hunk_id === hunkId);
   if (start === -1) return null;
   let end = start + 1;
-  while (end < state.rows.length && state.rows[end].hunk_id === hunkId) end++;
+  while (end < state.sbsRows.length && state.sbsRows[end].hunk_id === hunkId) end++;
   return [start, end];
 }
 
-// applyRowSplice replaces state.rows[start:end] with newRows, then
-// recomputes everything that depends on row positions: state.hunkRows (n/p),
-// the spacer height and the currently visible window.
+// applyRowSplice replaces state.sbsRows[start:end] with newRows (always
+// side-by-side shaped, straight off the server), then hands off to
+// rebuildActiveRows to re-derive state.rows/hunkRows for whichever layout is
+// current, resize the spacer, and repaint.
 function applyRowSplice(start, end, newRows) {
-  state.rows.splice(start, end - start, ...newRows);
-  state.hunkRows = [];
-  for (let i = 0; i < state.rows.length; i++) {
-    if (state.rows[i].kind === 'hunk') state.hunkRows.push(i);
-  }
-  document.getElementById('diff-spacer').style.height = `${state.rows.length * ROW_HEIGHT}px`;
-  renderVisibleRows();
+  state.sbsRows.splice(start, end - start, ...newRows);
+  rebuildActiveRows();
 }
 
 async function expandHunk(hunkId) {
@@ -543,7 +835,7 @@ async function expandHunk(hunkId) {
   const [start, end] = range;
   const diff = document.getElementById('diff');
   const scrollTop = diff.scrollTop;
-  const originalRows = state.rows.slice(start, end);
+  const originalRows = state.sbsRows.slice(start, end);
 
   let expandedRows;
   try {
@@ -598,17 +890,12 @@ async function selectFile(id) {
   const rows = await getJSON(`/api/file/${encodeURIComponent(id)}/rows`);
   if (token !== selectToken) return; // a newer selectFile call has since started
 
-  state.rows = rows;
-  state.hunkRows = [];
-  for (let i = 0; i < rows.length; i++) {
-    if (rows[i].kind === 'hunk') state.hunkRows.push(i);
-  }
+  state.sbsRows = rows;
   expandedHunks.clear(); // a freshly fetched file has nothing expanded yet
 
   const diff = ensureDiffDOM();
   diff.scrollTop = 0;
-  document.getElementById('diff-spacer').style.height = `${rows.length * ROW_HEIGHT}px`;
-  renderVisibleRows();
+  rebuildActiveRows();
 }
 
 // ======================== FR-7: review queue, reviewed state, progress ========================
@@ -749,6 +1036,9 @@ const HELP_KEYS = [
   ['c', 'comment on the focused line'],
   ['s', 'toggle hunk summaries on/off'],
   ['w', 'toggle line wrap'],
+  ['u', 'toggle unified / side-by-side diff layout'],
+  ['[', 'collapse/expand the file list'],
+  [']', 'collapse/expand the sidebar'],
   ['?', 'toggle this help'],
 ];
 
@@ -1409,6 +1699,33 @@ function toggleWrap() {
   applyWrapMode();
 }
 
+// ======================== diff layout toggle: side-by-side / unified ('u') ========================
+// Switching layout only ever calls rebuildActiveRows -- it never needs to
+// touch expandedHunks: expand/collapse (above) always read and write
+// state.sbsRows, never state.rows, so an already-expanded hunk stays
+// expanded (and still collapses correctly later) no matter how many times
+// the layout flips in between.
+function applyDiffLayoutUI() {
+  document.body.classList.toggle('diff-unified', state.layout === 'unified');
+  const btn = document.getElementById('layout-toggle');
+  btn.textContent = state.layout === 'unified' ? '☰ Unified' : '▥ Side-by-side';
+  btn.title = state.layout === 'unified'
+    ? 'Diff layout: unified -- click to switch to side-by-side (u)'
+    : 'Diff layout: side-by-side -- click to switch to unified (u)';
+}
+
+function setDiffLayout(layout) {
+  if (state.layout === layout) return;
+  state.layout = layout;
+  localStorage.setItem('flowreview.diffLayout', layout);
+  applyDiffLayoutUI();
+  rebuildActiveRows();
+}
+
+function toggleDiffLayout() {
+  setDiffLayout(state.layout === 'unified' ? 'sbs' : 'unified');
+}
+
 document.addEventListener('keydown', (e) => {
   const target = e.target;
   if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
@@ -1429,6 +1746,9 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'R') toggleCurrentFile();
   if (e.key === 'c') openComposeForFocused();
   if (e.key === 'w') toggleWrap();
+  if (e.key === 'u') toggleDiffLayout();
+  if (e.key === '[') toggleFilesCollapsed();
+  if (e.key === ']') toggleSideCollapsed();
 });
 
 (async function init() {
@@ -1453,6 +1773,7 @@ document.addEventListener('keydown', (e) => {
   document.getElementById('tb-file-reviewed').addEventListener('click', toggleCurrentFile);
   document.getElementById('order-toggle').addEventListener('click', toggleOrderMode);
   document.getElementById('wrap-toggle').addEventListener('click', toggleWrap);
+  document.getElementById('layout-toggle').addEventListener('click', toggleDiffLayout);
 
   // FR-19/FR-21 sidebar panels: one click handler per panel, bound once
   // (funcRadiusHTML/renderTestsPanel replace each panel's content wholesale
@@ -1460,6 +1781,15 @@ document.addEventListener('keydown', (e) => {
   document.getElementById('callers-panel').addEventListener('click', onFlowPanelClick);
   document.getElementById('tests-panel').addEventListener('click', onFlowPanelClick);
 
+  // Collapsible/resizable panes and the diff layout toggle: see their own
+  // "collapsible + resizable panes" / "diff layout toggle" sections above.
+  document.getElementById('files-toggle').addEventListener('click', toggleFilesCollapsed);
+  document.getElementById('side-toggle').addEventListener('click', toggleSideCollapsed);
+  setupFilesResizer();
+  setupSideResizer();
+  applyPaneLayout();
+  applyDiffSplit();
+  applyDiffLayoutUI();
   applyWrapMode();
 
   await refreshSession();
