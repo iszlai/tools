@@ -35,7 +35,7 @@ Full plan: `../PLAN.md`. Board: `th next` in this folder (`.taskhound.yaml`, pre
 - [ ] FR-22 Delta re-review (with diff against the body you reviewed)
 - [ ] FR-23 Commit walkthrough order
 - [ ] FR-24 CLI text/JSON surface for agents
-- [ ] FR-40 Gherkin step linking
+- [x] FR-40 Gherkin step linking
 - [ ] FR-41 Java and JS/TS structural flow
 - [ ] Dogfood gate
 

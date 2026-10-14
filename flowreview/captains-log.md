@@ -65,3 +65,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-5 merged; single instance via lock file, RepoPath resolved before handoff
 
 **Decision (agent, accepted).** The `Workspace` gains `Sync()` (disk-only refresh after a store write) and `Snapshot()` (session+files read together) so the web layer never pairs a session from before a swap with files from after it. A second invocation sends its source to `/api/open` of the running instance, with RepoPath resolved from its own cwd first (the bug it fixed: the running process otherwise resolved an empty path against its own cwd). The "diff" subcommand must precede flags until FR-12. Smoke: first paint ~50 ms.
+
+## 2026-10-14 — FR-40 merged; step link confidence rule
+
+**Decision (agent, accepted).** A step matching exactly one step definition is `static`; two or more matches are `heuristic` (ambiguity = several edges from one step). Patterns starting with `^` are regexes, anything else a cucumber expression. Outline placeholders use the first Examples row. Handlers named via a selector (`suite.Handler`) are left unresolved rather than guessed. The `flowreview order` acceptance moves to FR-17 (comment there).

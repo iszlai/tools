@@ -59,14 +59,14 @@ issues:
     - id: FR-6
       title: Side-by-side diff renderer
       description: 'See PLAN.md §5. Strict budget tested in smoke: <1 s first paint on 10k lines, <100 ms file switch, no long tasks while scrolling.'
-      status: todo
+      status: doing
       priority: high
       blocked_by:
         - FR-5
       labels:
         - M1
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:47:55Z
+      updated_at: 2026-10-14T08:53:14Z
     - id: FR-7
       title: Review queue, reviewed state, progress
       description: See PLAN.md §5 for scope, acceptance criteria and size.
@@ -128,7 +128,7 @@ issues:
     - id: FR-12
       title: CLI surface M1
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       priority: high
       blocked_by:
         - FR-5
@@ -136,7 +136,7 @@ issues:
       labels:
         - M1
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T08:53:14Z
     - id: FR-13
       title: Go package loader with cache (spike first)
       description: See PLAN.md §5 for scope, acceptance criteria and size.
@@ -190,7 +190,11 @@ issues:
       labels:
         - M2
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T08:53:17Z
+      comments:
+        - at: 2026-10-14T08:53:17Z
+          author: lehel
+          body: 'FR-40 deferred its ''flowreview order shows Scenario → step def → service'' acceptance here: consume gherkin.Index.EntryPoints() (scenarios as entry points) and EdgesForStep (step-def edges).'
     - id: FR-18
       title: Call-chain explorer UI
       description: See PLAN.md §5 for scope, acceptance criteria and size.
@@ -444,13 +448,13 @@ issues:
     - id: FR-40
       title: Gherkin step linking
       description: See PLAN.md §5 FR-40.
-      status: doing
+      status: done
       blocked_by:
         - FR-39
       labels:
         - M2
       created_at: 2026-10-14T07:47:55Z
-      updated_at: 2026-10-14T08:25:01Z
+      updated_at: 2026-10-14T08:53:17Z
     - id: FR-41
       title: Java and JS/TS structural flow
       description: See PLAN.md §5 FR-41.
