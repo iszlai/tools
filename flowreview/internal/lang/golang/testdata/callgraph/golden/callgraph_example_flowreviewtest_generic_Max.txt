@@ -1,0 +1,12 @@
+callgraph.example/flowreviewtest/generic.Max
+
+Callers (2):
+  [static]
+    callgraph.example/flowreviewtest/generic.CallInt (generic/generic.go:16:32)
+    callgraph.example/flowreviewtest/generic.CallString (generic/generic.go:19:38)
+
+Callees (0):
+  none
+
+Implementations (0):
+  none

@@ -1,0 +1,13 @@
+callgraph.example/flowreviewtest/closure.Helper
+
+Callers (3):
+  [static]
+    callgraph.example/flowreviewtest/closure.RunClosure (closure/closure.go:15:33)
+    callgraph.example/flowreviewtest/closure.RunDeferred (closure/closure.go:26:2)
+    callgraph.example/flowreviewtest/closure.RunGoroutine (closure/closure.go:21:2)
+
+Callees (0):
+  none
+
+Implementations (0):
+  none

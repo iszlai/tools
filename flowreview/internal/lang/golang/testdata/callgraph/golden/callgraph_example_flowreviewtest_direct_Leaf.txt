@@ -1,0 +1,11 @@
+callgraph.example/flowreviewtest/direct.Leaf
+
+Callers (1):
+  [static]
+    callgraph.example/flowreviewtest/direct.Middle (direct/direct.go:11:32)
+
+Callees (0):
+  none
+
+Implementations (0):
+  none
