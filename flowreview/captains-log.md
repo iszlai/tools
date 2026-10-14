@@ -130,3 +130,8 @@ Why things are the way they are. Append-only; written with `th log add`.
 
 **Decision (agent, accepted).** Preflight keeps a draft only if its hunk id still exists in the freshly fetched PR diff (stronger than comparing head SHAs, and tolerant of unrelated pushes). New line+side API (old→LEFT, new→RIGHT); general drafts go into the review body. A 422 falls back to a body-only review plus per-comment posts, so one bad line can't sink the batch. Retrying only-failed drafts posts them individually. Batch reviews don't return per-comment links (GitHub API limit).
 **Milestone.** With FR-1–FR-12 and FR-39 merged, M1 is functionally complete; the remaining gate is the user's dogfood review of a real PR.
+
+## 2026-10-14 — Backlog stays paused after the MVP
+
+**Context.** The session /goal asked for the whole backlog; the user later limited the run to the MVP for credit reasons.
+**Decision (user, 2026-10-14).** Stay paused: 14 slices remain open on the board. The user clears the goal hook with /goal clear.
