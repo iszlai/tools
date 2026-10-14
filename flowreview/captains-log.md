@@ -73,3 +73,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-14 merged; two id tiers for Go symbols
 
 **Decision (agent, accepted).** Type-checked symbols use `pkgpath.Name` / `pkgpath.(Recv).Name` (receiver bare, `*Recv` kept in Receiver); syntax-only paths (FunctionAt/Outline, wholly deleted files) use the structural `path#Name`. FR-15 must map between them when joining call-graph edges to diff symbols. Definition returns a Location (covers vars/params too). Signature changes are compared syntactically on both sides; renames are delete+add.
+
+## 2026-10-14 — FR-12 merged; CLI exit codes and PR hook shape
+
+**Decision (agent, accepted).** Exit codes: 0 ok, 1 runtime, 2 usage, 3 not a repo / source not found (incl. GitHub 404), 4 auth/host. Flags may come before or after the positional arg (hand-written scanner). `review.FetchPR` returns the resolved Source (clone path, SHAs). Remote comments are best-effort: a failure never blocks opening the review. `FLOWREVIEW_GITHUB_API` points the binary at another API base (tests). `flowreview context` is not mounted yet; FR-15 exposes ContextText for FR-24.
