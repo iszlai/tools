@@ -12,9 +12,11 @@ export CGO_ENABLED := 1
 # Set once third_party/llama/dist/ has been populated by `make fetch-llama`,
 # so a plain `make build` embeds the real llama-server and `go build ./...`
 # elsewhere (make check, go vet) keeps working from a fresh checkout, which
-# has no dist/ and falls back to the stub provider.
+# has no dist/ and falls back to the stub provider. Recursively expanded (=,
+# not :=) so `make fetch-llama release` sees dist/ appear from the first
+# target before the second target's recipe evaluates this.
 LLAMA_DIST := third_party/llama/dist
-LLAMA_TAGS := $(if $(wildcard $(LLAMA_DIST)/llama-server),-tags llama_embed,)
+LLAMA_TAGS = $(if $(wildcard $(LLAMA_DIST)/llama-server),-tags llama_embed,)
 
 .DEFAULT_GOAL := help
 
@@ -41,15 +43,25 @@ vet: ## go vet
 smoke: build ## drive the UI in headless Chromium (see tests/smoke.js)
 	PLAYWRIGHT_BROWSERS_PATH=$${PLAYWRIGHT_BROWSERS_PATH:-../taskhound/pw-browsers} node tests/smoke.js
 
-install: build ## install bin/flowreview into PREFIX
-	install -m 0755 $(BIN) $(PREFIX)/flowreview
+install: ## build and install flowreview + the agent skill
+	./install.sh --prefix $(PREFIX)
 
-release: ## build the darwin/arm64 release binary into dist/
+update: ## rebuild and reinstall over an existing install
+	./install.sh --update --prefix $(PREFIX)
+
+uninstall: ## remove flowreview and the agent skill
+	./install.sh --prefix $(PREFIX) --uninstall
+
+# darwin/arm64 only for now (M5's Mac); amd64 is a TODO (FR-36 PLAN.md note)
+# once a cgo cross-compiler or an amd64 runner is wired up for the llama
+# sidecar and the tree-sitter grammars.
+release: fetch-llama ## build the darwin/arm64 release binary (with embedded llama-server) into dist/
 	mkdir -p dist
-	GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o dist/flowreview_darwin_arm64 ./cmd/flowreview
+	GOOS=darwin GOARCH=arm64 go build -trimpath $(LLAMA_TAGS) -ldflags "-s -w -X main.version=$(VERSION)" -o dist/flowreview_darwin_arm64 ./cmd/flowreview
+	(cd dist && shasum -a 256 flowreview_darwin_arm64 > flowreview_darwin_arm64.sha256)
 	@ls -l dist
 
 clean: ## remove build output
 	rm -rf bin dist
 
-.PHONY: help build fetch-llama test check fmt vet smoke install release clean
+.PHONY: help build fetch-llama test check fmt vet smoke install update uninstall release clean

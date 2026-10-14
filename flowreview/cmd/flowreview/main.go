@@ -40,6 +40,7 @@ usage:
                                        list review sessions
   flowreview model <command>          manage the embedded summarizer model
   flowreview toolchain <command>      manage downloaded Go toolchains
+  flowreview upgrade                  replace flowreview with the latest published release
   flowreview version                  print the version
   flowreview help                     show this message
 
@@ -61,9 +62,9 @@ func main() {
 }
 
 // dispatch resolves the top-level command and runs it, returning the process
-// exit code. "model", "toolchain", "sessions", "version" and "help" each own
-// their whole remaining argument list; anything else is the review-opening
-// grammar parseArgs and run handle.
+// exit code. "model", "toolchain", "sessions", "upgrade", "version" and
+// "help" each own their whole remaining argument list; anything else is the
+// review-opening grammar parseArgs and run handle.
 func dispatch(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 {
 		switch args[0] {
@@ -79,6 +80,8 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 			return runToolchainCLI(args[1:], stdout, stderr)
 		case "sessions":
 			return runSessionsCLI(args[1:], stdout, stderr)
+		case "upgrade":
+			return runUpgradeCLI(args[1:], stdout, stderr)
 		}
 	}
 
