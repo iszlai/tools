@@ -15,7 +15,7 @@ Full plan: `../PLAN.md`. Board: `th next` in this folder (`.taskhound.yaml`, pre
 - [ ] FR-7 Review queue, reviewed state, progress
 - [ ] FR-8 Enclosing-function expansion
 - [ ] FR-9 Comment drafts
-- [ ] FR-10 GitHub host: read
+- [x] FR-10 GitHub host: read
 - [ ] FR-11 GitHub host: publish
 - [ ] FR-12 CLI surface M1
 - [x] FR-39 Tree-sitter structural provider (all languages)

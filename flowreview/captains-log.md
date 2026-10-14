@@ -44,3 +44,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 
 **Decision (agent, accepted).** `Mine(ctx, headSHA)` takes HEAD from the caller so a cache hit runs no git at all. The cache is a plain JSON write (regenerable), invalidated when mining params change. Ledger: ~0.75 s for 654 commits in 365 days, under the 2 s budget.
 **Also.** Test fixtures pass `-c commit.gpgsign=false` per git call: the user's global gpgsign made the FR-2 git tests take 36 s.
+
+## 2026-10-14 — FR-10 merged; PR clone fetches pull/N/head plus origin
+
+**Decision (agent, accepted).** Token order: GITHUB_TOKEN, GH_TOKEN, then `gh auth token`. A PR is reviewed in the local clone when origin matches (only `git fetch`, never a checkout), else in a blobless `gh repo clone` cache under the data root. Outdated review comments (`line: null`) are kept and flagged. Verified read-only against cli/cli#14679.
