@@ -19,4 +19,8 @@ require github.com/mattn/go-pointer v0.0.1 // indirect
 
 require golang.org/x/tools v0.48.0
 
-require golang.org/x/sync v0.22.0 // indirect
+require (
+	github.com/alecthomas/chroma/v2 v2.27.0 // indirect
+	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+)
