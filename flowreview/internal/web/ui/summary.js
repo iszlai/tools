@@ -5,7 +5,9 @@
 // app.js already produces, plus two tiny hooks app.js calls out to --
 // window.FlowReviewSummary.stripHTML while building a hunk-header cell, and
 // .onRowsRendered after #diff-rows is redrawn -- so this file can be read,
-// changed and tested on its own.
+// changed and tested on its own. Every control here is a visible button with
+// a tooltip naming its keyboard shortcut, if it has one -- never a shortcut
+// alone.
 //
 // Why a strip, not a row: app.js's virtualized diff gives every row,
 // including a hunk header, a fixed ROW_HEIGHT (20px) grid cell with
@@ -13,9 +15,17 @@
 // whole pane's scroll math is `row index * ROW_HEIGHT`. A multi-line card
 // cannot be inserted in flow without breaking that. So: collapsed, the
 // summary is a one-line strip appended inside the existing hunk-header cell
-// (kind badge + a truncated "what", never taller than the row); expanded, it
-// is a floating popover positioned over the diff -- like #help-overlay, but
-// anchored to the strip that opened it -- not an extra row.
+// (a truncated "what" plus a small kind badge, never taller than the row);
+// expanded, it is a floating popover positioned over the diff -- like
+// #help-overlay, but anchored to the strip that opened it -- not an extra
+// row.
+//
+// Card content is intentionally read defensively: `what` is the headline,
+// `kind` a small secondary badge, and every other field (inferred_why,
+// impact, risk_flags, confidence, fallback) is optional and simply omitted
+// when absent or empty, so a future prompt/schema revision that adds or
+// drops fields needs no change here as long as `what` and `kind` keep their
+// names.
 //
 // Fetching: app.js only ever renders rows within the viewport plus a small
 // overscan (see its own ROW_HEIGHT/OVERSCAN comment), so "the hunk-header
@@ -64,16 +74,30 @@ async function postJSON(url, body) {
   return getJSON(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 }
 
-// --- on/off toggle: visible button (topbar) + 's', both localStorage-backed --
+// --- on/off toggle: a visible glyph button, plus 's' -----------------------
+// The button is built here, not added to index.html's static topbar markup:
+// another agent is building a real top-bar toolbar in app.js, so touching
+// that markup from this file risks a collision. A small fixed control is the
+// documented fallback (someone can move it into the toolbar at merge time);
+// everything about it lives in this file alone.
+
+function buildToggleButton() {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.id = 'fr-summary-toggle-button';
+  btn.textContent = '✦';
+  btn.setAttribute('aria-label', 'Toggle hunk summaries');
+  btn.addEventListener('click', toggleEnabled);
+  document.body.appendChild(btn);
+  return btn;
+}
 
 // syncEnabledUI updates everything that reflects `enabled`: the body class
-// styles.css hides every strip on, and the visible topbar button's pressed
-// state/title -- so a mouse-only reviewer has the same control a keyboard
-// one does, not just the 's' shortcut.
+// styles.css hides every strip on, and the toggle button's pressed state and
+// tooltip (which always names both the action and its 's' shortcut).
 function syncEnabledUI() {
   document.body.classList.toggle('fr-summaries-off', !enabled);
-  const btn = document.getElementById('summary-toggle-button');
-  if (!btn) return;
+  const btn = document.getElementById('fr-summary-toggle-button') || buildToggleButton();
   btn.setAttribute('aria-pressed', String(enabled));
   btn.classList.toggle('active', enabled);
   btn.title = enabled ? 'Hide hunk summaries (s)' : 'Show hunk summaries (s)';
@@ -182,17 +206,23 @@ function loadingStripHTML() {
   return '<span class="fr-summary-shimmer" title="Summarizing…"></span>';
 }
 
+// kindBadgeHTML renders kind as a small, secondary badge -- never the
+// headline; "" (not yet known, or a future prompt variant that dropped it)
+// renders nothing rather than a placeholder.
 function kindBadgeHTML(kind) {
-  return `<span class="fr-kind fr-kind-${escapeAttr(kind || 'behavior')}">${escapeHTML(kind || '?')}</span>`;
+  if (!kind) return '';
+  return `<span class="fr-kind fr-kind-${escapeAttr(kind)}">${escapeHTML(kind)}</span>`;
 }
 
+// readyStripHTML leads with `what` (the headline) and treats every other
+// field as optional secondary detail, omitted when empty.
 function readyStripHTML(hunkId, s) {
   const risky = s.risk_flags && s.risk_flags.length ? ' fr-risky' : '';
   const fallback = s.fallback ? '<span class="fr-fallback" title="No model configured or the model failed; this is a derived summary, not AI-generated">fallback</span>' : '';
   return (
     `<button type="button" class="fr-summary-toggle${risky}" data-hunk="${escapeAttr(hunkId)}" title="Click for details">` +
-    kindBadgeHTML(s.kind) +
     `<span class="fr-what">${escapeHTML(truncate(s.what, 90))}</span>` +
+    kindBadgeHTML(s.kind) +
     fallback +
     '<span class="fr-chevron" aria-hidden="true">▾</span>' +
     '</button>'
@@ -218,22 +248,27 @@ function closePopover() {
   if (el) el.remove();
 }
 
+// popoverHTML leads with `what` as the headline paragraph; kind sits in the
+// header row as a small secondary badge next to confidence, and every other
+// field (inferred_why, impact, risk_flags, confidence, fallback) renders only
+// when present and non-empty.
 function popoverHTML(s) {
   const risk = (s.risk_flags || []).map((f) => `<span class="fr-risk-flag">${escapeHTML(f)}</span>`).join('');
+  const hasConfidence = typeof s.confidence === 'number';
   return `
     <div class="fr-summary-popover-card">
       <div class="fr-summary-popover-head">
         ${kindBadgeHTML(s.kind)}
-        <span class="fr-confidence">confidence ${Math.round((s.confidence || 0) * 100)}%</span>
+        ${hasConfidence ? `<span class="fr-confidence">confidence ${Math.round(s.confidence * 100)}%</span>` : ''}
         ${s.fallback ? '<span class="fr-fallback">fallback</span>' : ''}
-        <button type="button" class="fr-close" data-action="close" aria-label="Close">×</button>
+        <button type="button" class="fr-close" data-action="close" title="Close" aria-label="Close">×</button>
       </div>
-      <p class="fr-what">${escapeHTML(s.what)}</p>
+      <p class="fr-what fr-headline">${escapeHTML(s.what || '')}</p>
       ${s.inferred_why ? `<p class="fr-why"><strong>Why:</strong> ${escapeHTML(s.inferred_why)}</p>` : ''}
       ${s.impact ? `<p class="fr-impact"><strong>Impact:</strong> ${escapeHTML(s.impact)}</p>` : ''}
       ${risk ? `<div class="fr-risk-flags">${risk}</div>` : ''}
       <div class="fr-summary-popover-actions">
-        <button type="button" data-action="regenerate">⟳ Regenerate</button>
+        <button type="button" class="fr-regenerate" data-action="regenerate" title="Regenerate summary (asks the model again)" aria-label="Regenerate summary">↻</button>
       </div>
     </div>`;
 }
@@ -309,8 +344,6 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && popoverHunkId) closePopover();
 });
 
-const toggleButton = document.getElementById('summary-toggle-button');
-if (toggleButton) toggleButton.addEventListener('click', toggleEnabled);
-syncEnabledUI();
+syncEnabledUI(); // also builds the toggle button on first run
 
 window.FlowReviewSummary = { stripHTML, onRowsRendered };

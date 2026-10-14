@@ -476,23 +476,29 @@ mark.x-del { background: var(--mark-del-bg); }
 
 body.fr-summaries-off .fr-summary-strip { display: none; }
 
-/* Visible on/off control in the topbar (styled like #help-button), not just
-   the 's' shortcut -- a mouse-only reviewer gets the same control. */
-#summary-toggle-button {
-  flex: none;
+/* Visible on/off control, not just the 's' shortcut -- a mouse-only reviewer
+   gets the same control. Built and appended by summary.js itself (a fixed
+   corner control, not index.html's topbar markup) to avoid colliding with
+   the top-bar toolbar another agent is building in app.js; a natural
+   candidate to fold into that toolbar later. */
+#fr-summary-toggle-button {
+  position: fixed;
+  top: 6px;
+  right: 40px;
+  z-index: 55;
   border: 1px solid var(--border);
-  background: none;
+  background: var(--bg);
   color: var(--muted);
   border-radius: 50%;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   cursor: pointer;
   font: inherit;
   line-height: 1;
 }
-#summary-toggle-button:hover { background: var(--hover); }
-#summary-toggle-button.active { color: var(--accent); border-color: var(--accent); }
+#fr-summary-toggle-button:hover { background: var(--hover); }
+#fr-summary-toggle-button.active { color: var(--accent); border-color: var(--accent); }
 
 .fr-summary-strip { margin-left: 10px; }
 
@@ -579,6 +585,13 @@ body.fr-summaries-off .fr-summary-strip { display: none; }
   cursor: pointer;
 }
 .fr-summary-popover-card p { margin: 6px 0; font-size: 12px; line-height: 1.4; }
+.fr-summary-popover-card p.fr-headline {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: normal; /* override the collapsed strip's .fr-what truncation */
+  overflow: visible;
+  max-width: none;
+}
 .fr-risk-flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .fr-risk-flag {
   padding: 1px 6px;
@@ -588,13 +601,16 @@ body.fr-summaries-off .fr-summary-strip { display: none; }
   font-size: 10px;
 }
 .fr-summary-popover-actions { margin-top: 10px; text-align: right; }
-.fr-summary-popover-actions button {
-  padding: 4px 10px;
+.fr-summary-popover-actions .fr-regenerate {
+  width: 26px;
+  height: 26px;
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 50%;
   background: none;
   color: var(--fg);
   cursor: pointer;
-  font: inherit;
+  font: 14px inherit;
+  line-height: 1;
 }
-.fr-summary-popover-actions button:hover { background: var(--hover); }
+.fr-summary-popover-actions .fr-regenerate:hover { background: var(--hover); }
