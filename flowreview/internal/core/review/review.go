@@ -15,6 +15,7 @@ import (
 	"github.com/iszlai/tools/flowreview/internal/core/diff"
 	"github.com/iszlai/tools/flowreview/internal/core/git"
 	"github.com/iszlai/tools/flowreview/internal/core/session"
+	"github.com/iszlai/tools/flowreview/internal/host"
 	"github.com/iszlai/tools/flowreview/internal/model"
 )
 
@@ -22,18 +23,31 @@ import (
 // GitHub host to fetch from.
 var ErrPRNotSupported = errors.New("review: PR sources need a host adapter (FR-10)")
 
-// FetchPR is the hook FR-10 fills in: given a PR source, return the raw
-// unified diff the host renders, which is what comment positions are
-// relative to. Left nil until then.
-var FetchPR func(ctx context.Context, src model.Source) ([]byte, error)
+// FetchPR is the hook FR-12 fills in (cmd/flowreview wires it to the github
+// host): given a PR source -- Kind SourcePR, PR naming owner/repo/number, and
+// RepoPath as a hint for resolving a bare PR number and for reusing a local
+// clone -- it resolves the PR against a host and returns the source filled in
+// with the resolved local clone path and head/base SHAs, plus the raw unified
+// diff the host renders, which is what comment positions are relative to.
+// Left nil until the CLI wires a host.
+var FetchPR func(ctx context.Context, src model.Source) (resolved model.Source, diff []byte, err error)
+
+// FetchRemoteComments is the companion hook: given a resolved PR source, it
+// returns the comments already on the PR at the host, for display alongside
+// the diff. Left nil until the CLI wires a host; a nil hook, or an error from
+// it, just means no comments are shown -- they are supplementary to the diff,
+// never required to open it.
+var FetchRemoteComments func(ctx context.Context, src model.Source) ([]host.RemoteComment, error)
 
 // Workspace is one open review: the parsed diff, the persisted session
-// tracking progress on it, and the repo it came from (nil for a patch file
-// reviewed outside any git working tree).
+// tracking progress on it, the repo it came from (nil for a patch file
+// reviewed outside any git working tree), and -- for a PR -- the comments
+// already on it at the host.
 type Workspace struct {
 	Session *model.ReviewSession
 	Files   []model.ChangedFile
 	Repo    *git.Repo
+	Remote  []host.RemoteComment
 
 	mu    sync.Mutex
 	store *session.Store
@@ -76,10 +90,16 @@ func Open(ctx context.Context, store *session.Store, src model.Source) (*Workspa
 		}
 	}
 
+	var remote []host.RemoteComment
+	if src.Kind == model.SourcePR && FetchRemoteComments != nil {
+		remote, _ = FetchRemoteComments(ctx, src) // best-effort: supplementary to the diff
+	}
+
 	return &Workspace{
 		Session: sess,
 		Files:   files,
 		Repo:    repo,
+		Remote:  remote,
 		store:   store,
 		src:     src,
 	}, nil
@@ -96,8 +116,16 @@ func (w *Workspace) Reload(ctx context.Context) error {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.Session, w.Files, w.Repo = fresh.Session, fresh.Files, fresh.Repo
+	w.Session, w.Files, w.Repo, w.Remote = fresh.Session, fresh.Files, fresh.Repo, fresh.Remote
 	return nil
+}
+
+// RemoteComments returns the comments already on the host for a PR session
+// (nil for everything else), as of the last Open or Reload.
+func (w *Workspace) RemoteComments() []host.RemoteComment {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.Remote
 }
 
 // Sync reloads just the session from disk, for callers that changed it
@@ -167,10 +195,11 @@ func loadDiff(ctx context.Context, src *model.Source) (*git.Repo, []byte, error)
 		if FetchPR == nil {
 			return nil, nil, ErrPRNotSupported
 		}
-		raw, err := FetchPR(ctx, *src)
+		resolved, raw, err := FetchPR(ctx, *src)
 		if err != nil {
 			return nil, nil, err
 		}
+		*src = resolved
 		return tryOpenRepo(ctx, src.RepoPath), raw, nil
 
 	default:
@@ -229,6 +258,9 @@ func titleFor(src model.Source) string {
 		return "Patch " + filepath.Base(src.PatchPath)
 	case model.SourcePR:
 		if src.PR != nil {
+			if src.PR.Title != "" {
+				return src.PR.Title
+			}
 			return fmt.Sprintf("PR #%d %s/%s", src.PR.Number, src.PR.Owner, src.PR.Repo)
 		}
 		return "Pull request"

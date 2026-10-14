@@ -114,6 +114,7 @@ type PRRef struct {
 	Repo   string `json:"repo"`
 	Number int    `json:"number"`
 	URL    string `json:"url,omitempty"`
+	Title  string `json:"title,omitempty"` // the PR's title, once fetched from the host
 }
 
 // Source is where the diff of a session comes from.

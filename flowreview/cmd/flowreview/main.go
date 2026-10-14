@@ -7,17 +7,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/iszlai/tools/flowreview/internal/core/review"
 	"github.com/iszlai/tools/flowreview/internal/core/session"
+	"github.com/iszlai/tools/flowreview/internal/llm/models"
 	"github.com/iszlai/tools/flowreview/internal/model"
 	"github.com/iszlai/tools/flowreview/internal/web"
 	"github.com/iszlai/tools/flowreview/internal/window"
@@ -26,77 +28,181 @@ import (
 // version is stamped by the Makefile.
 var version = "dev"
 
+const usage = `flowreview reviews a local diff or a pull request in its own window.
+
+usage:
+  flowreview                          review the worktree diff (cwd)
+  flowreview diff <ref|range>         review one commit, or an A..B / A...B range
+  flowreview pr <url|owner/repo#N|N>  review a GitHub pull request
+  flowreview patch <file>             review a patch file
+  flowreview --patch <file>           same as "flowreview patch <file>"
+  flowreview sessions [--json] [--all]
+                                       list review sessions
+  flowreview model <command>          manage the embedded summarizer model
+  flowreview toolchain <command>      manage downloaded Go toolchains
+  flowreview version                  print the version
+  flowreview help                     show this message
+
+flags (review commands only, may appear before or after the positional argument):
+  --no-open      serve only: print the URL on stdout, open nothing
+  --browser      open the default browser instead of the native window
+  --port <n>     HTTP port to serve on (0, the default, picks a free one)
+
+exit codes:
+  0  ok
+  1  runtime error
+  2  usage error
+  3  not a git repository, or the source was not found
+  4  auth or host error (no GitHub token, rate limited, host unreachable)
+`
+
 func main() {
-	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
-		fmt.Println("flowreview", version)
-		return
+	os.Exit(dispatch(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+// dispatch resolves the top-level command and runs it, returning the process
+// exit code. "model", "toolchain", "sessions", "version" and "help" each own
+// their whole remaining argument list; anything else is the review-opening
+// grammar parseArgs and run handle.
+func dispatch(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 {
+		switch args[0] {
+		case "version", "--version":
+			fmt.Fprintln(stdout, "flowreview", version)
+			return 0
+		case "help", "-h", "--help":
+			fmt.Fprint(stdout, usage)
+			return 0
+		case "model":
+			return models.RunCLI(args[1:], stdout, stderr)
+		case "toolchain":
+			return runToolchainCLI(args[1:], stdout, stderr)
+		case "sessions":
+			return runSessionsCLI(args[1:], stdout, stderr)
+		}
 	}
-	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "flowreview:", err)
-		os.Exit(1)
+
+	if err := run(args, stdout, stderr); err != nil {
+		fmt.Fprintln(stderr, "flowreview:", err)
+		return exitCode(err)
 	}
+	return 0
 }
 
 // options are the parsed flags and the source every invocation reviews.
-// FR-12 grows the CLI surface (sessions list, pr, --json); this covers only
-// what M1's local sources need.
 type options struct {
 	source  model.Source
+	prRaw   string // the raw argument to "pr", resolved into source.PR once cwd is known
 	port    int
 	browser bool
 	noOpen  bool
 }
 
-// parseArgs recognizes "flowreview", "flowreview diff <ref|range>" and
-// "flowreview --patch <file>", each with --port/--browser/--no-open. The
-// "diff" subcommand must come first, before any flags; FR-12 is where a
-// fuller argument parser belongs.
+// parseArgs recognizes the review-opening grammar: an optional subcommand
+// ("diff <ref|range>", "pr <url|owner/repo#N|N>", "patch <file>") naming the
+// source, plus --port/--browser/--no-open/--patch in any order -- a flag may
+// come before or after the positional argument, unlike the standard flag
+// package (which stops parsing at the first non-flag token). "model",
+// "toolchain", "sessions", "version" and "help" are dispatched before this is
+// ever called; this only parses the source-opening commands.
 func parseArgs(args []string) (options, error) {
 	var opts options
-	rest := args
+	var positional []string
+	var patchFlag string
+	sawPatchFlag := false
 
-	if len(rest) > 0 && rest[0] == "diff" {
-		if len(rest) < 2 {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--no-open":
+			opts.noOpen = true
+		case a == "--browser":
+			opts.browser = true
+		case a == "--port":
+			v, next, err := flagValue(args, i, "--port")
+			if err != nil {
+				return opts, err
+			}
+			i = next
+			port, perr := strconv.Atoi(v)
+			if perr != nil {
+				return opts, fmt.Errorf("--port: %w", perr)
+			}
+			opts.port = port
+		case strings.HasPrefix(a, "--port="):
+			port, perr := strconv.Atoi(strings.TrimPrefix(a, "--port="))
+			if perr != nil {
+				return opts, fmt.Errorf("--port: %w", perr)
+			}
+			opts.port = port
+		case a == "--patch":
+			v, next, err := flagValue(args, i, "--patch")
+			if err != nil {
+				return opts, err
+			}
+			i = next
+			patchFlag, sawPatchFlag = v, true
+		case strings.HasPrefix(a, "--patch="):
+			patchFlag, sawPatchFlag = strings.TrimPrefix(a, "--patch="), true
+		case strings.HasPrefix(a, "-"):
+			return opts, fmt.Errorf("unknown flag %q", a)
+		default:
+			positional = append(positional, a)
+		}
+	}
+
+	if sawPatchFlag {
+		if len(positional) > 0 {
+			return opts, errors.New("--patch cannot be combined with a diff/pr/patch subcommand")
+		}
+		opts.source = model.Source{Kind: model.SourcePatch, PatchPath: patchFlag}
+		return opts, nil
+	}
+
+	switch {
+	case len(positional) == 0:
+		opts.source = model.Source{Kind: model.SourceWorktree}
+	case positional[0] == "diff":
+		if len(positional) != 2 {
 			return opts, errors.New("usage: flowreview diff <ref|range>")
 		}
-		ref := rest[1]
-		rest = rest[2:]
+		ref := positional[1]
 		if strings.Contains(ref, "..") {
 			opts.source = model.Source{Kind: model.SourceRange, Ref: ref}
 		} else {
 			opts.source = model.Source{Kind: model.SourceCommit, Ref: ref}
 		}
-	}
-
-	fs := flag.NewFlagSet("flowreview", flag.ContinueOnError)
-	patch := fs.String("patch", "", "review a patch file instead of a repo diff")
-	fs.IntVar(&opts.port, "port", 0, "HTTP port to serve on (0 picks a free one)")
-	fs.BoolVar(&opts.browser, "browser", false, "open the default browser instead of the native window (Playwright smoke only)")
-	fs.BoolVar(&opts.noOpen, "no-open", false, "serve only: print the URL on stdout and open nothing")
-	if err := fs.Parse(rest); err != nil {
-		return opts, err
-	}
-	if fs.NArg() > 0 {
-		return opts, fmt.Errorf("unexpected argument %q", fs.Arg(0))
-	}
-
-	if *patch != "" {
-		if opts.source.Kind != "" {
-			return opts, errors.New("--patch cannot be combined with 'diff'")
+	case positional[0] == "pr":
+		if len(positional) != 2 {
+			return opts, errors.New("usage: flowreview pr <url|owner/repo#N|N>")
 		}
-		opts.source = model.Source{Kind: model.SourcePatch, PatchPath: *patch}
-	}
-	if opts.source.Kind == "" {
-		opts.source = model.Source{Kind: model.SourceWorktree}
+		opts.prRaw = positional[1]
+	case positional[0] == "patch":
+		if len(positional) != 2 {
+			return opts, errors.New("usage: flowreview patch <file>")
+		}
+		opts.source = model.Source{Kind: model.SourcePatch, PatchPath: positional[1]}
+	default:
+		return opts, fmt.Errorf("unexpected argument %q", positional[0])
 	}
 	return opts, nil
 }
 
-func run(args []string) error {
+// flagValue returns the value of a flag given as two tokens ("--port" "4242"
+// rather than "--port=4242") and the index its value was consumed from.
+func flagValue(args []string, i int, name string) (string, int, error) {
+	if i+1 >= len(args) {
+		return "", i, fmt.Errorf("%s requires a value", name)
+	}
+	return args[i+1], i + 1, nil
+}
+
+func run(args []string, stdout, stderr io.Writer) error {
 	opts, err := parseArgs(args)
 	if err != nil {
-		return err
+		return usageErr(err)
 	}
+
 	// Resolve RepoPath against this process's cwd now, while it is still
 	// this process's: a second invocation sends its source to a different,
 	// already-running process over /api/open, and an empty RepoPath would
@@ -109,6 +215,16 @@ func run(args []string) error {
 			return fmt.Errorf("getwd: %w", err)
 		}
 		opts.source.RepoPath = cwd
+	}
+
+	ctx := context.Background()
+
+	if opts.prRaw != "" {
+		ref, err := resolvePRRef(ctx, opts.prRaw, opts.source.RepoPath)
+		if err != nil {
+			return err
+		}
+		opts.source = model.Source{Kind: model.SourcePR, RepoPath: opts.source.RepoPath, PR: &ref}
 	}
 
 	f, isPrimary, err := acquireLock(lockPath())
@@ -126,11 +242,10 @@ func run(args []string) error {
 	defer releaseLock(f)
 
 	store := session.New(session.DefaultRoot())
-	ctx := context.Background()
 
 	ws, err := review.Open(ctx, store, opts.source)
 	if err != nil {
-		return err
+		return classifyOpenErr(err)
 	}
 
 	srv := web.New(store, ws, nil)
@@ -145,18 +260,18 @@ func run(args []string) error {
 
 	go func() {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, net.ErrClosed) {
-			fmt.Fprintln(os.Stderr, "flowreview: server:", err)
+			fmt.Fprintln(stderr, "flowreview: server:", err)
 		}
 	}()
 
 	url := srv.URL()
 	switch {
 	case opts.noOpen:
-		fmt.Println(url + "/")
+		fmt.Fprintln(stdout, url+"/")
 	case opts.browser:
-		fmt.Println(url + "/")
+		fmt.Fprintln(stdout, url+"/")
 		if err := openBrowser(url); err != nil {
-			fmt.Fprintln(os.Stderr, "flowreview: could not open browser:", err)
+			fmt.Fprintln(stderr, "flowreview: could not open browser:", err)
 		}
 	default:
 		srv.SetWindow(windowController{})

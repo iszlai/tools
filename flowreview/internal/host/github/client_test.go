@@ -123,6 +123,30 @@ func TestNew_defaults(t *testing.T) {
 	}
 }
 
+func TestNew_baseURLFromEnv(t *testing.T) {
+	t.Setenv("FLOWREVIEW_GITHUB_API", "https://example.invalid/api")
+
+	c, err := New(Options{Token: "t"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if c.baseURL != "https://example.invalid/api" {
+		t.Errorf("baseURL = %q, want the FLOWREVIEW_GITHUB_API value", c.baseURL)
+	}
+}
+
+func TestNew_explicitBaseURLWinsOverEnv(t *testing.T) {
+	t.Setenv("FLOWREVIEW_GITHUB_API", "https://example.invalid/api")
+
+	c, err := New(Options{Token: "t", BaseURL: "https://explicit.invalid"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if c.baseURL != "https://explicit.invalid" {
+		t.Errorf("baseURL = %q, want the explicit Options.BaseURL", c.baseURL)
+	}
+}
+
 func TestNew_customBaseURLAndHTTPClient(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	t.Cleanup(srv.Close)

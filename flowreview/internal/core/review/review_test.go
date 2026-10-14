@@ -1,11 +1,14 @@
 package review
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/iszlai/tools/flowreview/internal/core/session"
+	"github.com/iszlai/tools/flowreview/internal/host"
 	"github.com/iszlai/tools/flowreview/internal/model"
 )
 
@@ -185,6 +188,85 @@ func TestWorkspaceSyncAndSnapshot(t *testing.T) {
 	sess, _, _ = ws.Snapshot()
 	if st, ok := sess.States[hunk.ID]; !ok || st.Status != model.HunkReviewed {
 		t.Fatalf("after Sync, hunk state = %+v, want HunkReviewed", st)
+	}
+}
+
+// withPRHooks installs fake FetchPR/FetchRemoteComments hooks for the
+// duration of the test, restoring the previous (nil) ones after -- these
+// package vars are global, so tests touching them cannot run in parallel with
+// each other.
+func withPRHooks(t *testing.T, fetchPR func(context.Context, model.Source) (model.Source, []byte, error), fetchRemote func(context.Context, model.Source) ([]host.RemoteComment, error)) {
+	t.Helper()
+	oldPR, oldRemote := FetchPR, FetchRemoteComments
+	FetchPR, FetchRemoteComments = fetchPR, fetchRemote
+	t.Cleanup(func() { FetchPR, FetchRemoteComments = oldPR, oldRemote })
+}
+
+func TestOpenPRResolvesSourceFromHook(t *testing.T) {
+	repo := newFixtureRepo(t)
+	repo.dirty(t)
+	raw := runGit(t, repo.dir, nil, "diff", "HEAD")
+	store := newStore(t)
+
+	withPRHooks(t, func(ctx context.Context, src model.Source) (model.Source, []byte, error) {
+		if src.PR == nil || src.PR.Owner != "o" || src.PR.Repo != "r" || src.PR.Number != 1 {
+			t.Fatalf("hook got src.PR = %+v, want o/r#1", src.PR)
+		}
+		resolved := src
+		title := "Fixture PR title"
+		resolved.PR = &model.PRRef{Host: "github.com", Owner: "o", Repo: "r", Number: 1, Title: title}
+		resolved.RepoPath = repo.dir
+		resolved.BaseSHA = "base-sha"
+		resolved.HeadSHA = "head-sha"
+		return resolved, []byte(raw), nil
+	}, func(ctx context.Context, src model.Source) ([]host.RemoteComment, error) {
+		return []host.RemoteComment{{ID: 1, Author: "reviewer", Body: "looks fine"}}, nil
+	})
+
+	ws, err := Open(ctx(t), store, model.Source{
+		Kind: model.SourcePR,
+		PR:   &model.PRRef{Owner: "o", Repo: "r", Number: 1},
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if ws.Session.Title != "Fixture PR title" {
+		t.Errorf("Title = %q, want the PR title from the hook", ws.Session.Title)
+	}
+	if ws.Session.Source.RepoPath != repo.dir || ws.Session.Source.BaseSHA != "base-sha" || ws.Session.Source.HeadSHA != "head-sha" {
+		t.Errorf("Source = %+v, want the hook's resolved RepoPath/BaseSHA/HeadSHA", ws.Session.Source)
+	}
+	if len(ws.Files) != 1 || ws.Files[0].Path() != "a.txt" {
+		t.Fatalf("Files = %+v, want one changed file a.txt", ws.Files)
+	}
+	remote := ws.RemoteComments()
+	if len(remote) != 1 || remote[0].Body != "looks fine" {
+		t.Errorf("RemoteComments = %+v, want the hook's one comment", remote)
+	}
+}
+
+func TestOpenPRIgnoresRemoteCommentsError(t *testing.T) {
+	repo := newFixtureRepo(t)
+	raw := runGit(t, repo.dir, nil, "diff", "HEAD")
+	store := newStore(t)
+
+	withPRHooks(t, func(ctx context.Context, src model.Source) (model.Source, []byte, error) {
+		resolved := src
+		resolved.RepoPath = repo.dir
+		return resolved, []byte(raw), nil
+	}, func(ctx context.Context, src model.Source) ([]host.RemoteComment, error) {
+		return nil, errors.New("host unreachable")
+	})
+
+	ws, err := Open(ctx(t), store, model.Source{
+		Kind: model.SourcePR,
+		PR:   &model.PRRef{Owner: "o", Repo: "r", Number: 1},
+	})
+	if err != nil {
+		t.Fatalf("Open: want no error when only the supplementary comments fetch fails, got %v", err)
+	}
+	if remote := ws.RemoteComments(); remote != nil {
+		t.Errorf("RemoteComments = %+v, want nil after a failed fetch", remote)
 	}
 }
 
