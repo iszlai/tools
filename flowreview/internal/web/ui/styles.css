@@ -1,6 +1,6 @@
 /* System colors, light by default, dark via prefers-color-scheme -- no
-   framework, no web-ish chrome. FR-6/FR-7 extend this; keep additions
-   consistent with these tokens rather than hardcoding new colors. */
+   framework, no web-ish chrome. FR-7 extends this; keep additions consistent
+   with these tokens rather than hardcoding new colors. */
 :root {
   --bg: #ffffff;
   --fg: #1d1d1f;
@@ -13,6 +13,10 @@
   --removed-bg: #ffebe9;
   --removed-fg: #cf222e;
   --header-bg: #f6f6f8;
+  --empty-bg: #fafafb;
+  --mark-add-bg: #abf2bc;
+  --mark-del-bg: #ffc9c9;
+  --lineno-w: 3.5em;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -28,6 +32,9 @@
     --removed-bg: #2d1214;
     --removed-fg: #f85149;
     --header-bg: #252527;
+    --empty-bg: #1a1a1b;
+    --mark-add-bg: #1f6f3c;
+    --mark-del-bg: #7d2d32;
   }
 }
 
@@ -56,7 +63,9 @@ html, body {
 #side { border-left: 1px solid var(--border); }
 
 #diff {
-  overflow: auto;
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .file-row {
@@ -106,30 +115,69 @@ html, body {
   flex: none;
 }
 
-table.diff-table {
-  border-collapse: collapse;
-  width: 100%;
+/* Side-by-side diff: #diff-spacer is an empty div sized to the full,
+   unvirtualized row count so #diff's scrollbar reflects the whole file;
+   #diff-rows holds only the rows near the viewport (see app.js) and is
+   nudged into place with translateY. Every .diff-row is `display: contents`
+   -- it contributes no box of its own, so its four cells become direct grid
+   items of #diff-rows and share column tracks with every other rendered
+   row's cells, keeping columns aligned regardless of which slice of the
+   file is currently in the DOM. */
+#diff-spacer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  visibility: hidden;
+}
+
+#diff-rows {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: grid;
+  grid-template-columns: var(--lineno-w) 1fr var(--lineno-w) 1fr;
   font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-table.diff-table td {
-  padding: 1px 8px;
-  white-space: pre;
-  vertical-align: top;
-}
+.diff-row { display: contents; }
 
-td.lineno {
+.cell {
+  height: 20px; /* must match ROW_HEIGHT in app.js */
+  line-height: 20px;
+  padding: 0 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: pre;
+  scrollbar-width: none; /* a long line scrolls within its own cell, not the whole pane */
+}
+.cell::-webkit-scrollbar { display: none; }
+
+.lineno {
   color: var(--muted);
   text-align: right;
   user-select: none;
-  width: 3.5em;
+  overflow: hidden; /* line numbers never need their own scroll */
 }
 
-tr.row-add { background: var(--added-bg); }
-tr.row-add td.text { color: var(--added-fg); }
-tr.row-del { background: var(--removed-bg); }
-tr.row-del td.text { color: var(--removed-fg); }
-tr.row-header td { color: var(--muted); background: var(--header-bg); font-style: italic; }
+.bg-add { background: var(--added-bg); }
+.bg-del { background: var(--removed-bg); }
+.bg-empty { background: var(--empty-bg); }
+
+.hunk-header {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  background: var(--header-bg);
+  font-style: italic;
+}
+
+mark.x-add, mark.x-del {
+  border-radius: 2px;
+  color: inherit;
+}
+mark.x-add { background: var(--mark-add-bg); }
+mark.x-del { background: var(--mark-del-bg); }
 
 #session-summary { color: var(--muted); line-height: 1.5; }
 #session-summary .title { color: var(--fg); font-weight: 600; margin-bottom: 4px; }

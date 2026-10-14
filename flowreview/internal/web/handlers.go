@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/iszlai/tools/flowreview/internal/core/git"
+	"github.com/iszlai/tools/flowreview/internal/core/render"
 	"github.com/iszlai/tools/flowreview/internal/core/review"
 	"github.com/iszlai/tools/flowreview/internal/model"
 )
@@ -45,13 +46,11 @@ type FileView struct {
 	Reviewed  int              `json:"reviewed"`
 }
 
-// Row is one line of GET /api/file/{id}/rows: a unified (not yet side-by-side)
-// view of a file's diff, plus a header row per hunk. Kind is "header" for a
-// hunk's "@@ ... @@" line, otherwise one of model.LineKind's values
-// ("context", "add", "del"). FR-6 replaces this with a real side-by-side,
-// syntax-highlighted renderer; new fields can be added here (e.g. old/new
-// HTML, intra-line spans) without breaking this shape.
-type Row struct {
+// unifiedRow is GET /api/file/{id}/rows's pre-FR-6 shape, kept behind
+// ?layout=unified: a flat, non-highlighted view of a file's diff, one row
+// per hunk header or diff line. Kind is "header" for a hunk's "@@ ... @@"
+// line, otherwise one of model.LineKind's values ("context", "add", "del").
+type unifiedRow struct {
 	Kind     string `json:"kind"`
 	OldNo    int    `json:"old_no,omitempty"`
 	NewNo    int    `json:"new_no,omitempty"`
@@ -82,6 +81,14 @@ func statusFor(err error) int {
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleChromaCSS serves the syntax-highlighting stylesheet render.Row's
+// old_html/new_html classes refer to: light rules plus a prefers-color-scheme
+// dark variant (see render.Stylesheet).
+func (s *Server) handleChromaCSS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	_, _ = w.Write(render.Stylesheet())
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
@@ -149,24 +156,33 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// handleFileRows renders a file's diff as side-by-side rows (render.Row),
+// cached per file id and content so switching back to an already-rendered
+// file is near-instant. ?layout=unified returns the flat pre-FR-6 shape
+// instead, for anything that still wants one row per diff line.
 func (s *Server) handleFileRows(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	_, files, _ := s.workspace().Snapshot()
 	for _, f := range files {
-		if f.ID == id {
-			writeJSON(w, http.StatusOK, buildRows(f))
+		if f.ID != id {
+			continue
+		}
+		if r.URL.Query().Get("layout") == "unified" {
+			writeJSON(w, http.StatusOK, buildUnifiedRows(f))
 			return
 		}
+		writeJSON(w, http.StatusOK, s.renderCache.Rows(f))
+		return
 	}
 	writeError(w, http.StatusNotFound, fmt.Errorf("file %q not found", id))
 }
 
-func buildRows(f model.ChangedFile) []Row {
-	rows := make([]Row, 0, len(f.Hunks)*4)
+func buildUnifiedRows(f model.ChangedFile) []unifiedRow {
+	rows := make([]unifiedRow, 0, len(f.Hunks)*4)
 	for _, h := range f.Hunks {
-		rows = append(rows, Row{Kind: "header", Text: hunkHeaderText(h), HunkID: h.ID})
+		rows = append(rows, unifiedRow{Kind: "header", Text: hunkHeaderText(h), HunkID: h.ID})
 		for _, l := range h.Lines {
-			rows = append(rows, Row{
+			rows = append(rows, unifiedRow{
 				Kind:     string(l.Kind),
 				OldNo:    l.OldNo,
 				NewNo:    l.NewNo,
@@ -179,9 +195,9 @@ func buildRows(f model.ChangedFile) []Row {
 	return rows
 }
 
-// hunkHeaderText renders a hunk's "@@ ... @@" line for display. It need not
-// be byte-exact with what git produced (diff.Parse/Emit own that); FR-6
-// replaces this placeholder with real rendering.
+// hunkHeaderText renders a hunk's "@@ ... @@" line for the unified layout's
+// "header" row. It need not be byte-exact with what git produced
+// (diff.Parse/Emit own that).
 func hunkHeaderText(h model.DiffHunk) string {
 	text := fmt.Sprintf("@@ -%d,%d +%d,%d @@", h.OldStart, h.OldLines, h.NewStart, h.NewLines)
 	if h.Section != "" {

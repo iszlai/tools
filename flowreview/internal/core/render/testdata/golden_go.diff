@@ -1,0 +1,11 @@
+diff --git a/greet.go b/greet.go
+index 1111111..2222222 100644
+--- a/greet.go
++++ b/greet.go
+@@ -1,5 +1,5 @@
+ package greet
+
+ func Greet(name string) string {
+-	return "Hello, " + name
++	return "Hi there, " + name + "!"
+ }

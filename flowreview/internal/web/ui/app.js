@@ -1,15 +1,36 @@
 'use strict';
-// FlowReview's UI shell: file queue, a plain unified-diff row table, and a
-// session summary panel. Vanilla JS, no bundler -- FR-6 replaces renderRows
-// with a virtualized, side-by-side, syntax-highlighted table; the row shape
-// it will render stays `{kind, old_no, new_no, text, hunk_id, position}` per
-// GET /api/file/{id}/rows, so this file is the reference for how those fields
-// map onto the DOM.
+// FlowReview's UI shell: file queue, a virtualized side-by-side diff table,
+// and a session summary panel. Vanilla JS, no bundler.
+//
+// The diff pane never puts all of a file's rows in the DOM -- for a 10k-line
+// file that would be the whole performance budget gone before a single
+// scroll. Instead #diff holds two children: #diff-spacer, an empty div whose
+// height is rows.length * ROW_HEIGHT (so the browser gives #diff a correctly
+// sized scrollbar), and #diff-rows, a CSS grid holding only the rows
+// currently in or near the viewport, shifted into place with `transform:
+// translateY(...)`. Every row's four cells (old line number, old code, new
+// line number, new code) are grid items of #diff-rows itself -- the row div
+// is `display: contents`, so it contributes no box of its own and every
+// row's cells share one set of column tracks, which keeps columns aligned
+// however small a slice of the file happens to be rendered.
+
+const ROW_HEIGHT = 20; // px; must match .cell's height in styles.css
+const OVERSCAN = 15; // extra rows rendered above/below the viewport
 
 const state = {
   files: [],
   selected: null,
+  rows: [], // render.Row from GET /api/file/{id}/rows, for the selected file
+  hunkRows: [], // indices into `rows` where kind === "hunk", for n/p
 };
+
+// selectToken guards against a slow fetch from an earlier selectFile call
+// landing after a newer one: each call takes the next token and, after its
+// fetch resolves, applies the response only if it is still the latest call
+// in flight. Without this, fast j/k navigation can let an older file's rows
+// (e.g. a large file that took longer to fetch) overwrite a file selected
+// after it.
+let selectToken = 0;
 
 async function getJSON(url, opts) {
   const res = await fetch(url, opts);
@@ -42,6 +63,12 @@ function escapeHTML(s) {
   return div.innerHTML;
 }
 
+// escapeAttr is escapeHTML plus quotes, for values template strings below
+// drop straight into a double-quoted HTML attribute.
+function escapeAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
 function renderFiles() {
   const el = document.getElementById('files');
   el.innerHTML = '';
@@ -62,52 +89,124 @@ function renderFiles() {
   }
 }
 
-function rowClass(kind) {
-  switch (kind) {
-    case 'add': return 'row-add';
-    case 'del': return 'row-del';
-    case 'header': return 'row-header';
-    default: return 'row-context';
+// sideBgClass picks the add/del tint for one side of one row: a "change"
+// row tints its old side as deleted and its new side as added; an unpaired
+// "add"/"del" row tints only the side it has content on, and marks the
+// other side as empty (no line there) rather than neutral.
+function sideBgClass(kind, side) {
+  if (side === 'old') {
+    if (kind === 'del' || kind === 'change') return 'bg-del';
+    if (kind === 'add') return 'bg-empty';
+    return '';
   }
+  if (kind === 'add' || kind === 'change') return 'bg-add';
+  if (kind === 'del') return 'bg-empty';
+  return '';
 }
 
-function renderRows(rows) {
-  const diff = document.getElementById('diff');
-  const table = document.createElement('table');
-  table.className = 'diff-table';
-  const tbody = document.createElement('tbody');
+// cellHTML builds one anchorable cell: a line-number cell or a code cell.
+// Every cell -- including ones with nothing on that side -- carries all five
+// data attributes FR-9 anchors comments against, even when a value is empty
+// because the row has no line there.
+function cellHTML(cls, fileId, side, lineNo, hunkID, position, inner) {
+  return `<div class="${cls}" data-file="${escapeAttr(fileId)}" data-side="${side}" ` +
+    `data-line="${lineNo || ''}" data-hunk="${escapeAttr(hunkID || '')}" data-position="${position || ''}">${inner}</div>`;
+}
 
-  for (const r of rows) {
-    const tr = document.createElement('tr');
-    tr.className = rowClass(r.kind);
-    tr.dataset.file = state.selected;
-    tr.dataset.side = r.kind === 'del' ? 'old' : 'new';
-    tr.dataset.line = String((r.kind === 'del' ? r.old_no : r.new_no) || '');
-    tr.dataset.hunk = r.hunk_id || '';
-    tr.dataset.position = String(r.position || '');
-
-    if (r.kind === 'header') {
-      tr.innerHTML = `<td colspan="3" class="text">${escapeHTML(r.text)}</td>`;
-    } else {
-      tr.innerHTML = `
-        <td class="lineno">${r.old_no || ''}</td>
-        <td class="lineno">${r.new_no || ''}</td>
-        <td class="text">${escapeHTML(r.text)}</td>
-      `;
-    }
-    tbody.appendChild(tr);
+function rowCellsHTML(fileId, row) {
+  if (row.kind === 'hunk') {
+    return cellHTML('cell hunk-header', fileId, '', '', row.hunk_id, '', row.old_html || '');
   }
+  const oldBg = sideBgClass(row.kind, 'old');
+  const newBg = sideBgClass(row.kind, 'new');
+  return (
+    cellHTML(`cell lineno ${oldBg}`, fileId, 'old', row.old_no, row.hunk_id, row.old_position, row.old_no || '') +
+    cellHTML(`cell code chroma ${oldBg}`, fileId, 'old', row.old_no, row.hunk_id, row.old_position, row.old_html || '') +
+    cellHTML(`cell lineno ${newBg}`, fileId, 'new', row.new_no, row.hunk_id, row.new_position, row.new_no || '') +
+    cellHTML(`cell code chroma ${newBg}`, fileId, 'new', row.new_no, row.hunk_id, row.new_position, row.new_html || '')
+  );
+}
 
-  table.appendChild(tbody);
-  diff.innerHTML = '';
-  diff.appendChild(table);
+// ensureDiffDOM builds #diff's virtualization scaffolding once; selectFile
+// just updates the spacer height and re-renders the visible window on every
+// later call.
+function ensureDiffDOM() {
+  const diff = document.getElementById('diff');
+  if (!diff.dataset.virtualized) {
+    diff.dataset.virtualized = '1';
+    diff.innerHTML = '<div id="diff-spacer"></div><div id="diff-rows"></div>';
+    diff.addEventListener('scroll', onDiffScroll, { passive: true });
+  }
+  return diff;
+}
+
+// onDiffScroll coalesces scroll events onto one requestAnimationFrame, so a
+// fast scroll gesture never queues up more re-renders than frames to show
+// them in -- the thing that keeps scrolling under the 50ms-long-task budget.
+let scrollRAF = null;
+function onDiffScroll() {
+  if (scrollRAF !== null) return;
+  scrollRAF = requestAnimationFrame(() => {
+    scrollRAF = null;
+    renderVisibleRows();
+  });
+}
+
+function renderVisibleRows() {
+  const diff = document.getElementById('diff');
+  const rowsEl = document.getElementById('diff-rows');
+  const rows = state.rows;
+  if (!rows.length) {
+    rowsEl.innerHTML = '';
+    return;
+  }
+  const scrollTop = diff.scrollTop;
+  const viewportHeight = diff.clientHeight;
+  const first = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
+  const last = Math.min(rows.length, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN);
+
+  let html = '';
+  for (let i = first; i < last; i++) {
+    html += `<div class="diff-row">${rowCellsHTML(state.selected, rows[i])}</div>`;
+  }
+  rowsEl.innerHTML = html;
+  rowsEl.style.transform = `translateY(${first * ROW_HEIGHT}px)`;
+}
+
+// jumpHunk moves to the next/previous hunk relative to whatever is
+// currently scrolled to the top of the viewport -- not a separately tracked
+// cursor -- so it does the right thing even after the user scrolls by hand.
+function jumpHunk(delta) {
+  const hunks = state.hunkRows;
+  if (!hunks.length) return;
+  const diff = document.getElementById('diff');
+  const topRow = Math.floor(diff.scrollTop / ROW_HEIGHT);
+  let cur = -1;
+  for (let i = 0; i < hunks.length; i++) {
+    if (hunks[i] <= topRow) cur = i;
+  }
+  const next = Math.min(Math.max(cur + delta, 0), hunks.length - 1);
+  diff.scrollTop = hunks[next] * ROW_HEIGHT;
+  renderVisibleRows();
 }
 
 async function selectFile(id) {
   state.selected = id;
   renderFiles();
+  const token = ++selectToken;
   const rows = await getJSON(`/api/file/${encodeURIComponent(id)}/rows`);
-  renderRows(rows);
+  if (token !== selectToken) return; // a newer selectFile call has since started
+
+  state.rows = rows;
+  state.hunkRows = [];
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].kind === 'hunk') state.hunkRows.push(i);
+  }
+
+  const diff = ensureDiffDOM();
+  diff.scrollTop = 0;
+  document.getElementById('diff-spacer').style.height = `${rows.length * ROW_HEIGHT}px`;
+  renderVisibleRows();
 }
 
 async function refreshSession() {
@@ -143,6 +242,8 @@ document.addEventListener('keydown', (e) => {
   if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
   if (e.key === 'j') moveSelection(1);
   if (e.key === 'k') moveSelection(-1);
+  if (e.key === 'n') jumpHunk(1);
+  if (e.key === 'p') jumpHunk(-1);
 });
 
 (async function init() {

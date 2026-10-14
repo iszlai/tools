@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/iszlai/tools/flowreview/internal/core/render"
 	"github.com/iszlai/tools/flowreview/internal/model"
 )
 
@@ -143,7 +144,7 @@ func TestFileRows(t *testing.T) {
 	_, hs := newTestServer(t)
 	id := fileID(t, hs)
 
-	var rows []Row
+	var rows []render.Row
 	resp := getJSON(t, hs.URL+"/api/file/"+id+"/rows", &rows)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -151,8 +152,40 @@ func TestFileRows(t *testing.T) {
 	if len(rows) == 0 {
 		t.Fatal("rows is empty")
 	}
-	if rows[0].Kind != "header" {
-		t.Errorf("rows[0].Kind = %q, want header", rows[0].Kind)
+	if rows[0].Kind != render.KindHunk {
+		t.Errorf("rows[0].Kind = %q, want hunk", rows[0].Kind)
+	}
+	var sawChange bool
+	for _, r := range rows[1:] {
+		if r.Kind != render.KindChange {
+			continue
+		}
+		sawChange = true
+		if r.OldPosition == 0 || r.NewPosition == 0 {
+			t.Errorf("change row missing a position: %+v", r)
+		}
+		if r.OldHTML == "" || r.NewHTML == "" {
+			t.Errorf("change row missing highlighted html: %+v", r)
+		}
+	}
+	if !sawChange {
+		t.Errorf("rows = %+v, want a paired change row (the fixture's one-word edit)", rows)
+	}
+}
+
+// TestFileRowsUnifiedLayout checks the ?layout=unified fallback kept for
+// anything that still wants flowreview's pre-FR-6 flat row shape.
+func TestFileRowsUnifiedLayout(t *testing.T) {
+	_, hs := newTestServer(t)
+	id := fileID(t, hs)
+
+	var rows []unifiedRow
+	resp := getJSON(t, hs.URL+"/api/file/"+id+"/rows?layout=unified", &rows)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if len(rows) == 0 || rows[0].Kind != "header" {
+		t.Errorf("rows = %+v, want a leading header row", rows)
 	}
 	var sawAdd, sawDel bool
 	for _, r := range rows[1:] {
@@ -186,7 +219,7 @@ func TestFileRowsNotFound(t *testing.T) {
 
 func hunkID(t *testing.T, hs testServer, fid string) string {
 	t.Helper()
-	var rows []Row
+	var rows []render.Row
 	getJSON(t, hs.URL+"/api/file/"+fid+"/rows", &rows)
 	for _, r := range rows {
 		if r.HunkID != "" {
@@ -244,12 +277,12 @@ func TestCommentLifecycle(t *testing.T) {
 	fid := fileID(t, hs)
 	hid := hunkID(t, hs, fid)
 
-	var rows []Row
+	var rows []render.Row
 	getJSON(t, hs.URL+"/api/file/"+fid+"/rows", &rows)
 	var anchorPos int
 	for _, r := range rows {
-		if r.Kind == "add" {
-			anchorPos = r.Position
+		if r.Kind == render.KindChange {
+			anchorPos = r.NewPosition
 			break
 		}
 	}
