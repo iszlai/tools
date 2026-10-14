@@ -325,7 +325,15 @@ func (s *Server) handleUpsertComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ws := s.workspace()
-	sess, _, _ := ws.Snapshot()
+	sess, _, repo := ws.Snapshot()
+	// Stamp the head the anchor was taken against, the same way MarkReviewed
+	// does for a ReviewState (headSHA below): the client sends path/side/
+	// line/hunk_id/position, which is all it can read off the row's data
+	// attributes, but head_sha needs the repo and is cheap to fill in here
+	// rather than ask every caller to resolve it themselves.
+	if req.Anchor != nil && req.Anchor.HeadSHA == "" {
+		req.Anchor.HeadSHA = headSHA(r.Context(), sess, repo)
+	}
 	draft := model.CommentDraft{
 		ID:         req.ID,
 		Anchor:     req.Anchor,
@@ -393,4 +401,22 @@ func (s *Server) handleOpen(w http.ResponseWriter, r *http.Request) {
 	window.Focus()
 
 	writeJSON(w, http.StatusOK, map[string]string{"session_id": ws.Session.ID})
+}
+
+// handleReload is POST /api/reload (FR-9): re-fetches the diff for the
+// session already open -- from git, or by re-reading a patch file -- and
+// reconciles stored state against it again (review.Workspace.Reload, which
+// runs the same session.Refresh an Open does). Unlike handleOpen this keeps
+// reviewing the same source; it exists for the case a long-running server's
+// in-memory Workspace needs to notice the thing it is reviewing moved (more
+// commits on a worktree branch, a PR pushed again) without a client having to
+// restart the process.
+func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) {
+	ws := s.workspace()
+	if err := ws.Reload(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	sess, files, _ := ws.Snapshot()
+	writeJSON(w, http.StatusOK, buildSessionView(sess, files))
 }

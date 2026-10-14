@@ -392,6 +392,82 @@ async function waitForCondition(fn, timeoutMs = 2000, intervalMs = 25) {
     check('FR-7 accept: reviewed state survives a process restart (same FLOWREVIEW_HOME)',
       sessAfterRestart.progress.reviewed_hunks === sessBeforeRestart.progress.reviewed_hunks && sessAfterRestart.progress.reviewed_hunks > 0,
       `${JSON.stringify(sessBeforeRestart.progress)} -> ${JSON.stringify(sessAfterRestart.progress)}`);
+
+    /* ======================== FR-9: comment drafts ======================== */
+
+    /* 16 -- inline draft: click the line-number gutter to open a compose
+       card, type, save; the card renders through mdlite. a.txt's single
+       hunk changes its line 2 ("line two" -> "line TWO"). */
+    await selectFileAndMeasure(page, 'a.txt');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    await page.locator('#diff-rows [data-side="new"][data-line="2"].lineno').click();
+    await page.waitForSelector('#comment-new textarea');
+    await page.fill('#comment-new textarea', 'needs a **look**');
+    await page.click('#comment-new [data-action="save"]');
+    await page.waitForSelector('#comment-list .comment-card');
+    const draftBodyHTML = await page.locator('#comment-list .comment-card .body-view').first().innerHTML();
+    check('FR-9: a saved inline draft renders through mdlite',
+      /<strong>look<\/strong>/.test(draftBodyHTML), draftBodyHTML);
+    const draftHasMarker = await page.locator('#diff-rows [data-side="new"][data-line="2"].lineno .marker-dot.draft').count();
+    check('FR-9: the line carrying a draft shows a gutter marker', draftHasMarker >= 1, String(draftHasMarker));
+
+    /* 17 -- FR-9 accept: draft -> reload -> still there. */
+    await page.reload();
+    await page.waitForSelector('.file-row');
+    await selectFileAndMeasure(page, 'a.txt');
+    await page.waitForSelector('#comment-list .comment-card');
+    const afterReloadText = await page.textContent('#comment-list .comment-card .body-view');
+    check('FR-9 accept: a draft survives a page reload', /look/.test(afterReloadText), afterReloadText);
+
+    /* 18 -- FR-9 accept: stale draft flagged after a fixture refresh. Change
+       the hunk the draft is anchored to (a second edit to the same line) and
+       trigger POST /api/reload -- the endpoint this slice adds so a running
+       server notices the working tree moved without a process restart --
+       then confirm the comment shows the stale warning. */
+    writeFileSync(path.join(repoDir, 'a.txt'), 'line one\nline TWO changed again\nline three\n');
+    const reloadResp = await fetch(`${url}api/reload`, { method: 'POST' }).then((r) => r.json());
+    check('FR-9: POST /api/reload reconciles against the changed fixture',
+      reloadResp.progress.total_hunks >= 1, JSON.stringify(reloadResp.progress));
+    await page.reload();
+    await page.waitForSelector('.file-row');
+    await selectFileAndMeasure(page, 'a.txt');
+    await page.waitForSelector('#comment-list .comment-card.stale');
+    const staleWarning = await page.textContent('#comment-list .comment-card.stale .stale-warning');
+    check('FR-9 accept: a stale draft is flagged with a warning', /changed/.test(staleWarning), staleWarning);
+
+    /* 19 -- re-anchor: click Re-anchor, then click a line in the diff; the
+       comment is re-upserted with a fresh anchor and loses its stale status
+       (handleUpsertComment always resets to "draft" on any upsert). */
+    await page.click('#comment-list .comment-card.stale [data-action="reanchor"]');
+    await page.waitForSelector('.comment-card.reanchoring');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    await page.locator('#diff-rows [data-side="new"][data-line="2"].lineno').click();
+    const unstaled = await waitForCondition(async () => {
+      const s = await fetch(`${url}api/session`).then((r) => r.json());
+      return s.comments.length === 1 && s.comments[0].status !== 'stale';
+    });
+    check('FR-9: re-anchoring a stale comment clears the stale flag', unstaled, 'timed out waiting for a non-stale status');
+
+    /* 20 -- remote comments: stub GET /api/remote-comments (kept simple per
+       the slice's own note -- no fake GitHub API needed) and confirm a
+       non-outdated one renders inline as a gutter marker at its anchor,
+       while an outdated one -- no live line left to anchor it to -- renders
+       read-only in the side panel instead. */
+    await page.route('**/api/remote-comments', (route) => route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify([
+        { id: 1, author: 'reviewer', body: 'looks fine to me', path: 'a.txt', line: 2, side: 'new', created_at: new Date().toISOString() },
+        { id: 2, author: 'reviewer', body: 'this was about an old line', path: 'a.txt', line: 1, side: 'new', created_at: new Date().toISOString(), outdated: true },
+      ]),
+    }));
+    await page.reload();
+    await page.waitForSelector('.file-row');
+    await selectFileAndMeasure(page, 'a.txt');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    const remoteMarker = await page.locator('#diff-rows [data-side="new"][data-line="2"].lineno .marker-dot.remote').count();
+    check('FR-9: a non-outdated remote comment renders inline at its anchor', remoteMarker >= 1, String(remoteMarker));
+    const outdatedCard = await page.locator('#remote-comment-list .remote-comment-card').count();
+    check('FR-9: an outdated remote comment renders read-only in the side panel', outdatedCard >= 1, String(outdatedCard));
   } finally {
     await browser.close();
     proc.kill();

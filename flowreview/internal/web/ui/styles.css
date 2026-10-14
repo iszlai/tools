@@ -281,3 +281,111 @@ mark.x-del { background: var(--mark-del-bg); }
 #help-overlay dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; }
 #help-overlay dt { font-family: ui-monospace, Menlo, monospace; font-weight: 600; }
 #help-overlay dd { margin: 0; color: var(--muted); }
+
+/* ======================== FR-9: comment drafts ======================== */
+
+#comments-panel { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
+#comments-panel h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 12px 0 6px;
+}
+#comments-panel h3:first-of-type { margin-top: 0; }
+
+#add-general-comment {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+}
+#add-general-comment:hover { background: var(--hover); }
+
+.comment-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  margin-top: 8px;
+}
+.comment-card .meta {
+  color: var(--muted);
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+.comment-card .body-view { margin: 6px 0; }
+.comment-card .body-view :first-child { margin-top: 0; }
+.comment-card .body-view :last-child { margin-bottom: 0; }
+.comment-card textarea {
+  width: 100%;
+  min-height: 56px;
+  font: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+.comment-card .preview {
+  color: var(--muted);
+  font-size: 12px;
+  border-top: 1px dashed var(--border);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+.comment-card .actions { display: flex; gap: 6px; margin-top: 6px; }
+.comment-card .actions button {
+  font: inherit;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--fg);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.comment-card .actions button:hover { background: var(--hover); }
+
+.comment-card.stale { border-color: var(--removed-fg); }
+.comment-card .stale-warning { color: var(--removed-fg); font-size: 11px; margin: 4px 0 0; }
+.comment-card.reanchoring { outline: 2px dashed var(--accent); outline-offset: 2px; }
+
+.remote-comment-card {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  margin-top: 8px;
+  color: var(--muted);
+}
+.remote-comment-card .meta { font-size: 11px; display: flex; justify-content: space-between; gap: 6px; }
+
+#comments-panel .placeholder { color: var(--muted); font-size: 12px; }
+
+/* Inline, read-only markers in the diff gutter: fixed-size dots, never
+   glyphs, so a line carrying one (or both) never grows past the fixed
+   ROW_HEIGHT the virtualized grid assumes. */
+.marker-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 3px;
+  vertical-align: middle;
+}
+.marker-dot.draft { background: var(--accent); }
+.marker-dot.remote { background: var(--muted); }
+
+/* The line a code-cell click last focused (for the `c` shortcut), outlined
+   rather than resized. */
+.cell.focused-line { outline: 1px solid var(--accent); outline-offset: -1px; }
+
+/* While picking a new line for a stale comment, every line in the open file
+   invites a click. */
+.cell.lineno { cursor: pointer; }
