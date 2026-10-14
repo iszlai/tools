@@ -1,0 +1,12 @@
+[
+  {
+    "id": 201,
+    "body": "Thanks for the fix! Will take a look today.",
+    "user": {
+      "login": "maintainer-a"
+    },
+    "created_at": "2026-09-01T09:00:00Z",
+    "updated_at": "2026-09-01T09:00:00Z",
+    "html_url": "https://github.com/cli/cli/pull/9999#issuecomment-201"
+  }
+]

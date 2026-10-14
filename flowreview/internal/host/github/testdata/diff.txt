@@ -1,0 +1,29 @@
+diff --git a/internal/repo/list.go b/internal/repo/list.go
+index 1111111..2222222 100644
+--- a/internal/repo/list.go
++++ b/internal/repo/list.go
+@@ -10,6 +10,9 @@ func listRepos(ctx context.Context, owner string) ([]Repo, error) {
+ 	repos, err := fetchRepos(ctx, owner)
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	if len(repos) == 0 {
++		return []Repo{}, nil
++	}
+ 	return repos, nil
+ }
+diff --git a/internal/repo/list_test.go b/internal/repo/list_test.go
+index 3333333..4444444 100644
+--- a/internal/repo/list_test.go
++++ b/internal/repo/list_test.go
+@@ -1,3 +1,10 @@
+ package repo
+
+ import "testing"
++
++func TestListRepos_empty(t *testing.T) {
++	repos, err := listRepos(nil, "octocat")
++	if err != nil || repos == nil {
++		t.Fatalf("listRepos: got (%v, %v)", repos, err)
++	}
++}

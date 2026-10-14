@@ -1,0 +1,21 @@
+{
+  "number": 8888,
+  "state": "closed",
+  "title": "docs: fix typo in README",
+  "user": {
+    "login": "hubot"
+  },
+  "body": "",
+  "draft": false,
+  "merged": true,
+  "head": {
+    "ref": "fix-typo",
+    "sha": "deadbeef00112233445566778899aabbccddeef",
+    "repo": null
+  },
+  "base": {
+    "ref": "trunk",
+    "sha": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "html_url": "https://github.com/cli/cli/pull/8888"
+}

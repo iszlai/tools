@@ -1,0 +1,20 @@
+[
+  {
+    "id": 102,
+    "pull_request_review_id": 5001,
+    "body": "Nit: prefer `nil` here per our style guide.",
+    "path": "internal/repo/list.go",
+    "commit_id": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "original_commit_id": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "user": {
+      "login": "reviewer-two"
+    },
+    "created_at": "2026-09-01T12:00:00Z",
+    "updated_at": "2026-09-01T12:00:00Z",
+    "html_url": "https://github.com/cli/cli/pull/9999#discussion_r102",
+    "line": null,
+    "original_line": 9,
+    "side": "LEFT",
+    "in_reply_to_id": 101
+  }
+]
