@@ -17,7 +17,11 @@ import (
 	"github.com/iszlai/tools/flowreview/internal/core/session"
 )
 
-//go:embed ui/index.html ui/app.js ui/styles.css
+// ui/md.js is mdlite, copied in from /Users/lehel/repos/tools/mdlite/md.js
+// the way taskhound and diagme do (see that file's own header comment): embed
+// cannot reach outside this directory, so the copy is checked in here.
+//
+//go:embed ui/index.html ui/app.js ui/styles.css ui/md.js
 var uiFiles embed.FS
 
 // uiRoot strips the "ui/" prefix embed.FS keeps, so "/" serves index.html
@@ -134,6 +138,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/comments", s.handleUpsertComment)
 	s.mux.HandleFunc("DELETE /api/comments/{id}", s.handleDeleteComment)
 	s.mux.HandleFunc("POST /api/open", s.handleOpen)
+	s.mux.HandleFunc("POST /api/reload", s.handleReload)                 // FR-9
 	s.mux.HandleFunc("GET /api/remote-comments", s.handleRemoteComments) // FR-12, internal/web/remote.go
 	s.mux.HandleFunc("GET /api/tests", s.handleTests)                    // FR-21, internal/web/tests.go
 	s.mux.HandleFunc("GET /api/radius", s.handleRadius)                  // FR-19, internal/web/radius.go

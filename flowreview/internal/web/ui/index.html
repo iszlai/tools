@@ -9,13 +9,33 @@
 <link rel="stylesheet" href="/styles/chroma.css">
 </head>
 <body>
+<!-- FR-7: progress lives in a thin header above the three panes, separate
+     from the richer session summary in the right pane (title, per-type
+     counts, comments, source/head). -->
+<header id="topbar" aria-label="Session progress">
+  <span id="topbar-title"></span>
+  <div class="progress-bar" id="topbar-progress"><div></div></div>
+  <span id="topbar-count"></span>
+  <button id="help-button" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+</header>
 <div id="app">
   <nav id="files" aria-label="Changed files"></nav>
   <main id="diff" aria-label="Diff"></main>
-  <aside id="side" aria-label="Session summary">
+  <aside id="side" aria-label="Session summary and comments">
     <div id="session-summary">Loading…</div>
+    <!-- FR-9: comment drafts live here, not inline in the virtualized diff
+         rows -- see app.js's FR-9 section comment for why. -->
+    <div id="comments-panel">
+      <h3>Comments</h3>
+      <button id="add-general-comment" type="button">+ General comment</button>
+      <div id="comment-list"></div>
+      <h3>Outdated remote comments</h3>
+      <div id="remote-comment-list"></div>
+    </div>
   </aside>
 </div>
+<div id="help-overlay" hidden></div>
+<script src="md.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

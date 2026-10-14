@@ -15,13 +15,18 @@ import (
 
 // SessionView is what GET /api/session returns: the session's own metadata
 // plus derived progress counts the UI would otherwise have to compute itself
-// from the file list.
+// from the file list, every hunk's review status (FR-7, so the diff pane can
+// dim reviewed hunks without a second round trip) and every comment draft on
+// the session (FR-9, so a reload can redraw them without a dedicated list
+// endpoint).
 type SessionView struct {
-	ID       string       `json:"id"`
-	RepoKey  string       `json:"repo_key"`
-	Title    string       `json:"title"`
-	Source   model.Source `json:"source"`
-	Progress Progress     `json:"progress"`
+	ID         string                      `json:"id"`
+	RepoKey    string                      `json:"repo_key"`
+	Title      string                      `json:"title"`
+	Source     model.Source                `json:"source"`
+	Progress   Progress                    `json:"progress"`
+	HunkStates map[string]model.HunkStatus `json:"hunk_states,omitempty"`
+	Comments   []model.CommentDraft        `json:"comments,omitempty"`
 }
 
 // Progress summarizes how much of a session's diff has been reviewed.
@@ -61,6 +66,12 @@ type unifiedRow struct {
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
+	// Every API response reflects live review state (progress, hunk states,
+	// comments); without this, a browser can serve a GET like /api/session
+	// out of its HTTP cache instead of hitting the handler, showing reviewed
+	// state from before the most recent change (FR-7 surfaced this: a page
+	// reload right after marking a hunk could read a stale cached response).
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
@@ -98,12 +109,29 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 
 func buildSessionView(sess *model.ReviewSession, files []model.ChangedFile) SessionView {
 	return SessionView{
-		ID:       sess.ID,
-		RepoKey:  sess.RepoKey,
-		Title:    sess.Title,
-		Source:   sess.Source,
-		Progress: buildProgress(sess, files),
+		ID:         sess.ID,
+		RepoKey:    sess.RepoKey,
+		Title:      sess.Title,
+		Source:     sess.Source,
+		Progress:   buildProgress(sess, files),
+		HunkStates: buildHunkStates(sess),
+		Comments:   sess.Comments,
 	}
+}
+
+// buildHunkStates projects sess.States down to just the status every hunk is
+// in, by hunk id -- the UI needs this to dim reviewed hunks and to drive the
+// current-hunk toggle, but has no business seeing the stored body or
+// timestamps the full ReviewState carries.
+func buildHunkStates(sess *model.ReviewSession) map[string]model.HunkStatus {
+	if len(sess.States) == 0 {
+		return nil
+	}
+	out := make(map[string]model.HunkStatus, len(sess.States))
+	for id, st := range sess.States {
+		out[id] = st.Status
+	}
+	return out
 }
 
 func buildProgress(sess *model.ReviewSession, files []model.ChangedFile) Progress {
@@ -297,7 +325,15 @@ func (s *Server) handleUpsertComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ws := s.workspace()
-	sess, _, _ := ws.Snapshot()
+	sess, _, repo := ws.Snapshot()
+	// Stamp the head the anchor was taken against, the same way MarkReviewed
+	// does for a ReviewState (headSHA below): the client sends path/side/
+	// line/hunk_id/position, which is all it can read off the row's data
+	// attributes, but head_sha needs the repo and is cheap to fill in here
+	// rather than ask every caller to resolve it themselves.
+	if req.Anchor != nil && req.Anchor.HeadSHA == "" {
+		req.Anchor.HeadSHA = headSHA(r.Context(), sess, repo)
+	}
 	draft := model.CommentDraft{
 		ID:         req.ID,
 		Anchor:     req.Anchor,
@@ -365,4 +401,22 @@ func (s *Server) handleOpen(w http.ResponseWriter, r *http.Request) {
 	window.Focus()
 
 	writeJSON(w, http.StatusOK, map[string]string{"session_id": ws.Session.ID})
+}
+
+// handleReload is POST /api/reload (FR-9): re-fetches the diff for the
+// session already open -- from git, or by re-reading a patch file -- and
+// reconciles stored state against it again (review.Workspace.Reload, which
+// runs the same session.Refresh an Open does). Unlike handleOpen this keeps
+// reviewing the same source; it exists for the case a long-running server's
+// in-memory Workspace needs to notice the thing it is reviewing moved (more
+// commits on a worktree branch, a PR pushed again) without a client having to
+// restart the process.
+func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) {
+	ws := s.workspace()
+	if err := ws.Reload(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	sess, files, _ := ws.Snapshot()
+	writeJSON(w, http.StatusOK, buildSessionView(sess, files))
 }

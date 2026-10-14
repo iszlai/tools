@@ -121,3 +121,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-17 merged; flow ordering with a narrated Why
 
 **Decision (agent, accepted).** Backward BFS over callers (depth 6, 500 nodes) to the first entry point; components become flow groups, callers-first by Kahn with lexicographic cycle-breaking. A file joins only the first group claiming it. Unclassified Go files are approximated by BFS depth (there's no import-depth primitive). Hotspot is injected as a func, so `order` doesn't depend on history. Flow analysis starts on the first `/api/order` request rather than at session open (no UI menu yet). Gherkin chains surface when step-def handler ids map to exact Go ids.
+
+## 2026-10-14 — FR-9: FR-7 and FR-9 merged; comments live in the side panel
+
+**Decision (agent, accepted).** Comment threads render in the side panel, with a gutter dot and a focused-line outline in the diff, because the virtualized grid assumes a fixed row height and inline variable-height rows would endanger the scroll budget. `R` posts one state per hunk (no batch endpoint). API responses send `Cache-Control: no-store` (a reload could read stale review state). `POST /api/reload` re-diffs and runs Refresh. Merge note: FR-8's expand click handler and FR-9's line click handler were unified into one delegated `onDiffClick`.
