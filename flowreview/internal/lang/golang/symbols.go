@@ -86,6 +86,15 @@ func goID(pkgPath, recv, name string) string {
 	return fmt.Sprintf("%s.(%s).%s", pkgPath, strings.TrimPrefix(recv, "*"), name)
 }
 
+// SymbolID is goID, exported for FR-19's blast radius: an interface's own
+// methods have no CodeSymbol of their own (Symbols lists declarations, not
+// interface method specs), so a caller that needs to ask Callers or
+// Implementations about one has to build its ID itself, using exactly the
+// convention CodeSymbol.ID already follows.
+func SymbolID(pkgPath, recv, name string) string {
+	return goID(pkgPath, recv, name)
+}
+
 // structuralID builds the structural-tier ID model.go documents ("path#Name",
 // "path#Class.Name"), used wherever symbols.go has only syntax and no
 // resolvable package path: Provider.FunctionAt/Outline (syntax only, by
