@@ -40,6 +40,27 @@ const state = {
     plan: null, // last PublishPreflight response (inline/general/excluded/head_sha), or null
     confirming: false, // true once Submit has been clicked, before the user confirms
   },
+
+  // FR-17: flow order toggle. orderMode persists in localStorage; 'flow'
+  // prefers the grouped order once GET /api/order resolves, falling back to
+  // plain diff order (state.files' own order) while it is still pending --
+  // 'diff' always shows plain diff order, even after flow order is ready.
+  orderMode: localStorage.getItem('flowreview.orderMode') === 'diff' ? 'diff' : 'flow',
+  order: null, // last successful GET /api/order?kind=flow response (order.Order), or null before it resolves
+  displayOrder: [], // flattened file ids in the order renderFiles last drew -- what moveSelection (j/k) walks
+
+  // FR-19/FR-21: callers + tests sidebar, for whichever changed function(s)
+  // the current hunk (currentHunkIndex) overlaps -- see symbolsForCurrentHunk.
+  radiusPending: true,
+  radius: null, // GET /api/radius's report, once ready
+  testsPending: true,
+  testsReport: null, // GET /api/tests's report, once ready -- also the only
+  // place a changed symbol's line range is exposed over the API (radius's
+  // own report carries bare symbol ID strings only), so this doubles as the
+  // join key source for the callers panel too.
+
+  // FR-wrap: long-line wrap toggle ('w'), persisted in localStorage; default on.
+  wrap: localStorage.getItem('flowreview.wrap') !== '0',
 };
 
 // expandedHunks tracks FR-8's "expand enclosing function": hunk_id -> the
@@ -113,24 +134,131 @@ function fileState(f) {
   return 'unreviewed';
 }
 
+// ======================== FR-17: flow order ========================
+// GET /api/order?kind=flow can take real time to compute on a large repo
+// (see order.go's own doc comment); loadOrder starts it once at init and
+// polls with backoff until it resolves, independent of which order the
+// toggle currently shows -- so switching to "flow" after the fact needs no
+// extra round trip, and the file list just shows plain diff order (see
+// flowDisplayGroups) until it does.
+
+// pollUntilReady calls fetchFn repeatedly until it resolves to a body that is
+// not {pending: true}, backing off between tries (poll.go-style background
+// analysis can take up to a couple of minutes on a large repo) so a slow
+// first run never hammers the server. Returns null, and stops polling, on a
+// hard failure -- the caller just keeps showing whatever it had before.
+async function pollUntilReady(fetchFn, { initialDelay = 300, maxDelay = 5000 } = {}) {
+  let delay = initialDelay;
+  for (;;) {
+    let body;
+    try {
+      body = await fetchFn();
+    } catch {
+      return null;
+    }
+    if (!body || !body.pending) return body;
+    await new Promise((r) => setTimeout(r, delay));
+    delay = Math.min(delay * 2, maxDelay);
+  }
+}
+
+async function loadOrder() {
+  const order = await pollUntilReady(() => getJSON('/api/order?kind=flow'));
+  if (order) state.order = order;
+  renderFiles();
+}
+
+// flowDisplayGroups turns state.order into exactly what renderFiles draws:
+// every order.FileEntry resolved against state.files (Order itself carries
+// no status/stats -- those come from FileView), skipping an entry whose file
+// id state.files no longer has rather than crashing on it (a reload racing
+// the order fetch). Returns null when flow order should not be shown: the
+// toggle is set to "diff", or nothing has arrived from loadOrder yet.
+function flowDisplayGroups() {
+  if (state.orderMode !== 'flow' || !state.order) return null;
+  const byId = new Map(state.files.map((f) => [f.id, f]));
+  const resolve = (entries) => (entries || [])
+    .map((e) => ({ why: e.why, file: byId.get(e.file_id) }))
+    .filter((x) => !!x.file);
+  return {
+    groups: (state.order.groups || []).map((g) => ({ title: g.title, files: resolve(g.files) })),
+    unclassified: resolve(state.order.unclassified),
+  };
+}
+
+function renderOrderToggle() {
+  const btn = document.getElementById('order-toggle');
+  const flowReady = !!(state.order && state.order.groups && state.order.groups.length);
+  if (state.orderMode === 'flow') {
+    btn.textContent = flowReady ? 'Flow order ▾' : 'Flow order (computing…)';
+    btn.title = 'Showing flow order -- click to show plain diff order';
+  } else {
+    btn.textContent = 'Diff order ▾';
+    btn.title = 'Showing diff order -- click to show flow order';
+  }
+}
+
+function toggleOrderMode() {
+  state.orderMode = state.orderMode === 'flow' ? 'diff' : 'flow';
+  localStorage.setItem('flowreview.orderMode', state.orderMode);
+  renderFiles();
+}
+
+function fileRow(f, why) {
+  const row = document.createElement('div');
+  row.className = `file-row ${fileState(f)}` + (f.id === state.selected ? ' selected' : '');
+  row.dataset.file = f.id;
+  row.tabIndex = 0;
+  if (why) row.title = why; // FR-17: the flow reason this file is in its group, as a plain tooltip
+  const fullyReviewed = f.hunks > 0 && f.reviewed >= f.hunks;
+  row.innerHTML = `
+    <span class="status">${statusLetter(f.status)}</span>
+    <span class="path" title="${escapeHTML(f.path)}">${escapeHTML(f.path)}</span>
+    <span class="stats">+${f.additions}/-${f.deletions}</span>
+    ${fullyReviewed ? '<span class="reviewed-badge" title="fully reviewed"></span>' : ''}
+  `;
+  row.addEventListener('click', () => selectFile(f.id));
+  return row;
+}
+
+function groupTitle(text) {
+  const el = document.createElement('div');
+  el.className = 'file-group-title';
+  el.textContent = text;
+  return el;
+}
+
+// renderFiles draws #files in whichever order is currently displayed (flow
+// groups, once loadOrder has something to show and the toggle has not been
+// switched to "diff"; plain diff order otherwise) and records that order in
+// state.displayOrder, which moveSelection (j/k) walks instead of state.files'
+// own fixed order.
 function renderFiles() {
   const el = document.getElementById('files');
   el.innerHTML = '';
-  for (const f of state.files) {
-    const row = document.createElement('div');
-    row.className = `file-row ${fileState(f)}` + (f.id === state.selected ? ' selected' : '');
-    row.dataset.file = f.id;
-    row.tabIndex = 0;
-    const fullyReviewed = f.hunks > 0 && f.reviewed >= f.hunks;
-    row.innerHTML = `
-      <span class="status">${statusLetter(f.status)}</span>
-      <span class="path" title="${escapeHTML(f.path)}">${escapeHTML(f.path)}</span>
-      <span class="stats">+${f.additions}/-${f.deletions}</span>
-      ${fullyReviewed ? '<span class="reviewed-badge" title="fully reviewed"></span>' : ''}
-    `;
-    row.addEventListener('click', () => selectFile(f.id));
-    el.appendChild(row);
+  state.displayOrder = [];
+
+  const append = (f, why) => {
+    el.appendChild(fileRow(f, why));
+    state.displayOrder.push(f.id);
+  };
+
+  const flow = flowDisplayGroups();
+  if (flow) {
+    for (const g of flow.groups) {
+      if (!g.files.length) continue;
+      el.appendChild(groupTitle(g.title));
+      for (const { file, why } of g.files) append(file, why);
+    }
+    if (flow.unclassified.length) {
+      if (flow.groups.some((g) => g.files.length)) el.appendChild(groupTitle('Other changes'));
+      for (const { file, why } of flow.unclassified) append(file, why);
+    }
+  } else {
+    for (const f of state.files) append(f);
   }
+
+  renderOrderToggle();
 }
 
 // sideBgClass picks the add/del tint for one side of one row: a "change"
@@ -199,8 +327,8 @@ function rowCellsHTML(fileId, row, isCurrent) {
   const dim = reviewed ? ' hunk-reviewed' : '';
   if (row.kind === 'hunk') {
     const cls = 'cell hunk-header' + dim + (isCurrent ? ' current' : '');
-    const check = reviewed ? ' <span class="reviewed-check">✓ reviewed</span>' : '';
-    return cellHTML(cls, fileId, '', '', row.hunk_id, '', (row.old_html || '') + check + expandButtonHTML(row.hunk_id) + summaryStripHTML(row.hunk_id));
+    const controls = reviewToggleButtonHTML(row.hunk_id, reviewed) + commentButtonHTML() + expandButtonHTML(row.hunk_id) + summaryStripHTML(row.hunk_id);
+    return cellHTML(cls, fileId, '', '', row.hunk_id, '', (row.old_html || '') + controls);
   }
   const oldBg = sideBgClass(row.kind, 'old');
   const newBg = sideBgClass(row.kind, 'new');
@@ -271,6 +399,7 @@ function renderVisibleRows() {
   if (!rows.length) {
     rowsEl.innerHTML = '';
     if (window.FlowReviewSummary) window.FlowReviewSummary.onRowsRendered(); // FR-29: nothing visible now either
+    updateSidebarPanelsIfNeeded(null);
     return;
   }
   const scrollTop = diff.scrollTop;
@@ -288,6 +417,7 @@ function renderVisibleRows() {
   rowsEl.innerHTML = html;
   rowsEl.style.transform = `translateY(${first * ROW_HEIGHT}px)`;
   if (window.FlowReviewSummary) window.FlowReviewSummary.onRowsRendered(); // FR-29: request summaries for what's now on screen
+  updateSidebarPanelsIfNeeded(curRowIdx >= 0 ? rows[curRowIdx].hunk_id : null);
 }
 
 // jumpHunk moves to the next/previous hunk relative to whatever is
@@ -336,6 +466,41 @@ function onExpandClick(e) {
   e.stopPropagation();
   toggleExpand(btn.dataset.hunk);
   return true;
+}
+
+// reviewToggleButtonHTML/commentButtonHTML render a hunk header's other two
+// row-level controls -- every keyboard shortcut has a clickable equivalent,
+// not just expand (see this file's header comment in index.html). The
+// reviewed toggle doubles as the status indicator the old passive "✓
+// reviewed" label used to be: active when reviewed, clickable to flip either
+// way.
+function reviewToggleButtonHTML(hunkId, reviewed) {
+  const label = reviewed ? 'mark unreviewed' : 'mark reviewed';
+  return ` <button type="button" class="hunk-btn reviewed-toggle${reviewed ? ' active' : ''}" ` +
+    `data-hunk="${escapeAttr(hunkId)}" title="${label} (r)">✓</button>`;
+}
+
+function commentButtonHTML() {
+  return ' <button type="button" class="hunk-btn comment-btn" title="comment on the focused line (c)">💬</button>';
+}
+
+// onHunkButtonClick handles the reviewed-toggle and comment buttons above;
+// consulted alongside onExpandClick by onDiffClick.
+function onHunkButtonClick(e) {
+  const toggleBtn = e.target.closest('.reviewed-toggle');
+  if (toggleBtn) {
+    e.stopPropagation();
+    const hunkId = toggleBtn.dataset.hunk;
+    setHunkReviewed(hunkId, state.hunkStates[hunkId] !== 'reviewed');
+    return true;
+  }
+  const commentBtn = e.target.closest('.comment-btn');
+  if (commentBtn) {
+    e.stopPropagation();
+    openComposeForFocused();
+    return true;
+  }
+  return false;
 }
 
 // hunkRowRange finds the contiguous run of state.rows carrying hunk_id ===
@@ -503,16 +668,23 @@ function renderSessionSummary(sess) {
 
 // toggleCurrentHunk is `r`: flip the reviewed state of the current hunk (see
 // currentHunkIndex's doc comment for what "current" means).
-async function toggleCurrentHunk() {
-  const idx = currentHunkIndex();
-  if (idx < 0) return;
-  const hunkId = state.rows[state.hunkRows[idx]].hunk_id;
-  const reviewed = state.hunkStates[hunkId] !== 'reviewed';
+// setHunkReviewed is the POST /api/state round trip both toggleCurrentHunk
+// (the `r` key, which resolves "current" first) and the per-row
+// reviewed-toggle button (which already has hunkId from its own row) end up
+// calling.
+async function setHunkReviewed(hunkId, reviewed) {
   const sess = await postJSON('/api/state', { hunk_id: hunkId, reviewed });
   applySessionView(sess);
   await loadFiles();
   renderVisibleRows();
   await maybeCelebrateCompletion();
+}
+
+async function toggleCurrentHunk() {
+  const idx = currentHunkIndex();
+  if (idx < 0) return;
+  const hunkId = state.rows[state.hunkRows[idx]].hunk_id;
+  await setHunkReviewed(hunkId, state.hunkStates[hunkId] !== 'reviewed');
 }
 
 // toggleCurrentFile is `R`: if any hunk of the selected file is still
@@ -573,6 +745,7 @@ const HELP_KEYS = [
   ['R', 'toggle reviewed on the whole file'],
   ['c', 'comment on the focused line'],
   ['s', 'toggle hunk summaries on/off'],
+  ['w', 'toggle line wrap'],
   ['?', 'toggle this help'],
 ];
 
@@ -600,11 +773,14 @@ async function loadFiles() {
   }
 }
 
+// moveSelection is j/k: step through state.displayOrder, the order
+// renderFiles actually drew (flow groups or plain diff order, whichever is
+// currently shown -- see flowDisplayGroups), not state.files' own fixed one.
 function moveSelection(delta) {
-  if (state.files.length === 0) return;
-  const idx = state.files.findIndex((f) => f.id === state.selected);
-  const next = Math.min(Math.max((idx < 0 ? 0 : idx) + delta, 0), state.files.length - 1);
-  selectFile(state.files[next].id);
+  if (state.displayOrder.length === 0) return;
+  const idx = state.displayOrder.indexOf(state.selected);
+  const next = Math.min(Math.max((idx < 0 ? 0 : idx) + delta, 0), state.displayOrder.length - 1);
+  selectFile(state.displayOrder[next]);
 }
 
 // ======================== FR-9: comment drafts ========================
@@ -665,6 +841,7 @@ function existingDraftAt(anchor) {
 // code cell just focuses the line for the `c` shortcut.
 function onDiffClick(e) {
   if (onExpandClick(e)) return;
+  if (onHunkButtonClick(e)) return;
   const cell = e.target.closest('.cell');
   if (!cell || !cell.dataset.line) return;
   const anchor = anchorFromDataset(cell.dataset);
@@ -943,6 +1120,290 @@ async function retryDraft(id) {
   await refreshSession();
 }
 
+// ======================== FR-19/FR-21: callers + tests sidebar ========================
+// For the hunk currentHunkIndex (FR-7) calls "current", the right sidebar
+// shows FR-19's blast radius (unchanged callers, call sites flagged in_diff,
+// implementers) and FR-21's test reach (which tests reach it, or a warning
+// that none do, plus a copyable `go test` command) for whichever changed
+// function(s) that hunk's lines overlap.
+//
+// The join from "a hunk" to "a changed function" needs a line range to match
+// against; GET /api/radius's own report carries bare symbol ID strings only
+// (see radius.FuncRadius's doc comment -- an interface method has no
+// model.CodeSymbol of its own, so radius never had one to give out), but
+// GET /api/tests's report carries model.CodeSymbol (path + line range) for
+// every changed func/method the diff touches, because FR-21 needs it to
+// report "this changed function" in the first place. So symbolsForCurrentHunk
+// below reads ranges from the tests report and, once it has a symbol ID,
+// looks radius up by that same ID (both come from golang.SymbolID, so the
+// strings agree). The accepted gap: a changed interface's own method-level
+// radius entries (interfaceRadius in radius.go) have no CodeSymbol and so are
+// never matched here -- only a changed func, method or (indirectly, via its
+// concrete methods) a changed type show up in this sidebar.
+
+// currentHunkRange is the current hunk's new-side line range, read back out
+// of its own already-rendered header row ("@@ -o,n +s,l @@ section", see
+// render.hunkRow) rather than asked of the server a second time -- render.Row
+// carries no NewStart/NewLines field of its own. end mirrors
+// radius.rangeInHunks' "anchor at NewStart" rule for a deletion-only hunk
+// (NewLines == 0), so a symbol flagged in_diff there and a symbol matched
+// here agree on what "inside this hunk" means.
+function currentHunkRange() {
+  const idx = currentHunkIndex();
+  if (idx < 0) return null;
+  const row = state.rows[state.hunkRows[idx]];
+  if (!row) return null;
+  const m = /\+(\d+),(\d+)/.exec(row.new_html || row.old_html || '');
+  if (!m) return null;
+  const start = Number(m[1]);
+  const lines = Number(m[2]);
+  return { path: state.selectedPath, start, end: lines > 0 ? start + lines - 1 : start };
+}
+
+function rangesOverlap(aStart, aEnd, bStart, bEnd) {
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+// symbolsForCurrentHunk is this file's half of the hunk-to-function join
+// described above: every changed CodeSymbol (from the tests report) whose
+// declaration range overlaps the current hunk's new-side range.
+function symbolsForCurrentHunk() {
+  const range = currentHunkRange();
+  if (!range || !state.testsReport || !state.testsReport.functions) return [];
+  return state.testsReport.functions
+    .map((fr) => fr.symbol)
+    .filter((sym) => sym && sym.path === range.path && rangesOverlap(sym.range.start_line, sym.range.end_line, range.start, range.end));
+}
+
+function radiusForSymbol(id) {
+  if (!state.radius || !state.radius.functions) return null;
+  return state.radius.functions.find((fr) => fr.symbol === id) || null;
+}
+
+// shortSymbolName turns a golang.SymbolID ("pkgpath.Name" or
+// "pkgpath.(Recv).Name") into just the part a reader recognizes at a glance:
+// "Name" or "Recv.Name".
+function shortSymbolName(id) {
+  const m = /\.\(([^)]+)\)\.([^.]+)$/.exec(id);
+  if (m) return `${m[1]}.${m[2]}`;
+  const parts = id.split('.');
+  return parts[parts.length - 1] || id;
+}
+
+function confBadgeHTML(conf) {
+  return conf ? `<span class="badge conf-${escapeAttr(conf)}">${escapeHTML(conf)}</span>` : '';
+}
+
+// navEntryHTML renders one caller/call-site/implementer row. inDiff is each
+// entry's own server-computed flag (Caller.InDiff is file-level, Site.InDiff
+// is the exact line, Impl.InDiff is declaration-level -- see radius.go's doc
+// comments on each); only an inDiff entry with a known loc is clickable, per
+// FR-19's "a read-only file view is out of scope" note -- the rest render
+// their path:line as plain text.
+function navEntryHTML(label, loc, conf, inDiff) {
+  const locText = loc ? `${loc.path}:${loc.line}` : '—';
+  const clickable = !!(inDiff && loc);
+  const attrs = clickable ? ` data-action="jump" data-path="${escapeAttr(loc.path)}" data-line="${loc.line}"` : '';
+  return `<div class="nav-entry${clickable ? ' clickable' : ''}"${attrs}>` +
+    `<span class="nav-name" title="${escapeAttr(label)}">${escapeHTML(label)}</span>` +
+    `<span class="nav-loc">${escapeHTML(locText)}</span>${confBadgeHTML(conf)}</div>`;
+}
+
+// funcRadiusHTML renders one changed function's whole FR-19 card: its name,
+// a badge when its signature changed, then unchanged callers, call sites
+// (only present at all when the signature changed) and implementers --
+// radius.FuncRadius's own three lists, each already empty when there is
+// nothing to show rather than this having to guess.
+function funcRadiusHTML(sym, fr) {
+  const name = shortSymbolName(sym.id);
+  const sigBadge = fr && fr.signature_changed ? '<span class="badge sig-changed">signature changed</span>' : '';
+  const callers = (fr && fr.unchanged_callers) || [];
+  const sites = (fr && fr.call_sites) || [];
+  const impls = (fr && fr.implementers) || [];
+
+  const callersHTML = callers.length
+    ? callers.map((c) => navEntryHTML(shortSymbolName(c.symbol), c.site, c.confidence, c.in_diff)).join('')
+    : '<p class="placeholder">No callers.</p>';
+  const sitesHTML = sites.length
+    ? `<h4>Call sites</h4>${sites.map((s) => navEntryHTML(shortSymbolName(s.caller), s.location, s.confidence, s.in_diff)).join('')}`
+    : '';
+  const implsHTML = impls.length
+    ? `<h4>Implementers</h4>${impls.map((i) => navEntryHTML(shortSymbolName(i.symbol), i.location, i.confidence, i.in_diff)).join('')}`
+    : '';
+
+  return `<div class="func-radius"><div class="func-radius-title">${escapeHTML(name)}${sigBadge}</div>${callersHTML}${sitesHTML}${implsHTML}</div>`;
+}
+
+// renderCallersPanel hides the whole section when radius has nothing to say
+// about this diff at all (non-Go source, or a patch with no resolvable old
+// revision -- handleRadius answers an empty report in both cases rather than
+// ever leaving the UI pending forever); otherwise it shows "computing…"
+// until both radius and the tests report (the join's symbol-range source)
+// are ready, then one card per function the current hunk overlaps, or a
+// placeholder when none does.
+function renderCallersPanel() {
+  const panel = document.getElementById('callers-panel');
+  const radiusFns = (state.radius && state.radius.functions) || [];
+  if (!state.radiusPending && !radiusFns.length) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  const content = document.getElementById('callers-content');
+  if (state.radiusPending || state.testsPending) {
+    content.innerHTML = '<p class="placeholder">Computing…</p>';
+    return;
+  }
+  const syms = symbolsForCurrentHunk();
+  content.innerHTML = syms.length
+    ? syms.map((sym) => funcRadiusHTML(sym, radiusForSymbol(sym.id))).join('')
+    : '<p class="placeholder">No changed function here.</p>';
+}
+
+// commandForReach is the one PackageCommand (if any) whose Tests include a
+// test that reaches fr -- there is at most one in practice (By's tests are
+// usually declared in the same package as each other), but this does not
+// assume it.
+function commandForReach(fr, commands) {
+  if (!fr.by || !fr.by.length || !commands) return null;
+  const byNames = new Set(fr.by.map(shortSymbolName));
+  return commands.find((c) => c.tests.some((t) => byNames.has(t))) || null;
+}
+
+// renderTestsPanel mirrors renderCallersPanel's hide/pending rules, reusing
+// the same symbolsForCurrentHunk join -- just against the tests report's own
+// per-function Reached/By instead of radius's callers.
+function renderTestsPanel() {
+  const panel = document.getElementById('tests-panel');
+  const report = state.testsReport;
+  if (!state.testsPending && (!report || !report.functions || !report.functions.length)) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  const content = document.getElementById('tests-content');
+  if (state.testsPending) {
+    content.innerHTML = '<p class="placeholder">Computing…</p>';
+    return;
+  }
+  const syms = symbolsForCurrentHunk();
+  if (!syms.length) {
+    content.innerHTML = '<p class="placeholder">No changed function here.</p>';
+    return;
+  }
+  content.innerHTML = syms.map((sym) => {
+    const fr = report.functions.find((x) => x.symbol.id === sym.id);
+    const name = shortSymbolName(sym.id);
+    if (!fr || !fr.reached) {
+      return `<div class="func-tests"><div class="func-radius-title">${escapeHTML(name)}</div>` +
+        '<p class="no-test-warning">⚠ no test reaches this</p></div>';
+    }
+    const by = fr.by.map(shortSymbolName).join(', ');
+    const cmd = commandForReach(fr, report.commands);
+    const cmdHTML = cmd
+      ? `<div class="test-command"><code>${escapeHTML(cmd.command)}</code><button type="button" data-action="copy-cmd" data-cmd="${escapeAttr(cmd.command)}">Copy</button></div>`
+      : '';
+    return `<div class="func-tests"><div class="func-radius-title">${escapeHTML(name)}</div>` +
+      `<p>Reached by: ${escapeHTML(by)}</p>${cmdHTML}</div>`;
+  }).join('');
+}
+
+// lastSidebarKey guards updateSidebarPanelsIfNeeded: renderVisibleRows calls
+// it on every scroll frame (it is the one place "the current hunk" gets
+// recomputed, see its own call site), but the callers/tests panels only need
+// to redraw when the current hunk -- or the selected file -- actually
+// changed, not on every frame of a scroll gesture that is still inside it.
+let lastSidebarKey;
+function updateSidebarPanelsIfNeeded(hunkId) {
+  const key = state.selected + '|' + (hunkId || '');
+  if (key === lastSidebarKey) return;
+  lastSidebarKey = key;
+  renderCallersPanel();
+  renderTestsPanel();
+}
+
+// jumpToLocation (FR-19/FR-21's "clicking an in-diff entry") selects path's
+// file if it is not already open, then scrolls to and focuses the row at
+// line, when that line happens to already be part of the diff this file
+// renders. It usually is for a call site (Site.InDiff means its exact line
+// sits in a hunk) and often is not for an unchanged caller or an
+// implementer (their own file is in the diff, but the specific line this
+// entry names need not be near any hunk at all) -- when the row cannot be
+// found, this still opens the file, just without a line to land on, rather
+// than pretend to a precision a read-only file view would be needed for.
+async function jumpToLocation(path, line) {
+  const f = state.files.find((x) => x.path === path);
+  if (!f) return;
+  if (state.selected !== f.id) await selectFile(f.id);
+  const rowIdx = state.rows.findIndex((r) => r.new_no === line);
+  if (rowIdx === -1) return;
+  document.getElementById('diff').scrollTop = rowIdx * ROW_HEIGHT;
+  state.focusedAnchor = { path, side: 'new', line };
+  renderVisibleRows();
+}
+
+async function copyTestCommand(cmd, btn) {
+  try {
+    await navigator.clipboard.writeText(cmd);
+  } catch {
+    return; // clipboard API unavailable (e.g. an insecure context) -- nothing more to do
+  }
+  const prev = btn.textContent;
+  btn.textContent = 'Copied';
+  setTimeout(() => { btn.textContent = prev; }, 1200);
+}
+
+// onFlowPanelClick delegates both panels' clicks (bound once on each
+// container in init(), since funcRadiusHTML/renderTestsPanel rebuild their
+// content wholesale on every redraw).
+function onFlowPanelClick(e) {
+  const jumpEl = e.target.closest('[data-action="jump"]');
+  if (jumpEl) {
+    jumpToLocation(jumpEl.dataset.path, Number(jumpEl.dataset.line));
+    return;
+  }
+  const copyBtn = e.target.closest('[data-action="copy-cmd"]');
+  if (copyBtn) copyTestCommand(copyBtn.dataset.cmd, copyBtn);
+}
+
+async function loadRadius() {
+  const body = await pollUntilReady(() => getJSON('/api/radius'));
+  state.radiusPending = false;
+  state.radius = (body && body.report) || { functions: [] };
+  forceSidebarRedraw();
+}
+
+async function loadTests() {
+  const body = await pollUntilReady(() => getJSON('/api/tests'));
+  state.testsPending = false;
+  state.testsReport = body || { functions: [] };
+  forceSidebarRedraw();
+}
+
+// forceSidebarRedraw forces a redraw once loadRadius/loadTests
+// resolve, bypassing updateSidebarPanelsIfNeeded's dedup key -- the current
+// hunk has not changed, but pending just flipped to false, which is exactly
+// the thing that needs to show up.
+function forceSidebarRedraw() {
+  lastSidebarKey = undefined;
+  renderCallersPanel();
+  renderTestsPanel();
+}
+
+// ======================== long-line wrap toggle ('w') ========================
+function applyWrapMode() {
+  document.body.classList.toggle('wrap-lines', state.wrap);
+  const btn = document.getElementById('wrap-toggle');
+  btn.textContent = state.wrap ? 'Wrap: on' : 'Wrap: off';
+  btn.title = `Toggle long-line wrap (w)`;
+}
+
+function toggleWrap() {
+  state.wrap = !state.wrap;
+  localStorage.setItem('flowreview.wrap', state.wrap ? '1' : '0');
+  applyWrapMode();
+}
+
 document.addEventListener('keydown', (e) => {
   const target = e.target;
   if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
@@ -962,6 +1423,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'r') toggleCurrentHunk();
   if (e.key === 'R') toggleCurrentFile();
   if (e.key === 'c') openComposeForFocused();
+  if (e.key === 'w') toggleWrap();
 });
 
 (async function init() {
@@ -977,7 +1439,40 @@ document.addEventListener('keydown', (e) => {
   document.getElementById('publish-confirm-yes').addEventListener('click', confirmSubmit);
   document.getElementById('publish-confirm-no').addEventListener('click', cancelSubmitConfirm);
 
+  // Topbar toolbar: one button per global shortcut (see index.html's own
+  // comment on #toolbar).
+  document.getElementById('tb-prev-file').addEventListener('click', () => moveSelection(-1));
+  document.getElementById('tb-next-file').addEventListener('click', () => moveSelection(1));
+  document.getElementById('tb-prev-hunk').addEventListener('click', () => jumpHunk(-1));
+  document.getElementById('tb-next-hunk').addEventListener('click', () => jumpHunk(1));
+  document.getElementById('tb-file-reviewed').addEventListener('click', toggleCurrentFile);
+  document.getElementById('order-toggle').addEventListener('click', toggleOrderMode);
+  document.getElementById('wrap-toggle').addEventListener('click', toggleWrap);
+
+  // FR-19/FR-21 sidebar panels: one click handler per panel, bound once
+  // (funcRadiusHTML/renderTestsPanel replace each panel's content wholesale
+  // on every redraw, same reasoning as onCommentsPanelClick above).
+  document.getElementById('callers-panel').addEventListener('click', onFlowPanelClick);
+  document.getElementById('tests-panel').addEventListener('click', onFlowPanelClick);
+
+  applyWrapMode();
+
   await refreshSession();
   await loadFiles();
   await loadRemoteComments();
+
+  // FR-17/FR-19/FR-21: all three run in the background on the server and
+  // answer {"pending": true} until ready (see each endpoint's own doc
+  // comment) -- loadOrder/loadRadius/loadTests poll independently of the
+  // file list and of each other, so none of them block initial render.
+  // Started from requestIdleCallback, not immediately: each is a real
+  // go/packages Load server-side (CPU, not just a network wait), and kicking
+  // off all three the instant the page loads can compete with the browser's
+  // own first-paint and scroll work for the CPU it is still busy with right
+  // then. A 2s timeout is the fallback for a browser without
+  // requestIdleCallback (Safari) -- not a deadline on the loads themselves,
+  // which keep polling however long they need to afterward.
+  const startBackgroundAnalysis = () => { loadOrder(); loadRadius(); loadTests(); };
+  if (window.requestIdleCallback) requestIdleCallback(startBackgroundAnalysis, { timeout: 2000 });
+  else setTimeout(startBackgroundAnalysis, 0);
 })();

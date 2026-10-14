@@ -55,6 +55,11 @@ type Impl struct {
 	Symbol     string           `json:"symbol"`
 	Confidence model.Confidence `json:"confidence"`
 	InDiff     bool             `json:"in_diff"`
+	// Location is where Symbol is declared, when res resolved it (nil for a
+	// symbol ID that did not resolve to anything in scope). Already computed
+	// to decide InDiff above (see symsByID) -- surfaced here too so a caller
+	// (the web UI's FR-19 panel) can jump to it without a second lookup.
+	Location *model.Location `json:"location,omitempty"`
 }
 
 // FuncRadius is one changed function, method or interface method's blast
@@ -158,6 +163,7 @@ func funcRadius(res *golang.Result, files []model.ChangedFile, symsByID map[stri
 			}
 			fr.Implementers = append(fr.Implementers, Impl{
 				Symbol: other, Confidence: e.Confidence, InDiff: symbolInDiff(files, symsByID[other]),
+				Location: locationOfSymbol(symsByID[other]),
 			})
 		}
 	}
@@ -216,8 +222,9 @@ func interfaceMethodRadius(res *golang.Result, files []model.ChangedFile, symsBy
 	fr := FuncRadius{Symbol: methodID, Kind: model.SymMethod, SignatureChanged: true}
 
 	addImplementer := func(implID string, conf model.Confidence) {
-		inDiff := symbolInDiff(files, symsByID[implID])
-		fr.Implementers = append(fr.Implementers, Impl{Symbol: implID, Confidence: conf, InDiff: inDiff})
+		sym := symsByID[implID]
+		inDiff := symbolInDiff(files, sym)
+		fr.Implementers = append(fr.Implementers, Impl{Symbol: implID, Confidence: conf, InDiff: inDiff, Location: locationOfSymbol(sym)})
 		if !inDiff {
 			fr.Warnings = append(fr.Warnings, fmt.Sprintf("%s implements %s but is not changed in this diff", implID, methodID))
 		}
@@ -356,6 +363,15 @@ func locInHunk(files []model.ChangedFile, loc *model.Location) bool {
 		return false
 	}
 	return rangeInHunks(files, loc.Path, loc.Line, loc.Line)
+}
+
+// locationOfSymbol is sym's declaration site, or nil for a zero-value sym (an
+// ID golang.Symbols did not resolve -- see symbolInDiff's own such check).
+func locationOfSymbol(sym model.CodeSymbol) *model.Location {
+	if sym.ID == "" {
+		return nil
+	}
+	return &model.Location{Path: sym.Path, Line: sym.Range.StartLine}
 }
 
 // symbolInDiff reports whether sym's whole declaration range sits inside one
