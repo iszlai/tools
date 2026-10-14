@@ -1,5 +1,7 @@
 bin/
 dist/
+/flowreview-eval
+/flowreview-eval-extract
 pw-browsers/
 node_modules/
 third_party/llama/*.zip
