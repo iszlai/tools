@@ -18,3 +18,8 @@ Why things are the way they are. Append-only; written with `th log add`.
 
 **Decision (agent, accepted).** `Verify` accepts a finding when at least one evidence excerpt is a trimmed substring of the cited line or a line within ±2 (line corrected to the match). Additive `Limits.MaxFindings` field. Schema drift is guarded by a test with `-update`, not a separate generator command.
 **Also.** Worktrees created by the agent harness were sometimes cut from a stale base (46263fd, before FR-1); agents are told to rebase onto main, and Opus imports only the slice's own package when merging such a branch (done for FR-5a's window package: its bootstrap go.mod/Makefile were discarded).
+
+## 2026-10-14 — FR-4 merged; needs-re-review is path-level until FR-22
+
+**Decision (agent, accepted).** `Refresh` marks a vanished reviewed hunk `needs-re-review` when its file still has any hunk, else `stale`. A path-level proxy for "overlapping location": ReviewState has no line range. FR-22 must refine this (match by location/body similarity) — noted on FR-22.
+**Session ids** derive from the source identity (`pr-owner-repo-N`, `range-<hash>`, `worktree`) and `FindBySource` ignores SHAs, so reopening an updated PR resumes the same session.
