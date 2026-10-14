@@ -9,6 +9,15 @@
 <link rel="stylesheet" href="/styles/chroma.css">
 </head>
 <body>
+<!-- FR-7: progress lives in a thin header above the three panes, separate
+     from the richer session summary in the right pane (title, per-type
+     counts, comments, source/head). -->
+<header id="topbar" aria-label="Session progress">
+  <span id="topbar-title"></span>
+  <div class="progress-bar" id="topbar-progress"><div></div></div>
+  <span id="topbar-count"></span>
+  <button id="help-button" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+</header>
 <div id="app">
   <nav id="files" aria-label="Changed files"></nav>
   <main id="diff" aria-label="Diff"></main>
@@ -16,6 +25,7 @@
     <div id="session-summary">Loading…</div>
   </aside>
 </div>
+<div id="help-overlay" hidden></div>
 <script src="app.js"></script>
 </body>
 </html>

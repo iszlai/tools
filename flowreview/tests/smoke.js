@@ -104,10 +104,26 @@ async function selectFileAndMeasure(page, pathSubstr) {
   return Date.now() - t0;
 }
 
+// waitForCondition polls fn (which may itself be async, e.g. a fetch to the
+// server) sequentially -- not page.waitForFunction's rAF-driven polling,
+// which can fire overlapping evaluations of a slow async predicate and
+// resolve on a stale one. Used below (FR-7) to wait on server-persisted
+// state directly rather than guessing a fixed delay.
+async function waitForCondition(fn, timeoutMs = 2000, intervalMs = 25) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (await fn()) return true;
+    if (Date.now() >= deadline) return false;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}
+
 (async () => {
   const repoDir = buildRepo();
   const home = mkdtempSync(path.join(tmpdir(), 'flowreview-home-'));
-  const { proc, url } = await serve(repoDir, home);
+  // let, not const: the FR-7 process-restart check below replaces both with
+  // a freshly spawned process/URL over the same FLOWREVIEW_HOME.
+  let { proc, url } = await serve(repoDir, home);
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
 
@@ -266,6 +282,116 @@ async function selectFileAndMeasure(page, pathSubstr) {
     console.log(`scrolling big.js: ${longTasks.length} long task(s), worst ${worstLongTask.toFixed(1)}ms (budget ${LONGTASK_BUDGET_MS}ms)`);
     check('performance: no long task over budget while scrolling the 10k-line file',
       longTasks.every((d) => d <= LONGTASK_BUDGET_MS), JSON.stringify(longTasks));
+
+    /* ======================== FR-7: review queue, reviewed state, progress ======================== */
+
+    /* 12 -- `r` toggles the current hunk (the one nearest above the top of
+       the viewport) and both dims it and updates the header progress
+       fraction. big.js has ~100 hunks, so marking its first one reviewed
+       does not complete the file -- keeps this check independent of the
+       completion/auto-advance behavior exercised in 13. */
+    await selectFileAndMeasure(page, 'big.js'); // selectFile resets scrollTop to 0
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    const countBefore12 = await page.textContent('#topbar-count');
+    await page.keyboard.press('r');
+    await page.waitForFunction(
+      (before) => document.getElementById('topbar-count').textContent !== before,
+      countBefore12, { timeout: 2000 },
+    ).catch(() => {});
+    const countAfter12 = await page.textContent('#topbar-count');
+    check('FR-7: r toggles the current hunk and updates the header progress fraction',
+      countAfter12 !== countBefore12, `${countBefore12} -> ${countAfter12}`);
+    const dimmedCount = await page.locator('.hunk-header.hunk-reviewed').count();
+    check('FR-7: a reviewed hunk header is visually dimmed', dimmedCount >= 1, String(dimmedCount));
+
+    /* 13 -- `R` toggles every hunk of the whole file. b.txt is a one-hunk
+       added file, so R both completes it (file-queue state flips to
+       "reviewed") and triggers the completion flash + auto-advance to the
+       next unreviewed file. */
+    await selectFileAndMeasure(page, 'b.txt');
+    await page.keyboard.press('R');
+    await page.waitForFunction(() => {
+      const el = document.querySelector('.file-row.selected');
+      return el && el.classList.contains('reviewed');
+    }, { timeout: 2000 }).catch(() => {});
+    const bRowClass = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('.file-row')];
+      const b = rows.find((r) => r.querySelector('.path').textContent === 'b.txt');
+      return b ? b.className : '';
+    });
+    check('FR-7: R marks every hunk of the file reviewed', /\breviewed\b/.test(bRowClass), bRowClass);
+
+    const selectedPathBeforeAdvance = await page.locator('.file-row.selected .path').first().textContent();
+    await page.waitForFunction(
+      (prev) => {
+        const el = document.querySelector('.file-row.selected .path');
+        return el && el.textContent !== prev;
+      },
+      selectedPathBeforeAdvance,
+      { timeout: 2000 },
+    ).catch(() => {});
+    const selectedPathAfterAdvance = await page.locator('.file-row.selected .path').first().textContent();
+    check('FR-7: completing a file auto-advances to the next unreviewed one',
+      selectedPathAfterAdvance !== selectedPathBeforeAdvance,
+      `${selectedPathBeforeAdvance} -> ${selectedPathAfterAdvance}`);
+
+    /* 14 -- `?` opens the keyboard-shortcut help overlay. */
+    await page.keyboard.press('?');
+    await page.waitForSelector('#help-overlay:not([hidden])');
+    const helpText = await page.textContent('#help-overlay');
+    check('FR-7: ? shows a help overlay listing the shortcuts',
+      /hunk/.test(helpText) && /reviewed/.test(helpText), helpText);
+    await page.keyboard.press('Escape');
+    // Not waitForSelector: an element matching [hidden] is never "visible",
+    // so that would wait for the state it is already in and time out.
+    await page.waitForFunction(() => document.getElementById('help-overlay').hidden);
+
+    /* 15 -- FR-7 accept: mark a hunk with r, reload the page AND restart the
+       process (same FLOWREVIEW_HOME) -- state persists; progress counts
+       in /api/session match what was marked.
+       State checks below hit the server directly with node's own fetch,
+       not page.evaluate: confirming persistence is exactly the server's
+       job, independent of the browser, and page.waitForFunction's rAF-driven
+       polling can overlap evaluations of a slow async predicate and resolve
+       on a stale one (waitForCondition polls sequentially instead). */
+    await selectFileAndMeasure(page, 'a.txt'); // single-hunk file, easy to reason about
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    const aHunkId = await page.getAttribute('#diff-rows [data-hunk]', 'data-hunk');
+
+    // Start from a known "unreviewed" state regardless of what earlier checks did.
+    await fetch(`${url}api/state`, { method: 'POST', body: JSON.stringify({ hunk_id: aHunkId, reviewed: false }) });
+    await waitForCondition(async () => {
+      const s = await fetch(`${url}api/session`).then((r) => r.json());
+      return !(s.hunk_states && s.hunk_states[aHunkId] === 'reviewed');
+    });
+
+    await page.reload();
+    await selectFileAndMeasure(page, 'a.txt');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    await page.keyboard.press('r'); // a.txt's one hunk is always "current" at scrollTop 0
+    const marked = await waitForCondition(async () => {
+      const s = await fetch(`${url}api/session`).then((r) => r.json());
+      return !!(s.hunk_states && s.hunk_states[aHunkId] === 'reviewed');
+    });
+    check('FR-7 accept: r persists the hunk as reviewed', marked, 'timed out waiting for the server to see it reviewed');
+
+    const sessBeforeRestart = await fetch(`${url}api/session`).then((r) => r.json());
+    await page.reload(); // same process, reload the page
+    await page.waitForSelector('.file-row');
+    const sessAfterPageReload = await fetch(`${url}api/session`).then((r) => r.json());
+    check('FR-7 accept: reviewed state survives a page reload',
+      sessAfterPageReload.progress.reviewed_hunks === sessBeforeRestart.progress.reviewed_hunks && sessAfterPageReload.progress.reviewed_hunks > 0,
+      `${JSON.stringify(sessBeforeRestart.progress)} -> ${JSON.stringify(sessAfterPageReload.progress)}`);
+
+    proc.kill();
+    await new Promise((resolve) => proc.once('exit', resolve));
+    ({ proc, url } = await serve(repoDir, home)); // same FLOWREVIEW_HOME, a brand new process
+    await page.goto(url);
+    await page.waitForSelector('.file-row');
+    const sessAfterRestart = await fetch(`${url}api/session`).then((r) => r.json());
+    check('FR-7 accept: reviewed state survives a process restart (same FLOWREVIEW_HOME)',
+      sessAfterRestart.progress.reviewed_hunks === sessBeforeRestart.progress.reviewed_hunks && sessAfterRestart.progress.reviewed_hunks > 0,
+      `${JSON.stringify(sessBeforeRestart.progress)} -> ${JSON.stringify(sessAfterRestart.progress)}`);
   } finally {
     await browser.close();
     proc.kill();
