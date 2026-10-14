@@ -1455,7 +1455,14 @@ document.addEventListener('keydown', (e) => {
   // answer {"pending": true} until ready (see each endpoint's own doc
   // comment) -- loadOrder/loadRadius/loadTests poll independently of the
   // file list and of each other, so none of them block initial render.
-  loadOrder();
-  loadRadius();
-  loadTests();
+  // Started from requestIdleCallback, not immediately: each is a real
+  // go/packages Load server-side (CPU, not just a network wait), and kicking
+  // off all three the instant the page loads can compete with the browser's
+  // own first-paint and scroll work for the CPU it is still busy with right
+  // then. A 2s timeout is the fallback for a browser without
+  // requestIdleCallback (Safari) -- not a deadline on the loads themselves,
+  // which keep polling however long they need to afterward.
+  const startBackgroundAnalysis = () => { loadOrder(); loadRadius(); loadTests(); };
+  if (window.requestIdleCallback) requestIdleCallback(startBackgroundAnalysis, { timeout: 2000 });
+  else setTimeout(startBackgroundAnalysis, 0);
 })();

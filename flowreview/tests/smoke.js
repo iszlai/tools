@@ -36,24 +36,66 @@ function git(dir, env, ...args) {
   execFileSync('git', args, { cwd: dir, env: { ...process.env, ...env } });
 }
 
-// goFnSource builds a Go file with one 23-line function whose body statement
-// v10 is tenValue: 10 for the fixture's committed revision, 100 for its
+// goFnSource builds a Go file with one function whose body statement v10 is
+// tenValue: 10 for the fixture's committed revision, 100 for its
 // worktree-edited one. A default 3-line-context diff only shows a handful of
 // lines around v10, leaving real, unchanged body on both sides for FR-8's
 // "expand enclosing function" to splice in -- unlike a.txt's one-word edit,
-// which is small enough that the whole file is already the hunk.
+// which is small enough that the whole file is already the hunk. Every vN is
+// summed into the return value (not just v0): the file list now also drives
+// GET /api/order, /api/radius and /api/tests through a real go/packages
+// Load, which type-checks the source -- an unused local is a hard error
+// there, not just a vet nit, and would otherwise make Compute's whole
+// package fail to build an SSA call graph (empty Callers/Callees for every
+// symbol in it, radius and testreach both report nothing).
 function goFnSource(tenValue) {
   const lines = ['package main', '', 'func Compute() int {'];
   for (let i = 0; i < 20; i++) lines.push(`\tv${i} := ${i === 10 ? tenValue : i}`);
-  lines.push('\treturn v0', '}');
+  lines.push('\tsum := v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9');
+  lines.push('\tsum += v10 + v11 + v12 + v13 + v14 + v15 + v16 + v17 + v18 + v19');
+  lines.push('\treturn sum', '}');
   return lines.join('\n') + '\n';
 }
+
+// callerSource is FR-19/FR-21's fixture: CallCompute calls Compute and never
+// itself changes across the diff (an "unchanged caller" of it, in_diff true
+// since this file does carry a hunk elsewhere); TestCompute (in its own
+// file, never touched by the diff at all) also calls Compute, so it shows up
+// as an unchanged caller with in_diff false, and makes Compute "reached by a
+// test" for FR-21. unrelated is the one line this file's own hunk actually
+// touches -- far enough above CallCompute (two blank lines) that the
+// default 3-line-context hunk never overlaps CallCompute's own declaration
+// range, so CallCompute stays correctly "unchanged" per golang's own
+// hunk-range-overlap definition (see ChangedSymbols) -- and, having no
+// caller of its own, doubles as FR-19's "no callers" case.
+const callerSource = `package main
+
+func unrelated() int {
+	return 1
+}
+
+
+func CallCompute() int {
+	return Compute()
+}
+`;
+
+const testSource = `package main
+
+import "testing"
+
+func TestCompute(t *testing.T) {
+	Compute()
+}
+`;
 
 // buildRepo makes a repo with: a modified tracked file and a new untracked
 // one (so the file queue has more than one entry and WorktreeDiff exercises
 // both its tracked and untracked-synthesis paths), a 10k-line file with
-// changes scattered through it for the performance budget below, and a small
-// Go file whose one hunk sits in the middle of a function for FR-8.
+// changes scattered through it for the performance budget below, a small Go
+// file whose one hunk sits in the middle of a function for FR-8 (also
+// FR-17/19/21's changed-function fixture), a caller/test pair for FR-19/21,
+// and one very long line for the wrap toggle.
 function buildRepo() {
   const dir = mkdtempSync(path.join(tmpdir(), 'flowreview-smoke-'));
   const env = {
@@ -69,12 +111,20 @@ function buildRepo() {
   for (let i = 0; i < BIG_FILE_LINES; i++) bigLines.push(`const line${i} = ${i};`);
   writeFileSync(path.join(dir, 'big.js'), bigLines.join('\n') + '\n');
   writeFileSync(path.join(dir, 'fn.go'), goFnSource(10));
-  git(dir, env, 'add', 'a.txt', 'big.js', 'fn.go');
+  writeFileSync(path.join(dir, 'go.mod'), 'module smoke\n\ngo 1.21\n');
+  writeFileSync(path.join(dir, 'caller.go'), callerSource);
+  writeFileSync(path.join(dir, 'fn_test.go'), testSource);
+  writeFileSync(path.join(dir, 'long.txt'), 'short line\n');
+  git(dir, env, 'add', 'a.txt', 'big.js', 'fn.go', 'go.mod', 'caller.go', 'fn_test.go', 'long.txt');
   git(dir, env, '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'init');
 
   writeFileSync(path.join(dir, 'a.txt'), 'line one\nline TWO\nline three\n');
   writeFileSync(path.join(dir, 'b.txt'), 'a brand new file\n');
   writeFileSync(path.join(dir, 'fn.go'), goFnSource(100));
+  // unrelated's body, not CallCompute -- see callerSource's own comment.
+  writeFileSync(path.join(dir, 'caller.go'), callerSource.replace('return 1', 'return 2'));
+  // A 400-char line: no reasonable viewport shows all of it without wrap.
+  writeFileSync(path.join(dir, 'long.txt'), 'x'.repeat(400) + '\n');
   // Scatter ~100 single-line edits through the big file -- enough hunks to
   // make virtualization matter across the whole scroll, not so many that
   // every line is a hunk (which no real diff looks like).
@@ -113,9 +163,18 @@ function serve(repoDir, home, args = [], extraEnv = {}) {
 // after that), for the first-paint and file-switch budgets below.
 async function selectFileAndMeasure(page, pathSubstr) {
   const row = page.locator('.file-row', { hasText: pathSubstr });
+  // Matched on this file's own id, not just the "/api/file/.*/rows" shape: a
+  // prior selection's fetch can still be in flight when this one clicks
+  // (moveSelection's own j/k checks only wait for the file-row highlight to
+  // move, not for its rows fetch to finish -- see their own comments), and a
+  // bare shape match can resolve this Promise.all on that stale response
+  // instead of the one this click actually triggers. FR-17/19/21's
+  // background analysis adds real server-side latency variance that made
+  // this latent race easy to hit in practice, not just in theory.
+  const fileId = await row.getAttribute('data-file');
   const t0 = Date.now();
   await Promise.all([
-    page.waitForResponse((r) => /\/api\/file\/.*\/rows/.test(r.url())),
+    page.waitForResponse((r) => r.url().includes(`/api/file/${fileId}/rows`)),
     row.click(),
   ]);
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -223,16 +282,25 @@ async function runWorktreeSmoke() {
        this -- a.txt only has one). */
     await selectFileAndMeasure(page, 'big.js');
     const diffScrollTop = () => page.evaluate(() => document.getElementById('diff').scrollTop);
+    // waitForFunction after each press (falling back to an immediate read on
+    // timeout, same as before) rather than reading scrollTop right away --
+    // FR-17/19/21's background analysis (go/packages Load, real CPU work)
+    // now starts the moment the page loads, and can occasionally delay this
+    // tab's own next animation frame just long enough to read pre-press
+    // state without it.
     const beforeN = await diffScrollTop();
     await page.keyboard.press('n');
+    await page.waitForFunction((prev) => document.getElementById('diff').scrollTop > prev, beforeN, { timeout: 3000 }).catch(() => {});
     const afterN1 = await diffScrollTop();
     check('keyboard: n jumps forward to a hunk', afterN1 > beforeN, `${beforeN} -> ${afterN1}`);
 
     await page.keyboard.press('n');
+    await page.waitForFunction((prev) => document.getElementById('diff').scrollTop > prev, afterN1, { timeout: 3000 }).catch(() => {});
     const afterN2 = await diffScrollTop();
     check('keyboard: n again jumps further forward', afterN2 > afterN1, `${afterN1} -> ${afterN2}`);
 
     await page.keyboard.press('p');
+    await page.waitForFunction((prev) => document.getElementById('diff').scrollTop === prev, afterN1, { timeout: 3000 }).catch(() => {});
     const afterP = await diffScrollTop();
     check('keyboard: p jumps back to the previous hunk', afterP === afterN1, `${afterN2} -> ${afterP}, want ${afterN1}`);
 
@@ -523,6 +591,206 @@ async function runWorktreeSmoke() {
     check('FR-9: a non-outdated remote comment renders inline at its anchor', remoteMarker >= 1, String(remoteMarker));
     const outdatedCard = await page.locator('#remote-comment-list .remote-comment-card').count();
     check('FR-9: an outdated remote comment renders read-only in the side panel', outdatedCard >= 1, String(outdatedCard));
+
+    /* ======================== FR-17: flow order ======================== */
+    /* 21 -- the file list groups by flow order once GET /api/order finishes
+       (a real go/packages Load, seconds not milliseconds -- wait for the
+       toggle button to stop reading "computing" rather than guess a fixed
+       delay), and the toolbar toggle switches it back to plain diff order. */
+    await selectFileAndMeasure(page, 'a.txt');
+    const orderReady = await waitForCondition(async () => {
+      const text = await page.textContent('#order-toggle');
+      return !!text && !/computing/i.test(text);
+    }, 60000, 200);
+    check('FR-17: flow order finishes computing', orderReady, 'order-toggle still reads "computing" after 60s');
+
+    const listedPaths = () => page.$$eval('.file-row .path', (els) => els.map((e) => e.textContent));
+    check('FR-17: flow order groups at least one file under a group title', (await page.locator('.file-group-title').count()) >= 1);
+    const flowPaths = await listedPaths();
+
+    await page.click('#order-toggle'); // flow -> diff
+    await page.waitForFunction((prev) => {
+      const paths = [...document.querySelectorAll('.file-row .path')].map((e) => e.textContent);
+      return JSON.stringify(paths) !== prev;
+    }, JSON.stringify(flowPaths), { timeout: 2000 }).catch(() => {});
+    const diffPaths = await listedPaths();
+    check('FR-17: the order toggle changes the displayed file order', JSON.stringify(flowPaths) !== JSON.stringify(diffPaths),
+      `flow=${flowPaths.join(',')} diff=${diffPaths.join(',')}`);
+    check('FR-17: diff order shows no group titles', (await page.locator('.file-group-title').count()) === 0);
+
+    await page.click('#order-toggle'); // diff -> flow, for the checks below
+    await page.waitForFunction(() => document.querySelectorAll('.file-group-title').length > 0, { timeout: 2000 }).catch(() => {});
+
+    /* ======================== FR-19: callers panel ======================== */
+    /* 22 -- for fn.go's one hunk (already "current" at scrollTop 0), the
+       panel shows Compute's known callers: CallCompute (its file caller.go
+       is in the diff, so it is clickable) and TestCompute (its file is
+       untouched by the diff, so it renders as plain, non-clickable text). */
+    await selectFileAndMeasure(page, 'fn.go');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    const callersReady = await waitForCondition(async () => {
+      if (await page.getAttribute('#callers-panel', 'hidden') !== null) return false;
+      return !/Computing/.test(await page.textContent('#callers-content'));
+    }, 60000, 200);
+    check('FR-19: the callers panel finishes computing', callersReady, 'callers-content still reads "Computing…" after 60s');
+
+    const callersText = await page.textContent('#callers-content');
+    check('FR-19: the callers panel names the changed function Compute', /Compute/.test(callersText), callersText);
+    check('FR-19: the callers panel lists the in-diff caller CallCompute', /CallCompute/.test(callersText), callersText);
+    check('FR-19: the callers panel lists the out-of-diff caller TestCompute', /TestCompute/.test(callersText), callersText);
+
+    const inDiffCaller = page.locator('#callers-content .nav-entry.clickable', { hasText: 'CallCompute' });
+    check('FR-19: the in-diff caller entry is clickable', (await inDiffCaller.count()) >= 1, callersText);
+    const outOfDiffCallerClickable = await page.locator('#callers-content .nav-entry.clickable', { hasText: 'TestCompute' }).count();
+    check('FR-19: the out-of-diff caller entry is not clickable', outOfDiffCallerClickable === 0, String(outOfDiffCallerClickable));
+
+    await inDiffCaller.first().click();
+    await page.waitForFunction(() => {
+      const el = document.querySelector('.file-row.selected .path');
+      return el && el.textContent === 'caller.go';
+    }, { timeout: 2000 }).catch(() => {});
+    const selectedAfterCallerJump = await page.locator('.file-row.selected .path').first().textContent();
+    check('FR-19: clicking an in-diff caller jumps to its file', selectedAfterCallerJump === 'caller.go', selectedAfterCallerJump);
+
+    /* 23 -- caller.go's own changed function (unrelated) has no caller at
+       all -- the "no callers" case. jumpToLocation's selectFile() flips
+       .selected synchronously, before its rows fetch resolves (see
+       selectFile's own code), so waiting on "not Computing" alone can read
+       fn.go's still-stale Compute card; wait for the new content itself. */
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    await waitForCondition(async () => /unrelated/.test(await page.textContent('#callers-content')), 5000, 100);
+    const callersTextUnrelated = await page.textContent('#callers-content');
+    check('FR-19: a changed function with no callers shows "No callers."', /No callers/.test(callersTextUnrelated), callersTextUnrelated);
+
+    /* ======================== FR-21: tests panel ======================== */
+    /* 24 -- Compute is reached by TestCompute (FR-21's "reached" state) and
+       carries a copyable `go test` command; unrelated is not reached by any
+       test (the "unreached" state, with its warning flag). */
+    await selectFileAndMeasure(page, 'fn.go');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    const testsReady = await waitForCondition(async () => {
+      if (await page.getAttribute('#tests-panel', 'hidden') !== null) return false;
+      return !/Computing/.test(await page.textContent('#tests-content'));
+    }, 60000, 200);
+    check('FR-21: the tests panel finishes computing', testsReady, 'tests-content still reads "Computing…" after 60s');
+
+    const testsTextCompute = await page.textContent('#tests-content');
+    check('FR-21: a reached function lists the reaching test', /Reached by/.test(testsTextCompute) && /TestCompute/.test(testsTextCompute), testsTextCompute);
+
+    const copyBtn = page.locator('#tests-content [data-action="copy-cmd"]');
+    check('FR-21: a reached function shows a copy-command button', (await copyBtn.count()) >= 1, testsTextCompute);
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await copyBtn.first().click();
+    await page.waitForFunction(() => {
+      const btn = document.querySelector('#tests-content [data-action="copy-cmd"]');
+      return btn && btn.textContent === 'Copied';
+    }, { timeout: 2000 }).catch(() => {});
+    check('FR-21: clicking copy confirms with "Copied"', (await copyBtn.first().textContent()) === 'Copied');
+    const clipboardText = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
+    check('FR-21: the clipboard holds the matching `go test` command', /^go test .*-run/.test(clipboardText), clipboardText);
+
+    await selectFileAndMeasure(page, 'caller.go');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    await waitForCondition(async () => !/Computing/.test(await page.textContent('#tests-content')), 5000, 100);
+    const testsTextUnrelated = await page.textContent('#tests-content');
+    check('FR-21: an unreached function shows the warning flag', /no test reaches this/.test(testsTextUnrelated), testsTextUnrelated);
+
+    /* ======================== long-line wrap toggle ======================== */
+    /* 25 -- wrap on (the default) shows a long line at its natural width
+       (no internal per-cell clipping); wrap off returns to the original
+       clipped/internal-scroll look; the toolbar button does the same thing
+       the `w` key does. */
+    await selectFileAndMeasure(page, 'long.txt');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    const longCell = page.locator('#diff-rows [data-side="new"].code').first();
+    await longCell.waitFor();
+    const wrapOnOverflow = await longCell.evaluate((el) => el.scrollWidth - el.clientWidth);
+    check('wrap: wrap on (default) shows the long line at its natural width', wrapOnOverflow <= 1, String(wrapOnOverflow));
+
+    await page.keyboard.press('w');
+    await page.waitForFunction(() => !document.body.classList.contains('wrap-lines'), { timeout: 2000 });
+    const wrapOffOverflow = await longCell.evaluate((el) => el.scrollWidth - el.clientWidth);
+    check('wrap: the `w` key turns wrap off, clipping the long line inside its cell', wrapOffOverflow > 50, String(wrapOffOverflow));
+
+    await page.click('#wrap-toggle');
+    await page.waitForFunction(() => document.body.classList.contains('wrap-lines'), { timeout: 2000 });
+    const wrapOnAgainOverflow = await longCell.evaluate((el) => el.scrollWidth - el.clientWidth);
+    check('wrap: clicking the wrap-toggle button does the same as the `w` key', wrapOnAgainOverflow <= 1, String(wrapOnAgainOverflow));
+
+    /* ======================== every shortcut also has a button ======================== */
+    /* 26 -- the pre-existing shortcut-only actions (prev/next file, prev/next
+       hunk, mark hunk/file reviewed, comment, help) each get a visible,
+       clickable control too; clicking it does the same thing its key does. */
+    await selectFileAndMeasure(page, 'a.txt');
+    const beforeTbNextFile = await page.locator('.file-row.selected .path').first().textContent();
+    await page.click('#tb-next-file');
+    await page.waitForFunction((prev) => {
+      const el = document.querySelector('.file-row.selected .path');
+      return el && el.textContent !== prev;
+    }, beforeTbNextFile, { timeout: 2000 }).catch(() => {});
+    const afterTbNextFile = await page.locator('.file-row.selected .path').first().textContent();
+    check('toolbar: the next-file button does the same as `j`', afterTbNextFile !== beforeTbNextFile, `${beforeTbNextFile} -> ${afterTbNextFile}`);
+
+    await page.click('#tb-prev-file');
+    await page.waitForFunction((prev) => {
+      const el = document.querySelector('.file-row.selected .path');
+      return el && el.textContent === prev;
+    }, beforeTbNextFile, { timeout: 2000 }).catch(() => {});
+    const afterTbPrevFile = await page.locator('.file-row.selected .path').first().textContent();
+    check('toolbar: the prev-file button does the same as `k`', afterTbPrevFile === beforeTbNextFile, `${afterTbPrevFile} vs ${beforeTbNextFile}`);
+
+    await selectFileAndMeasure(page, 'big.js');
+    const beforeTbHunk = await diffScrollTop();
+    await page.click('#tb-next-hunk');
+    await page.waitForFunction((prev) => document.getElementById('diff').scrollTop > prev, beforeTbHunk, { timeout: 3000 }).catch(() => {});
+    const afterTbNextHunk = await diffScrollTop();
+    check('toolbar: the next-hunk button does the same as `n`', afterTbNextHunk > beforeTbHunk, `${beforeTbHunk} -> ${afterTbNextHunk}`);
+    await page.click('#tb-prev-hunk');
+    await page.waitForFunction((prev) => document.getElementById('diff').scrollTop === prev, beforeTbHunk, { timeout: 3000 }).catch(() => {});
+    const afterTbPrevHunk = await diffScrollTop();
+    check('toolbar: the prev-hunk button does the same as `p`', afterTbPrevHunk === beforeTbHunk, `${afterTbNextHunk} -> ${afterTbPrevHunk}`);
+
+    await selectFileAndMeasure(page, 'a.txt');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    const countBeforeToggleBtn = await page.textContent('#topbar-count');
+    await page.locator('.reviewed-toggle').first().click();
+    await page.waitForFunction((before) => document.getElementById('topbar-count').textContent !== before, countBeforeToggleBtn, { timeout: 2000 }).catch(() => {});
+    const countAfterToggleBtn = await page.textContent('#topbar-count');
+    check('hunk header: the reviewed-toggle button does the same as `r`', countAfterToggleBtn !== countBeforeToggleBtn, `${countBeforeToggleBtn} -> ${countAfterToggleBtn}`);
+    await page.locator('.reviewed-toggle').first().click(); // revert, so it does not leak into checks above if this file runs again
+    await page.waitForFunction((before) => document.getElementById('topbar-count').textContent === before, countBeforeToggleBtn, { timeout: 2000 }).catch(() => {});
+
+    await selectFileAndMeasure(page, 'long.txt');
+    const beforeFileReviewed = await page.evaluate(() => {
+      const row = [...document.querySelectorAll('.file-row')].find((r) => r.querySelector('.path').textContent === 'long.txt');
+      return row ? row.classList.contains('reviewed') : null;
+    });
+    await page.click('#tb-file-reviewed');
+    await page.waitForFunction((before) => {
+      const row = [...document.querySelectorAll('.file-row')].find((r) => r.querySelector('.path').textContent === 'long.txt');
+      return row && row.classList.contains('reviewed') !== before;
+    }, beforeFileReviewed, { timeout: 2000 }).catch(() => {});
+    const afterFileReviewed = await page.evaluate(() => {
+      const row = [...document.querySelectorAll('.file-row')].find((r) => r.querySelector('.path').textContent === 'long.txt');
+      return row ? row.classList.contains('reviewed') : null;
+    });
+    check('toolbar: the file-reviewed button does the same as `R`', afterFileReviewed !== beforeFileReviewed, `${beforeFileReviewed} -> ${afterFileReviewed}`);
+
+    await selectFileAndMeasure(page, 'fn.go');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    await page.locator('#diff-rows [data-side="new"].code[data-line]').first().click(); // focuses the line without opening compose (a code cell, not the lineno gutter)
+    check('comment button prerequisite: a code-cell click focuses without opening compose', (await page.locator('#comment-new textarea').count()) === 0);
+    await page.click('.comment-btn');
+    await page.waitForSelector('#comment-new textarea');
+    check('hunk header: the comment button does the same as `c`', (await page.locator('#comment-new textarea').count()) === 1);
+    await page.click('#comment-new [data-action="cancel"]');
+
+    await page.click('#help-button');
+    await page.waitForSelector('#help-overlay:not([hidden])');
+    const toolbarHelpText = await page.textContent('#help-overlay');
+    check('topbar: the help button does the same as `?`', /wrap/.test(toolbarHelpText), toolbarHelpText);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.getElementById('help-overlay').hidden);
   } finally {
     await browser.close();
     proc.kill();
