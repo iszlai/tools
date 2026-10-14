@@ -3,13 +3,13 @@ package models
 import "testing"
 
 // TestCatalogComplete asserts every shipped entry carries what Install and
-// the UI disclosure need, and that none is Recommended yet: FR-27 is the
-// slice that runs the eval harness and picks one per tier, not this one.
+// the UI disclosure need, and that exactly one entry is Recommended.
 func TestCatalogComplete(t *testing.T) {
 	if len(Catalog) == 0 {
 		t.Fatal("catalog is empty")
 	}
 	seen := map[string]bool{}
+	recommended := 0
 	for _, e := range Catalog {
 		if e.Name == "" {
 			t.Fatalf("entry with empty Name: %+v", e)
@@ -46,8 +46,11 @@ func TestCatalogComplete(t *testing.T) {
 			t.Errorf("%s: unknown Tier %q", e.Name, e.Tier)
 		}
 		if e.Recommended {
-			t.Errorf("%s: Recommended is true; FR-27 hasn't run yet, nothing should be preselected", e.Name)
+			recommended++
 		}
+	}
+	if recommended != 1 {
+		t.Errorf("%d Recommended entries, want exactly 1", recommended)
 	}
 }
 

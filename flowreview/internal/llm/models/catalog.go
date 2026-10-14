@@ -13,9 +13,9 @@ import (
 )
 
 // Entry is one model in the catalog. URL, SHA256 and Size describe the exact
-// GGUF file fetched from Hugging Face; EvalScore and Recommended are 0/false
-// until FR-27 runs the eval harness and records a verdict — there is no
-// silent default (PLAN.md §8).
+// GGUF file fetched from Hugging Face; EvalScore is FR-27's eval-harness
+// score (0 = not evaluated) and Recommended marks the default model the
+// user chose from those results.
 type Entry struct {
 	Name        string  `json:"name"` // catalog key; also the installed filename without ".gguf"
 	Display     string  `json:"display"`
@@ -28,7 +28,7 @@ type Entry struct {
 	MinRAMGB    int     `json:"min_ram_gb"`
 	Tier        string  `json:"tier"`        // "large" | "medium" | "small"
 	EvalScore   float64 `json:"eval_score"`  // 0 = not yet evaluated (FR-27)
-	Recommended bool    `json:"recommended"` // false until FR-27 picks one per tier
+	Recommended bool    `json:"recommended"` // the default (FR-27); see RecommendedFor
 }
 
 // RAM tiers, matching PLAN.md §3: large models need 24 GB+ physical RAM,
@@ -139,9 +139,9 @@ var Catalog = []Entry{
 	// and model cards (unsloth's GGUF quantizations), not yet independently
 	// re-verified by a build in this environment (see the final report: a
 	// sandbox classifier blocked running go build/go test/go run against this
-	// file after it was edited with fetched web content). EvalScore is 0 for
-	// all four — they were never run through the harness, so whether b11609
-	// can even load Qwen3.5's architecture is unconfirmed.
+	// file after it was edited with fetched web content). b11609 loads all
+	// four; EvalScore is from eval/reports/2026-10-14-qwen3.5-nothink.md,
+	// run with thinking disabled (sidecar sends enable_thinking=false).
 	{
 		Name:       "qwen3.5-9b-q4_k_m",
 		Display:    "Qwen3.5 9B (Q4_K_M)",
@@ -153,6 +153,7 @@ var Catalog = []Entry{
 		Params:     "9B",
 		MinRAMGB:   24,
 		Tier:       TierLarge,
+		EvalScore:  0.894,
 	},
 	{
 		Name:       "qwen3.5-4b-q4_k_m",
@@ -165,6 +166,10 @@ var Catalog = []Entry{
 		Params:     "4B",
 		MinRAMGB:   16,
 		Tier:       TierMedium,
+		// FR-27: best score of every model evaluated (kind accuracy 86%,
+		// hallucination 7.4%, 4.3s/hunk, 5.6 GB peak RSS) — the default.
+		EvalScore:   0.904,
+		Recommended: true,
 	},
 	{
 		Name:       "qwen3.5-2b-q4_k_m",
@@ -177,6 +182,7 @@ var Catalog = []Entry{
 		Params:     "2B",
 		MinRAMGB:   8,
 		Tier:       TierSmall,
+		EvalScore:  0.695,
 	},
 	{
 		Name:       "qwen3.5-0.8b-q4_k_m",
@@ -189,6 +195,7 @@ var Catalog = []Entry{
 		Params:     "0.8B",
 		MinRAMGB:   8,
 		Tier:       TierSmall,
+		EvalScore:  0.709,
 	},
 }
 
@@ -211,6 +218,17 @@ func Filter(tier string) []Entry {
 		}
 	}
 	return out
+}
+
+// RecommendedFor returns the recommended entry that fits in ramBytes of
+// physical RAM, if any.
+func RecommendedFor(ramBytes uint64) (Entry, bool) {
+	for _, e := range Catalog {
+		if e.Recommended && uint64(e.MinRAMGB)*gb <= ramBytes {
+			return e, true
+		}
+	}
+	return Entry{}, false
 }
 
 // TierFor classifies physical RAM into the buckets PLAN.md §3 defines:
