@@ -22,7 +22,9 @@ const defaultBaseURL = "https://api.github.com"
 
 // Options configures a Client. Token, if set, wins over everything else;
 // otherwise GITHUB_TOKEN, then GH_TOKEN, then `gh auth token` are tried in
-// that order.
+// that order. BaseURL, if set, wins over FLOWREVIEW_GITHUB_API, which wins
+// over the public GitHub API -- the env var lets a test point the real
+// flowreview binary at an httptest server without any code change.
 type Options struct {
 	BaseURL string
 	HTTP    *http.Client
@@ -56,6 +58,9 @@ func New(opts Options) (*Client, error) {
 	}
 
 	baseURL := opts.BaseURL
+	if baseURL == "" {
+		baseURL = os.Getenv("FLOWREVIEW_GITHUB_API")
+	}
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
