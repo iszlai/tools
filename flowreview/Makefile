@@ -29,7 +29,7 @@ vet: ## go vet
 	go vet ./...
 
 smoke: build ## drive the UI in headless Chromium (see tests/smoke.js)
-	PLAYWRIGHT_BROWSERS_PATH=./pw-browsers node tests/smoke.js
+	PLAYWRIGHT_BROWSERS_PATH=$${PLAYWRIGHT_BROWSERS_PATH:-../taskhound/pw-browsers} node tests/smoke.js
 
 install: build ## install bin/flowreview into PREFIX
 	install -m 0755 $(BIN) $(PREFIX)/flowreview
