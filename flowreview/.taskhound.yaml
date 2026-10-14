@@ -212,11 +212,14 @@ issues:
       labels:
         - M2
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T12:25:01Z
+      updated_at: 2026-10-14T14:02:38Z
       comments:
         - at: 2026-10-14T12:25:01Z
           author: lehel
           body: 'Trimmed: callers/call sites/implementers panel + tests panel + flow order; no read-only file view or back/forward history yet.'
+        - at: 2026-10-14T14:02:38Z
+          author: lehel
+          body: 'Finished the rest of FR-18: GET /api/symbol (callers/callees/implementations with resolved path+line, confidence, in-diff flag; Go exact tier shares FR-17''s background analysis, structural tier via tree-sitter), GET /api/file/{id}/symbols (per-file decl-line precompute), GET /api/blob (read-only file view, syntax-highlighted). UI: inline decl-nav button, call-chain popover (g / toolbar / inline button), read-only file view with breadcrumb + Back to diff, and back/forward history (Alt+←/→, toolbar) across every hop. Go+Go test suite and smoke (three-hop navigate + back/forward x3) all green.'
     - id: FR-19
       title: Blast radius and signature changes
       description: See PLAN.md §5 for scope, acceptance criteria and size.
