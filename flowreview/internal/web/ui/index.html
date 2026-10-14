@@ -16,6 +16,8 @@
   <span id="topbar-title"></span>
   <div class="progress-bar" id="topbar-progress"><div></div></div>
   <span id="topbar-count"></span>
+  <!-- FR-29: visible on/off for hunk summaries, not just the 's' shortcut -- summary.js wires it up. -->
+  <button id="summary-toggle-button" type="button" title="Toggle hunk summaries (s)" aria-label="Toggle hunk summaries" aria-pressed="true">✦</button>
   <button id="help-button" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
 </header>
 <div id="app">
@@ -60,5 +62,6 @@
 <div id="help-overlay" hidden></div>
 <script src="md.js"></script>
 <script src="app.js"></script>
+<script src="summary.js"></script>
 </body>
 </html>

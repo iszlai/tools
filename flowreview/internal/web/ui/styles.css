@@ -463,3 +463,138 @@ mark.x-del { background: var(--mark-del-bg); }
 .publish-badge button { font: inherit; margin-left: 4px; }
 
 .comment-card.published { border-color: var(--added-fg); }
+
+/* ======================== FR-29: structured hunk summaries (trimmed) ========================
+   Collapsed, a summary is a one-line strip appended inside the existing
+   hunk-header cell -- never a height change, so virtualization's fixed
+   ROW_HEIGHT math (see .cell's own comment above) stays exact. Expanded, it
+   is a floating popover over the diff, positioned by summary.js the way
+   #help-overlay is, not an extra row. The on/off toggle ('s') just hides
+   .fr-summary-strip via a body class; summary.js keeps its own cache either
+   way, so turning it back on needs no new request. Every color below reuses
+   the root token block -- no new hardcoded colors. */
+
+body.fr-summaries-off .fr-summary-strip { display: none; }
+
+/* Visible on/off control in the topbar (styled like #help-button), not just
+   the 's' shortcut -- a mouse-only reviewer gets the same control. */
+#summary-toggle-button {
+  flex: none;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+}
+#summary-toggle-button:hover { background: var(--hover); }
+#summary-toggle-button.active { color: var(--accent); border-color: var(--accent); }
+
+.fr-summary-strip { margin-left: 10px; }
+
+.fr-chevron { color: var(--muted); font-size: 9px; }
+
+.fr-summary-shimmer {
+  display: inline-block;
+  width: 90px;
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--hover) 25%, var(--border) 50%, var(--hover) 75%);
+  background-size: 200% 100%;
+  animation: fr-shimmer 1.4s ease-in-out infinite;
+  vertical-align: middle;
+}
+@keyframes fr-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.fr-summary-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 0 6px;
+  font: 11px -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  color: var(--fg);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.fr-summary-toggle:hover { background: var(--hover); border-color: var(--border); }
+.fr-summary-toggle.fr-risky { color: var(--removed-fg); }
+
+.fr-kind {
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--header-bg);
+  border: 1px solid var(--border);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.fr-what {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 50ch;
+}
+
+.fr-fallback {
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--empty-bg);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+#fr-summary-popover { z-index: 60; max-width: 420px; }
+.fr-summary-popover-card {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  font-style: normal;
+}
+.fr-summary-popover-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.fr-summary-popover-head .fr-confidence { color: var(--muted); font-size: 11px; }
+.fr-summary-popover-head .fr-close {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.fr-summary-popover-card p { margin: 6px 0; font-size: 12px; line-height: 1.4; }
+.fr-risk-flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.fr-risk-flag {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--removed-bg);
+  color: var(--removed-fg);
+  font-size: 10px;
+}
+.fr-summary-popover-actions { margin-top: 10px; text-align: right; }
+.fr-summary-popover-actions button {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+}
+.fr-summary-popover-actions button:hover { background: var(--hover); }
