@@ -70,18 +70,18 @@ issues:
     - id: FR-7
       title: Review queue, reviewed state, progress
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       priority: high
       blocked_by:
         - FR-6
       labels:
         - M1
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T09:28:09Z
     - id: FR-8
       title: Enclosing-function expansion
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       priority: high
       blocked_by:
         - FR-6
@@ -89,18 +89,18 @@ issues:
       labels:
         - M1
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:47:55Z
+      updated_at: 2026-10-14T09:28:09Z
     - id: FR-9
       title: Comment drafts
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: todo
+      status: doing
       priority: high
       blocked_by:
         - FR-7
       labels:
         - M1
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T09:28:09Z
     - id: FR-10
       title: 'GitHub host: read'
       description: See PLAN.md §5 for scope, acceptance criteria and size.
@@ -163,13 +163,13 @@ issues:
     - id: FR-15
       title: 'Call graph: callers, callees, implementations'
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: doing
+      status: done
       blocked_by:
         - FR-14
       labels:
         - M2
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T09:05:56Z
+      updated_at: 2026-10-14T09:30:17Z
       comments:
         - at: 2026-10-14T09:05:46Z
           author: lehel

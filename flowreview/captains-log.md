@@ -86,3 +86,8 @@ Why things are the way they are. Append-only; written with `th log add`.
 
 **Measured.** 10k-line file first paint 32 ms, file switch 41 ms, 0 long tasks while scrolling, session first paint 53 ms (budgets 1000/100/50/1000 ms).
 **Decision (agent, accepted).** Rows carry `old_position` and `new_position` (each side has its own GitHub position). Highlighting is per hunk side (the diff holds no text between hunks); per-cell horizontal scroll keeps virtualization simple (synchronized pane scroll is later polish). A stale-response guard fixes fast j/k showing the wrong file.
+
+## 2026-10-14 — FR-15 merged; VTA stays default (0.8 s on ledger)
+
+**Measured.** ledger, FR-13's 3-file load set: SSA 0.12 s + VTA 0.6 s + implements index 0.07 s; under the 5 s bar, so VTA (with CHA fallback on panic) is the default.
+**Decision (agent, accepted).** Closures attribute edges to the enclosing named func; generic instantiations to their origin. Implementations search only the in-module load set, not stdlib. Structural ids are mapped to exact ones via path+line. ContextText is ready for `flowreview context` (FR-24 mounts it).
