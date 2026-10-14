@@ -309,3 +309,86 @@ func TestListPackages_IgnoresErrorsInUnrelatedPackage(t *testing.T) {
 		t.Error("expected the broken package to still be listed")
 	}
 }
+
+// TestLoad_NestedModuleKeepsRepoRelativePaths covers a monorepo whose Go
+// module sits below the repo root (no go.mod at the root): Load must find
+// the module itself, and every symbol path must stay repo-relative
+// ("svc/a/a.go"), matching the diff's paths. It used to be module-relative
+// ("a/a.go"), so nothing downstream (flow order, callers, tests, radius)
+// ever matched a changed file.
+func TestLoad_NestedModuleKeepsRepoRelativePaths(t *testing.T) {
+	root := t.TempDir()
+	write := func(rel, content string) {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("svc/go.mod", "module nested.example/svc\n\ngo 1.21\n")
+	write("svc/a/a.go", "package a\n\nfunc Leaf() int { return 1 }\n\nfunc Branch() int { return Leaf() + 1 }\n")
+
+	l := &Loader{Dir: root}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	res, err := l.Load(ctx, []string{"svc/a/a.go"})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(res.Packages) == 0 {
+		t.Fatal("no packages loaded for a module below the repo root")
+	}
+	sym := SymbolAt(res, "svc/a/a.go", 5)
+	if sym == nil || sym.Name != "Branch" {
+		t.Fatalf("SymbolAt(svc/a/a.go:5) = %+v, want Branch", sym)
+	}
+	if sym.Path != "svc/a/a.go" {
+		t.Errorf("symbol path = %q, want repo-relative svc/a/a.go", sym.Path)
+	}
+	callees, err := Callees(res, sym.ID)
+	if err != nil || len(callees) == 0 {
+		t.Fatalf("Callees(Branch) = %v, %v; want Leaf", callees, err)
+	}
+}
+
+// TestLoad_BuildTaggedChangedFileIsLoaded covers a changed file behind a
+// build tag (a cucumber suite's //go:build cucumber_test): without the tag
+// the go command skips the file, so its functions had no symbols, callers
+// or callees at all.
+func TestLoad_BuildTaggedChangedFileIsLoaded(t *testing.T) {
+	root := t.TempDir()
+	write := func(rel, content string) {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("go.mod", "module tagged.example\n\ngo 1.21\n")
+	write("suite/helper.go", "package suite\n\nfunc Leaf() int { return 1 }\n")
+	write("suite/suite_test.go", "//go:build cucumber_test && !windows\n\npackage suite\n\nimport \"testing\"\n\nfunc setup() int { return Leaf() }\n\nfunc TestSuite(t *testing.T) { _ = setup() }\n")
+
+	if got := buildTags(root, []string{"suite/suite_test.go"}); len(got) != 1 || got[0] != "cucumber_test" {
+		t.Fatalf("buildTags = %v, want [cucumber_test]", got)
+	}
+
+	l := &Loader{Dir: root}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	res, err := l.Load(ctx, []string{"suite/suite_test.go"})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	sym := SymbolAt(res, "suite/suite_test.go", 7)
+	if sym == nil || sym.Name != "setup" {
+		t.Fatalf("SymbolAt(suite_test.go:7) = %+v, want setup", sym)
+	}
+	callees, err := Callees(res, sym.ID)
+	if err != nil || len(callees) == 0 {
+		t.Fatalf("Callees(setup) = %v, %v; want Leaf", callees, err)
+	}
+}

@@ -21,11 +21,17 @@ import (
 )
 
 // relPath turns an absolute file path into the repo-relative path CodeSymbol
-// and model.Location carry, using pkg's module root. A package with no module
-// (the standard library, or a dependency loaded from GOPATH) has nothing to
-// relativize against, so abs is returned unchanged — still correct, just not
-// repo-relative, which only matters for files actually inside the repo.
-func relPath(pkg *packages.Package, abs string) string {
+// and model.Location carry: relative to res.Root (the repo root the Loader
+// was given, which may sit above the module), else to pkg's module root. A
+// file outside both (the standard library, a dependency in the module
+// cache) is returned unchanged — still correct, just not repo-relative,
+// which only matters for files actually inside the repo.
+func relPath(res *Result, pkg *packages.Package, abs string) string {
+	if res != nil && res.Root != "" {
+		if rel, err := filepath.Rel(res.Root, abs); err == nil && !strings.HasPrefix(rel, "..") {
+			return filepath.ToSlash(rel)
+		}
+	}
 	if pkg != nil && pkg.Module != nil && pkg.Module.Dir != "" {
 		if rel, err := filepath.Rel(pkg.Module.Dir, abs); err == nil {
 			return filepath.ToSlash(rel)
@@ -41,7 +47,7 @@ func relPath(pkg *packages.Package, abs string) string {
 // other.
 func findFile(res *Result, path string) (abs string, pkg *packages.Package, ok bool) {
 	for a, p := range res.FileToPkg {
-		if relPath(p, a) == path {
+		if relPath(res, p, a) == path {
 			return a, p, true
 		}
 	}
@@ -235,7 +241,7 @@ func symbolsForPackage(res *Result, p *packages.Package) []model.CodeSymbol {
 		if res.FileToPkg[filename] != p {
 			continue
 		}
-		repoPath := relPath(p, filename)
+		repoPath := relPath(res, p, filename)
 		for _, d := range declsFromFile(file) {
 			start := res.Fset.Position(d.start)
 			end := res.Fset.Position(d.end)
@@ -398,7 +404,7 @@ func Definition(res *Result, path string, line, col int) (*model.Location, error
 	}
 	p := res.Fset.Position(obj.Pos())
 	return &model.Location{
-		Path: relPath(objectPackage(res, obj), p.Filename),
+		Path: relPath(res, objectPackage(res, obj), p.Filename),
 		Line: p.Line,
 		Col:  p.Column,
 	}, nil

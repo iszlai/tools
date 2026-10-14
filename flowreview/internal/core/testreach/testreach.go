@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -80,7 +81,7 @@ func Compute(res *golang.Result, files []model.ChangedFile) (Report, error) {
 		return Report{}, err
 	}
 
-	return buildReport(changed, hits, tests), nil
+	return buildReport(changed, hits, tests, modulePrefix(res)), nil
 }
 
 // changedFunctions is files' changed symbols narrowed to funcs and methods:
@@ -167,7 +168,7 @@ func bfs(res *golang.Result, rootID string) (map[string][]string, error) {
 // buildReport assembles Report from changed's symbols and the reach hits
 // every test's BFS produced. tests is needed only to resolve, for
 // buildCommands, the package directory and bare name of each reaching test.
-func buildReport(changed []model.CodeSymbol, hits map[string][]hit, tests []golang.EntryPoint) Report {
+func buildReport(changed []model.CodeSymbol, hits map[string][]hit, tests []golang.EntryPoint, prefix string) Report {
 	r := Report{Functions: make([]FunctionReach, 0, len(changed))}
 	reachingTests := map[string]bool{}
 
@@ -197,7 +198,7 @@ func buildReport(changed []model.CodeSymbol, hits map[string][]hit, tests []gola
 		}
 	}
 
-	r.Commands = buildCommands(tests, reachingTests)
+	r.Commands = buildCommands(tests, reachingTests, prefix)
 	return r
 }
 
@@ -205,7 +206,27 @@ func buildReport(changed []model.CodeSymbol, hits map[string][]hit, tests []gola
 // declaration lives in -- go test runs by package directory, not by symbol
 // ID, and a test and the changed code it reaches need not share one -- and
 // renders one copyable `go test` invocation per directory.
-func buildCommands(tests []golang.EntryPoint, reachingTests map[string]bool) []PackageCommand {
+// modulePrefix is the loaded module's directory relative to res.Root ("" when
+// the module is the repo root itself): symbol paths are repo-relative, but
+// `go test` must run inside the module.
+func modulePrefix(res *golang.Result) string {
+	if res.Root == "" {
+		return ""
+	}
+	for _, p := range res.Packages {
+		if p.Module == nil || p.Module.Dir == "" {
+			continue
+		}
+		rel, err := filepath.Rel(res.Root, p.Module.Dir)
+		if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+			return ""
+		}
+		return filepath.ToSlash(rel)
+	}
+	return ""
+}
+
+func buildCommands(tests []golang.EntryPoint, reachingTests map[string]bool, prefix string) []PackageCommand {
 	byDir := map[string]map[string]bool{}
 	for _, t := range tests {
 		if !reachingTests[t.Symbol.ID] {
@@ -231,7 +252,16 @@ func buildCommands(tests []golang.EntryPoint, reachingTests map[string]bool) []P
 			names = append(names, n)
 		}
 		sort.Strings(names)
-		out = append(out, PackageCommand{Dir: dir, Tests: names, Command: goTestCommand(dir, names)})
+		cmd := goTestCommand(dir, names)
+		if prefix != "" {
+			if rel := strings.TrimPrefix(dir, prefix+"/"); rel != dir || dir == prefix {
+				if dir == prefix {
+					rel = "."
+				}
+				cmd = "cd " + prefix + " && " + goTestCommand(rel, names)
+			}
+		}
+		out = append(out, PackageCommand{Dir: dir, Tests: names, Command: cmd})
 	}
 	return out
 }

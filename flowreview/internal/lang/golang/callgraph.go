@@ -257,7 +257,7 @@ func location(res *Result, pos token.Pos) *model.Location {
 	if p.Filename == "" {
 		return nil
 	}
-	return &model.Location{Path: relPath(res.FileToPkg[p.Filename], p.Filename), Line: p.Line, Col: p.Column}
+	return &model.Location{Path: relPath(res, res.FileToPkg[p.Filename], p.Filename), Line: p.Line, Col: p.Column}
 }
 
 // Callers returns every call edge into the function(s) symbolID names — "who

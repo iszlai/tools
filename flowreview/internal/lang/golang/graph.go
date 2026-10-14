@@ -98,7 +98,8 @@ func (l *Loader) importGraph(ctx context.Context) (*importGraph, error) {
 // ignored, not treated as a failure: the broken package simply never makes it
 // into the graph, matching "errors in unrelated packages must not abort".
 func (l *Loader) listPackages(ctx context.Context) ([]*pkgNode, error) {
-	cmd := exec.CommandContext(ctx, "go", "list", "-mod=readonly", "-json="+listFields, "./...")
+	args := append([]string{"list", "-mod=readonly", "-json=" + listFields}, tagsFlag(l.Tags)...)
+	cmd := exec.CommandContext(ctx, "go", append(args, "./...")...)
 	cmd.Dir = l.Dir
 	if l.Env != nil {
 		cmd.Env = l.Env
@@ -219,6 +220,7 @@ func (g *importGraph) scopeFor(dir string, changedFiles []string) []*pkgNode {
 // missed; that is a deliberate, documented approximation, see BENCHMARK.md.
 func (l *Loader) manifestKey() (string, error) {
 	h := sha256.New()
+	h.Write([]byte("tags=" + strings.Join(l.Tags, ",") + "\n"))
 	for _, name := range []string{"go.mod", "go.sum"} {
 		data, err := os.ReadFile(filepath.Join(l.Dir, name))
 		if err != nil && !os.IsNotExist(err) {

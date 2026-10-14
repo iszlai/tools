@@ -13,6 +13,7 @@ package symbol
 
 import (
 	"context"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -200,6 +201,12 @@ func buildTargets(edges []model.NavigationEdge, selfID string, resolve func(stri
 			t.Path, t.Line = sym.Path, sym.Range.StartLine
 		case e.Site != nil:
 			t.Path, t.Line = e.Site.Path, e.Site.Line
+		}
+		if filepath.IsAbs(t.Path) {
+			// Outside the repo (standard library, module cache): there is
+			// no file in the review to open, and it is not what a reviewer
+			// is tracing.
+			continue
 		}
 		if t.Path != "" {
 			t.InDiff = lineInDiff(files, t.Path, t.Line)
