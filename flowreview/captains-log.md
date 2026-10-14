@@ -113,3 +113,11 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-19 merged; heuristic pass catches the implementer left behind
 
 **Decision (agent, accepted).** Once an interface method's signature changes, `types.Implements` no longer sees a stale implementer, so a name-matched pass over old-interface method names adds `heuristic` implementers; any implementer outside the diff gets a warning. A changed interface computes radius for all its methods (broader, never narrower). Struct-only changes are out of scope. `/api/radius` needs BaseSHA for patch sources (errors there for now).
+
+## 2026-10-14 — FR-8 merged; expansion lives in its own package
+
+**Decision (agent, accepted).** Provider dispatch and old/new alignment live in `internal/core/expand` (it depends on lang providers, which render should not); render gains only ContextRows and `Row.Expanded`. Closures expand to their enclosing named func; no grammar or no symbol falls back to ±15 lines. Expanded rows have position 0 (not publishable as GitHub comments).
+
+## 2026-10-14 — FR-17 merged; flow ordering with a narrated Why
+
+**Decision (agent, accepted).** Backward BFS over callers (depth 6, 500 nodes) to the first entry point; components become flow groups, callers-first by Kahn with lexicographic cycle-breaking. A file joins only the first group claiming it. Unclassified Go files are approximated by BFS depth (there's no import-depth primitive). Hotspot is injected as a func, so `order` doesn't depend on history. Flow analysis starts on the first `/api/order` request rather than at session open (no UI menu yet). Gherkin chains surface when step-def handler ids map to exact Go ids.

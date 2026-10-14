@@ -27,7 +27,7 @@ Full plan: `../PLAN.md`. Board: `th next` in this folder (`.taskhound.yaml`, pre
 - [x] FR-14 Symbols and definitions
 - [x] FR-15 Call graph: callers, callees, implementations
 - [x] FR-16 Entry points
-- [ ] FR-17 Flow ordering
+- [x] FR-17 Flow ordering
 - [ ] FR-18 Call-chain explorer UI
 - [x] FR-19 Blast radius and signature changes
 - [x] FR-20 Co-change companions and hotspots

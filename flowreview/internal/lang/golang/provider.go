@@ -57,6 +57,7 @@ func (p *Provider) Capabilities() lang.Capabilities {
 		Callers:         true,
 		Callees:         true,
 		Implementations: true,
+		EntryPoints:     true,
 	}
 }
 

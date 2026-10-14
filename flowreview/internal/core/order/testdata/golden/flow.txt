@@ -1,0 +1,18 @@
+order: flow (3 groups)
+
+== handler CreateUser ==
+  service/service.go
+      called from handler CreateUser
+  repo/repo.go
+      called from CreateUser (changed) ← handler CreateUser
+
+== scenario Create user.Validate a create user request ==
+  service/validate.go
+      called from aCreateUserRequestIsValidated ← scenario Validate a create user request
+
+== helper (no entry point found) ==
+  util/util.go
+      no in-repo callers found
+
+Unclassified (1):
+  README.md
