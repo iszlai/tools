@@ -15,13 +15,16 @@ import (
 	"github.com/iszlai/tools/flowreview/internal/core/render"
 	"github.com/iszlai/tools/flowreview/internal/core/review"
 	"github.com/iszlai/tools/flowreview/internal/core/session"
+	"github.com/iszlai/tools/flowreview/internal/llm/summary"
 )
 
 // ui/md.js is mdlite, copied in from /Users/lehel/repos/tools/mdlite/md.js
 // the way taskhound and diagme do (see that file's own header comment): embed
 // cannot reach outside this directory, so the copy is checked in here.
+// ui/summary.js is FR-29's trimmed summary UI, kept out of app.js entirely --
+// see its own header comment.
 //
-//go:embed ui/index.html ui/app.js ui/styles.css ui/md.js
+//go:embed ui/index.html ui/app.js ui/summary.js ui/styles.css ui/md.js
 var uiFiles embed.FS
 
 // uiRoot strips the "ui/" prefix embed.FS keeps, so "/" serves index.html
@@ -55,10 +58,11 @@ type Server struct {
 	store       *session.Store
 	renderCache *render.Cache
 
-	mu     sync.RWMutex
-	ws     *review.Workspace
-	window WindowController
-	addr   string
+	mu        sync.RWMutex
+	ws        *review.Workspace
+	window    WindowController
+	addr      string
+	summaries *summary.Pipeline // FR-28; nil until SetSummaries, or forever in tests that don't need it
 
 	mux *http.ServeMux
 }
@@ -85,6 +89,23 @@ func (s *Server) SetWindow(w WindowController) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.window = w
+}
+
+// SetSummaries wires up FR-28's summary pipeline, the way SetWindow wires up
+// a real window: main.go builds the Pipeline (it needs the user's model
+// config, resolved after New) and hands it over once it exists. A Server with
+// no Pipeline set answers the summaries endpoints as "everything pending"
+// rather than erroring (see handleSummaries).
+func (s *Server) SetSummaries(p *summary.Pipeline) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.summaries = p
+}
+
+func (s *Server) summariesPipeline() *summary.Pipeline {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.summaries
 }
 
 // Handler is the server's http.Handler, for tests that want to drive it with
@@ -138,12 +159,15 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/comments", s.handleUpsertComment)
 	s.mux.HandleFunc("DELETE /api/comments/{id}", s.handleDeleteComment)
 	s.mux.HandleFunc("POST /api/open", s.handleOpen)
-	s.mux.HandleFunc("POST /api/reload", s.handleReload)                      // FR-9
-	s.mux.HandleFunc("GET /api/remote-comments", s.handleRemoteComments)      // FR-12, internal/web/remote.go
-	s.mux.HandleFunc("GET /api/tests", s.handleTests)                         // FR-21, internal/web/tests.go
-	s.mux.HandleFunc("GET /api/radius", s.handleRadius)                       // FR-19, internal/web/radius.go
-	s.mux.HandleFunc("GET /api/order", s.handleOrder)                         // FR-17, internal/web/order.go
-	s.mux.HandleFunc("POST /api/publish", s.handlePublish)                    // FR-11, internal/web/publish.go
-	s.mux.HandleFunc("POST /api/publish/preflight", s.handlePublishPreflight) // FR-11, internal/web/publish.go
+	s.mux.HandleFunc("POST /api/reload", s.handleReload)                          // FR-9
+	s.mux.HandleFunc("GET /api/remote-comments", s.handleRemoteComments)          // FR-12, internal/web/remote.go
+	s.mux.HandleFunc("GET /api/tests", s.handleTests)                             // FR-21, internal/web/tests.go
+	s.mux.HandleFunc("GET /api/radius", s.handleRadius)                           // FR-19, internal/web/radius.go
+	s.mux.HandleFunc("GET /api/order", s.handleOrder)                             // FR-17, internal/web/order.go
+	s.mux.HandleFunc("POST /api/publish", s.handlePublish)                        // FR-11, internal/web/publish.go
+	s.mux.HandleFunc("POST /api/publish/preflight", s.handlePublishPreflight)     // FR-11, internal/web/publish.go
+	s.mux.HandleFunc("GET /api/summaries", s.handleSummaries)                     // FR-28, internal/web/summary.go
+	s.mux.HandleFunc("POST /api/summaries", s.handleSummaries)                    // FR-28, internal/web/summary.go
+	s.mux.HandleFunc("POST /api/summaries/regenerate", s.handleRegenerateSummary) // FR-28, internal/web/summary.go
 	s.mux.Handle("/", http.FileServer(http.FS(uiRoot)))
 }

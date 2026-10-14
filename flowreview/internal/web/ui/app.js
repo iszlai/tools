@@ -187,13 +187,20 @@ function focusedClass(side, lineNo) {
   return a && lineNo && a.side === side && a.line === lineNo ? ' focused-line' : '';
 }
 
+// summaryStripHTML (FR-29) hands off to summary.js, a separate file loaded
+// after this one: window.FlowReviewSummary is undefined only if that script
+// failed to load, in which case a hunk header just renders without a card.
+function summaryStripHTML(hunkId) {
+  return window.FlowReviewSummary ? window.FlowReviewSummary.stripHTML(hunkId) : '';
+}
+
 function rowCellsHTML(fileId, row, isCurrent) {
   const reviewed = state.hunkStates[row.hunk_id] === 'reviewed';
   const dim = reviewed ? ' hunk-reviewed' : '';
   if (row.kind === 'hunk') {
     const cls = 'cell hunk-header' + dim + (isCurrent ? ' current' : '');
     const check = reviewed ? ' <span class="reviewed-check">✓ reviewed</span>' : '';
-    return cellHTML(cls, fileId, '', '', row.hunk_id, '', (row.old_html || '') + check + expandButtonHTML(row.hunk_id));
+    return cellHTML(cls, fileId, '', '', row.hunk_id, '', (row.old_html || '') + check + expandButtonHTML(row.hunk_id) + summaryStripHTML(row.hunk_id));
   }
   const oldBg = sideBgClass(row.kind, 'old');
   const newBg = sideBgClass(row.kind, 'new');
@@ -263,6 +270,7 @@ function renderVisibleRows() {
   const rows = state.rows;
   if (!rows.length) {
     rowsEl.innerHTML = '';
+    if (window.FlowReviewSummary) window.FlowReviewSummary.onRowsRendered(); // FR-29: nothing visible now either
     return;
   }
   const scrollTop = diff.scrollTop;
@@ -279,6 +287,7 @@ function renderVisibleRows() {
   }
   rowsEl.innerHTML = html;
   rowsEl.style.transform = `translateY(${first * ROW_HEIGHT}px)`;
+  if (window.FlowReviewSummary) window.FlowReviewSummary.onRowsRendered(); // FR-29: request summaries for what's now on screen
 }
 
 // jumpHunk moves to the next/previous hunk relative to whatever is
@@ -563,6 +572,7 @@ const HELP_KEYS = [
   ['r', 'toggle reviewed on the current hunk'],
   ['R', 'toggle reviewed on the whole file'],
   ['c', 'comment on the focused line'],
+  ['s', 'toggle hunk summaries on/off'],
   ['?', 'toggle this help'],
 ];
 

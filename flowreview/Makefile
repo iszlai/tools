@@ -40,8 +40,9 @@ fmt: ## gofmt everything
 vet: ## go vet
 	go vet ./...
 
-smoke: build ## drive the UI in headless Chromium (see tests/smoke.js)
+smoke: build ## drive the UI in headless Chromium (see tests/smoke.js, tests/smoke-summary.js)
 	PLAYWRIGHT_BROWSERS_PATH=$${PLAYWRIGHT_BROWSERS_PATH:-../taskhound/pw-browsers} node tests/smoke.js
+	PLAYWRIGHT_BROWSERS_PATH=$${PLAYWRIGHT_BROWSERS_PATH:-../taskhound/pw-browsers} node tests/smoke-summary.js
 
 eval: fetch-llama ## run the FR-27 model eval harness against the default tier models; see eval/reports/
 	go run ./cmd/flowreview-eval --models qwen2.5-coder-1.5b-instruct-q4_k_m,qwen2.5-coder-3b-instruct-q4_k_m,qwen2.5-coder-7b-instruct-q4_k_m

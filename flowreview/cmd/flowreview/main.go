@@ -248,14 +248,19 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 	defer releaseLock(f)
 
-	store := session.New(session.DefaultRoot())
+	dataRoot := session.DefaultRoot()
+	store := session.New(dataRoot)
 
 	ws, err := review.Open(ctx, store, opts.source)
 	if err != nil {
 		return classifyOpenErr(err)
 	}
 
+	pipeline, stopSummaries := buildSummaryPipeline(dataRoot)
+	defer stopSummaries()
+
 	srv := web.New(store, ws, nil)
+	srv.SetSummaries(pipeline)
 	ln, err := srv.Listen(opts.port)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
