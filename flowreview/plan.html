@@ -1,0 +1,99 @@
+<!doctype html><html><head><meta charset="utf-8"><title>FlowReview plan</title>
+<script type="module">import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';mermaid.initialize({startOnLoad:true,theme:'neutral'});</script>
+<style>body{font:15px/1.5 -apple-system,system-ui,sans-serif;max-width:1000px;margin:2rem auto;padding:0 1rem;color:#222}h1,h2{font-weight:600}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:.4rem .6rem;text-align:left;vertical-align:top}th{background:#f6f6f6}code{background:#f3f3f3;padding:0 .25em;border-radius:3px}.mermaid{background:#fafafa;border:1px solid #eee;padding:1rem;margin:1rem 0}</style></head><body>
+<h1>FlowReview — what gets built, in what order</h1>
+<p>One Go binary with its own WKWebView window. Tree-sitter structure for every language, exact Go semantics in-process, Go toolchain downloaded on demand. <code>llama-server</code> embedded in the binary. GitHub through the <code>gh</code> token. Full text: <code>PLAN.md</code>.</p>
+
+<h2>Architecture</h2>
+<div class="mermaid">
+flowchart LR
+  CLI[flowreview CLI<br/>open · diff · pr · order · context · model] --> CORE
+  subgraph CORE[Go core]
+    GIT[git adapter] --> DIFF[diff model<br/>hunk ids · positions]
+    DIFF --> SESS[(session store<br/>JSON · atomic · flock)]
+    DIFF --> ORDER[flow ordering]
+    LANG[LanguageProvider<br/>tree-sitter structural tier for all languages<br/>exact tier: go/packages · go/ssa · VTA<br/>Gherkin step linking] --> ORDER
+    TOOL[[Go toolchain<br/>downloaded on demand]] -.-> LANG
+    LANG --> RADIUS[blast radius · test reach]
+    GIT --> MINE[git-log mining<br/>companions · hotspots]
+    LLM[ModelProvider] --> SUM[summary pipeline<br/>JSON schema · cache · priority queue]
+    AGENT[AgentProvider<br/>embedded model only] --> FIND[findings · evidence]
+    HOST[Host · GitHub REST via gh token]
+  end
+  LLM -.spawns.-> SIDE[[embedded llama-server<br/>extracted to App Support]]
+  SIDE --> MODELS[(GGUF models<br/>downloaded once, with consent)]
+  CORE --> WEB[HTTP API + embedded UI<br/>virtualized diff rows · explorer · queue]
+  WEB --> WIN[native WKWebView window<br/>16 ms frames · <100 ms file switch]
+  HOST <--> GH[(github.com)]
+</div>
+
+<h2>Milestones and dependencies</h2>
+<div class="mermaid">
+flowchart TB
+  subgraph M1[M1 daily-usable reviewer]
+    FR1[FR-1 types] --> FR2[FR-2 git] & FR3[FR-3 diff parse] & FR4[FR-4 store]
+    FR1 --> FR39[FR-39 tree-sitter structure]
+    FR3 & FR4 --> FR5[FR-5 server + native window] --> FR6[FR-6 diff rows] --> FR7[FR-7 queue/progress] --> FR9[FR-9 drafts]
+    FR6 & FR39 --> FR8[FR-8 function expand]
+    FR2 & FR3 --> FR10[FR-10 GitHub read]
+    FR9 & FR10 --> FR11[FR-11 publish]
+    FR5 & FR10 --> FR12[FR-12 CLI]
+  end
+  subgraph M2[M2 flow and risk]
+    FR1 --> FR32[FR-32 Go toolchain download]
+    FR2 & FR32 --> FR13[FR-13 go/packages loader] --> FR14[FR-14 symbols] --> FR15[FR-15 call graph]
+    FR14 --> FR16[FR-16 entry points]
+    FR15 & FR16 --> FR17[FR-17 flow order] --> FR23[FR-23 commit order]
+    FR15 & FR8 --> FR18[FR-18 explorer UI]
+    FR15 --> FR19[FR-19 blast radius] & FR21[FR-21 test reach]
+    FR2 --> FR20[FR-20 companions/hotspots]
+    FR4 & FR10 --> FR22[FR-22 delta re-review]
+    FR17 & FR19 & FR21 --> FR24[FR-24 agent CLI]
+    FR39 --> FR40[FR-40 Gherkin step linking]
+    FR39 & FR17 --> FR41[FR-41 Java/JS structural flow]
+  end
+  subgraph M3[M3 embedded summaries]
+    FR1 --> FR25[FR-25 sidecar] --> FR26[FR-26 model manager]
+    FR25 & FR26 --> FR27[FR-27 eval · HITL]
+    FR25 & FR3 & FR8 --> FR28[FR-28 pipeline] --> FR29[FR-29 summary UI]
+    FR28 & FR11 --> FR30[FR-30 review body]
+  end
+  subgraph M4[M4 agentic]
+    FR1 --> FR31[FR-31 finding model]
+    FR31 & FR28 & FR15 --> FR33[FR-33 embedded provider]
+    FR31 & FR9 --> FR34[FR-34 findings UI]
+    FR21 --> FR35[FR-35 checks runner]
+  end
+  subgraph M5[M5 distribution]
+    FR12 & FR25 --> FR36[FR-36 release/upgrade] --> FR37[FR-37 .app polish] --> FR38[FR-38 notarize · HITL]
+  end
+</div>
+
+<h2>Review flow after M3</h2>
+<div class="mermaid">
+sequenceDiagram
+  participant U as Reviewer
+  participant F as flowreview
+  participant L as llama-server (embedded)
+  participant G as GitHub
+  U->>F: flowreview pr 123
+  F->>G: PR diff, comments (gh token)
+  F->>F: parse hunks, load Go packages, call graph, flow order
+  F-->>U: browser: queue in flow order, blast radius, companions
+  F->>L: summarize visible hunks (JSON schema, cached)
+  L-->>F: {kind, what, impact, risk_flags}
+  U->>F: expand function, follow callers, mark reviewed, draft comments
+  U->>F: submit review
+  F->>G: one review with approved comments only
+</div>
+
+<h2>What changed from the draft PRD</h2>
+<table><tr><th>Was</th><th>Now</th><th>Why</th></tr>
+<tr><td>Tauri + Monaco</td><td>Go binary + embedded vanilla-JS UI in its own WKWebView window; strict perf budget</td><td>the engine must be Go anyway; one toolchain; proven in taskhound/diagme/gh-view</td></tr>
+<tr><td>Go first, other languages later</td><td>tree-sitter structural tier for all languages from M1, Gherkin step linking in M2</td><td>Java, JS/TS and feature files are daily review targets</td></tr>
+<tr><td>go on PATH</td><td>Go toolchain downloaded on demand</td><td>user installs one thing</td></tr>
+<tr><td>gopls</td><td>go/packages + go/ssa in-process</td><td>exact call graph, no sidecar process</td></tr>
+<tr><td>OAuth + Keychain</td><td><code>gh auth token</code></td><td>zero auth work for M1</td></tr>
+<tr><td>llama.cpp or MLX, user-installed</td><td>llama-server embedded in the binary</td><td>user installs one thing</td></tr>
+<tr><td>4 sequential phases</td><td>5 milestones of tracer-bullet slices, dogfood gate between</td><td>usable after M1</td></tr></table>
+</body></html>

@@ -1,0 +1,460 @@
+version: 1
+prefix: FR
+next_id: 42
+issues:
+    - id: FR-1
+      title: Skeleton and frozen types
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: must
+      labels:
+        - M1
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-2
+      title: Git adapter
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: high
+      blocked_by:
+        - FR-1
+      labels:
+        - M1
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-3
+      title: Unified diff parser and position map
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: high
+      blocked_by:
+        - FR-1
+      labels:
+        - M1
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-4
+      title: Session store
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: high
+      blocked_by:
+        - FR-1
+      labels:
+        - M1
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-5
+      title: Server, native WKWebView window and UI shell
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: high
+      blocked_by:
+        - FR-3
+        - FR-4
+      labels:
+        - M1
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:47:55Z
+    - id: FR-6
+      title: Side-by-side diff renderer
+      description: 'See PLAN.md §5. Strict budget tested in smoke: <1 s first paint on 10k lines, <100 ms file switch, no long tasks while scrolling.'
+      status: todo
+      priority: high
+      blocked_by:
+        - FR-5
+      labels:
+        - M1
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:47:55Z
+    - id: FR-7
+      title: Review queue, reviewed state, progress
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: high
+      blocked_by:
+        - FR-6
+      labels:
+        - M1
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-8
+      title: Enclosing-function expansion
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: high
+      blocked_by:
+        - FR-6
+        - FR-39
+      labels:
+        - M1
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:47:55Z
+    - id: FR-9
+      title: Comment drafts
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: high
+      blocked_by:
+        - FR-7
+      labels:
+        - M1
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-10
+      title: 'GitHub host: read'
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: high
+      blocked_by:
+        - FR-2
+        - FR-3
+      labels:
+        - M1
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-11
+      title: 'GitHub host: publish'
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: high
+      blocked_by:
+        - FR-9
+        - FR-10
+      labels:
+        - M1
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-12
+      title: CLI surface M1
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: high
+      blocked_by:
+        - FR-5
+        - FR-10
+      labels:
+        - M1
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-13
+      title: Go package loader with cache (spike first)
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: high
+      blocked_by:
+        - FR-2
+        - FR-32
+      labels:
+        - M2
+        - spike
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:47:55Z
+    - id: FR-14
+      title: Symbols and definitions
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-13
+      labels:
+        - M2
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-15
+      title: 'Call graph: callers, callees, implementations'
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-14
+      labels:
+        - M2
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-16
+      title: Entry points
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-14
+      labels:
+        - M2
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-17
+      title: Flow ordering
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-15
+        - FR-16
+      labels:
+        - M2
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-18
+      title: Call-chain explorer UI
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-15
+        - FR-8
+      labels:
+        - M2
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-19
+      title: Blast radius and signature changes
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-15
+        - FR-14
+      labels:
+        - M2
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-20
+      title: Co-change companions and hotspots
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-2
+      labels:
+        - M2
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-21
+      title: Test reach
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-15
+      labels:
+        - M2
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-22
+      title: Delta re-review
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-4
+        - FR-10
+      labels:
+        - M2
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-23
+      title: Commit walkthrough order
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: low
+      blocked_by:
+        - FR-17
+      labels:
+        - M2
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-24
+      title: CLI text/JSON surface for agents
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-17
+        - FR-19
+        - FR-21
+      labels:
+        - M2
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-25
+      title: Sidecar embedding and lifecycle (llama-server)
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: high
+      blocked_by:
+        - FR-1
+      labels:
+        - M3
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-26
+      title: Model manager
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-25
+      labels:
+        - M3
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-27
+      title: Eval harness and model choice (HITL)
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-25
+        - FR-26
+      labels:
+        - M3
+        - hitl
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-28
+      title: Summary pipeline
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-25
+        - FR-3
+        - FR-8
+      labels:
+        - M3
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-29
+      title: Summary UI
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-28
+        - FR-7
+      labels:
+        - M3
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-30
+      title: Review body draft
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: low
+      blocked_by:
+        - FR-28
+        - FR-11
+      labels:
+        - M3
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-31
+      title: Finding model and provider interface
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-1
+      labels:
+        - M4
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-32
+      title: On-demand Go toolchain download
+      description: 'See PLAN.md §5. Replaces the dropped Claude CLI provider (decision 2026-10-14: embedded model only in M4).'
+      status: todo
+      blocked_by:
+        - FR-1
+      labels:
+        - M2
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:47:55Z
+      comments:
+        - at: 2026-10-14T07:47:55Z
+          author: lehel
+          body: 'Repurposed: Claude CLI provider dropped at the grill (embedded model is the only agentic provider). Now the on-demand Go toolchain downloader, blocks FR-13.'
+    - id: FR-33
+      title: Embedded-model provider
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-31
+        - FR-28
+        - FR-15
+      labels:
+        - M4
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-34
+      title: Findings UI and approve-to-comment
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-31
+        - FR-9
+      labels:
+        - M4
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-35
+      title: Read-only checks runner
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-21
+      labels:
+        - M4
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-36
+      title: Release and upgrade
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      blocked_by:
+        - FR-12
+        - FR-25
+      labels:
+        - M5
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-37
+      title: .app bundle polish (window exists since FR-5)
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: low
+      blocked_by:
+        - FR-36
+      labels:
+        - M5
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:47:55Z
+    - id: FR-38
+      title: Signing and notarization (HITL)
+      description: See PLAN.md §5 for scope, acceptance criteria and size.
+      status: todo
+      priority: low
+      blocked_by:
+        - FR-37
+      labels:
+        - M5
+        - hitl
+      created_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T07:26:52Z
+    - id: FR-39
+      title: Tree-sitter structural provider (all languages)
+      description: See PLAN.md §5 FR-39.
+      status: todo
+      priority: high
+      blocked_by:
+        - FR-1
+      labels:
+        - M1
+      created_at: 2026-10-14T07:47:55Z
+      updated_at: 2026-10-14T07:47:55Z
+    - id: FR-40
+      title: Gherkin step linking
+      description: See PLAN.md §5 FR-40.
+      status: todo
+      blocked_by:
+        - FR-39
+      labels:
+        - M2
+      created_at: 2026-10-14T07:47:55Z
+      updated_at: 2026-10-14T07:47:55Z
+    - id: FR-41
+      title: Java and JS/TS structural flow
+      description: See PLAN.md §5 FR-41.
+      status: todo
+      blocked_by:
+        - FR-39
+        - FR-17
+      labels:
+        - M2
+      created_at: 2026-10-14T07:47:55Z
+      updated_at: 2026-10-14T07:47:55Z
