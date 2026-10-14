@@ -6,20 +6,61 @@ run.
 
 ## Install
 
-```sh
-make build            # builds bin/flowreview (embeds llama-server only if
-                       # third_party/llama/dist/ has been populated by
-                       # `make fetch-llama`; otherwise falls back to a stub
-                       # model provider, which is the normal case for a dev
-                       # checkout)
-make install          # installs bin/flowreview into $PREFIX (default
-                       # $HOME/.local/bin); make sure that is on your PATH
+**Prebuilt binary** (no Go needed; darwin/arm64 only for now, see
+[Release and upgrade](#release-and-upgrade) below):
+
+```bash
+mkdir -p ~/.local/bin
+curl -fsSL "https://github.com/iszlai/tools/releases/latest/download/flowreview_darwin_arm64" -o ~/.local/bin/flowreview
+chmod +x ~/.local/bin/flowreview
 ```
 
-`make build` requires `CGO_ENABLED=1` (the Makefile sets this itself) because
-the native window and the tree-sitter grammars are cgo. Requires a GitHub
-token for the `pr` command: either `gh auth login` once, or set
-`GITHUB_TOKEN`/`GH_TOKEN`.
+**From source** (also installs the agent skill, once FR-24 adds one):
+
+```bash
+git clone https://github.com/iszlai/tools.git && cd tools/flowreview
+./install.sh                 # ~/.local/bin/flowreview (+ ~/.claude/skills/flowreview/ if present)
+```
+
+`./install.sh` (and the Makefile's `build`/`release` targets it delegates
+to) requires `CGO_ENABLED=1` (set automatically) because the native window
+and the tree-sitter grammars are cgo. Requires a GitHub token for the `pr`
+command: either `gh auth login` once, or set `GITHUB_TOKEN`/`GH_TOKEN`.
+
+A build from a checkout embeds the real `llama-server` sidecar only once
+`make fetch-llama` has populated `third_party/llama/dist/`; otherwise it
+falls back to a stub model provider, which is the normal case for a dev
+checkout and does not affect anything in this slice (FR-25/FR-26).
+
+## Release and upgrade
+
+Releases are tagged `flowreview-vX.Y.Z` and built by
+`.github/workflows/flowreview-release.yml` on a `macos-14` (arm64) runner:
+`make -C flowreview check release` builds `dist/flowreview_darwin_arm64`
+(embedding the real llama-server, via `make fetch-llama`) plus a
+`dist/flowreview_darwin_arm64.sha256` checksum, and both are uploaded to the
+GitHub release. Only darwin/arm64 is published for now; amd64 is a TODO (see
+the note next to `release:` in the Makefile) once a cgo cross-compiler or an
+amd64 runner is wired up for the llama sidecar and the tree-sitter grammars.
+
+```sh
+flowreview upgrade
+downloading latest for darwin/arm64...
+upgraded /Users/you/.local/bin/flowreview: v0.1.0 -> v0.2.0
+```
+
+It downloads `flowreview_darwin_arm64` from the latest `flowreview-v*`
+release, verifies it against the published `.sha256` checksum when there is
+one (refusing and leaving the running binary untouched on a mismatch),
+confirms the download runs, and replaces the running binary only if its
+version differs — otherwise it prints `already on the latest release` and
+changes nothing. The download lands next to the current binary under a temp
+name and is only renamed over it at the very end, so a failed or interrupted
+upgrade never leaves a broken binary in place.
+
+**If you have the repo**, `./install.sh --update` rebuilds from the checkout
+when Go is present and otherwise pulls the latest published build, same as
+`flowreview upgrade` plus refreshing the agent skill.
 
 ## Commands
 
@@ -111,6 +152,11 @@ repo without requiring `go` on `PATH`.
 flowreview toolchain list        # installed versions and their GOROOT
 flowreview toolchain rm 1.22.3   # delete a cached toolchain
 ```
+
+### `flowreview upgrade`
+
+Replace this binary with the latest published `flowreview-v*` release for
+this platform. See [Release and upgrade](#release-and-upgrade) above.
 
 ### `flowreview version`
 

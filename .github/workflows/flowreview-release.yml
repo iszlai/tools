@@ -1,0 +1,46 @@
+# Cut a flowreview release: tag it `flowreview-vX.Y.Z` and push the tag.
+#
+#   git tag flowreview-v0.1.0 && git push origin flowreview-v0.1.0
+#
+# Assets are named flowreview_<os>_<arch> (plus a .sha256 checksum) so the
+# install line in flowreview/README.md and `flowreview upgrade` resolve them
+# from .../releases/latest/download/. darwin/arm64 only for now -- see the
+# note next to `release:` in flowreview/Makefile.
+name: flowreview release
+
+on:
+  push:
+    tags: ['flowreview-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'tag to build and release, e.g. flowreview-v0.1.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14 # arm64, matches the only release target for now
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: flowreview/go.mod
+          cache-dependency-path: flowreview/go.sum
+
+      - name: Check and build the release binary
+        run: |
+          tag='${{ github.event.inputs.tag || github.ref_name }}'
+          make -C flowreview check release VERSION="${tag#flowreview-}"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag='${{ github.event.inputs.tag || github.ref_name }}'
+          gh release create "$tag" flowreview/dist/* \
+            --title "flowreview $tag" \
+            --generate-notes \
+            || gh release upload "$tag" flowreview/dist/* --clobber
