@@ -1,0 +1,7 @@
+diff --git a/with space/new file.go b/with space/new file.go
+new file mode 100644
+index 0000000..109ff8b
+--- /dev/null
++++ b/with space/new file.go	
+@@ -0,0 +1 @@
++quoted path content

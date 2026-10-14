@@ -1,0 +1,10 @@
+diff --git a/combo.sh b/combo.sh
+old mode 100644
+new mode 100755
+index 6e76616..b9ec285
+--- a/combo.sh
++++ b/combo.sh
+@@ -1,2 +1,2 @@
+-script body
++script body CHANGED
+ more

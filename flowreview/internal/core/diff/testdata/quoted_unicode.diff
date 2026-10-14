@@ -1,0 +1,7 @@
+diff --git "a/with space/caf\303\251 new.go" "b/with space/caf\303\251 new.go"
+new file mode 100644
+index 0000000..0c3fb80
+--- /dev/null
++++ "b/with space/caf\303\251 new.go"	
+@@ -0,0 +1 @@
++cafe variant content

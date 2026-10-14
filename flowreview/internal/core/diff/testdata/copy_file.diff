@@ -1,0 +1,4 @@
+diff --git a/copysrc.go b/copydst.go
+similarity index 100%
+copy from copysrc.go
+copy to copydst.go

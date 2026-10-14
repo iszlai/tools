@@ -1,0 +1,8 @@
+diff --git a/del.go b/del.go
+deleted file mode 100644
+index 71f1645..0000000
+--- a/del.go
++++ /dev/null
+@@ -1,2 +0,0 @@
+-to be deleted
+-second

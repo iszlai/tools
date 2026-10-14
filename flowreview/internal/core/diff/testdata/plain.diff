@@ -1,0 +1,8 @@
+--- a/src/util.go
++++ b/src/util.go
+@@ -1,3 +1,4 @@
+ line1
+-line2
++line2 changed
+ line3
++line4

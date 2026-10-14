@@ -1,0 +1,8 @@
+diff --git a/added.go b/added.go
+new file mode 100644
+index 0000000..9d0e60b
+--- /dev/null
++++ b/added.go
+@@ -0,0 +1,2 @@
++new file content
++second

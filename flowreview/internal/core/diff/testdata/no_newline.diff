@@ -1,0 +1,9 @@
+diff --git a/nonewline.go b/nonewline.go
+index 74e57e3..1beba89 100644
+--- a/nonewline.go
++++ b/nonewline.go
+@@ -1 +1 @@
+-no newline last line
+\ No newline at end of file
++no newline last line CHANGED
+\ No newline at end of file

@@ -1,0 +1,4 @@
+diff --git "a/with space/caf\303\251 commit.go" "b/with space/caf\303\251 renamed.go"
+similarity index 100%
+rename from "with space/caf\303\251 commit.go"
+rename to "with space/caf\303\251 renamed.go"
