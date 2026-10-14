@@ -135,5 +135,6 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/open", s.handleOpen)
 	s.mux.HandleFunc("GET /api/remote-comments", s.handleRemoteComments) // FR-12, internal/web/remote.go
 	s.mux.HandleFunc("GET /api/tests", s.handleTests)                    // FR-21, internal/web/tests.go
+	s.mux.HandleFunc("GET /api/radius", s.handleRadius)                  // FR-19, internal/web/radius.go
 	s.mux.Handle("/", http.FileServer(http.FS(uiRoot)))
 }

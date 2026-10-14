@@ -109,3 +109,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-21 merged; test commands grouped by the test's package
 
 **Decision (agent, accepted).** Suggested `go test -run` lines group by the test's own package dir (where `go test` runs), not the changed function's. `/api/tests` computes in the background behind `{"pending":true}`; its cache is a package-level map keyed by *Server to avoid touching the Server struct, so it should be unified with the order/radius endpoints later.
+
+## 2026-10-14 — FR-19 merged; heuristic pass catches the implementer left behind
+
+**Decision (agent, accepted).** Once an interface method's signature changes, `types.Implements` no longer sees a stale implementer, so a name-matched pass over old-interface method names adds `heuristic` implementers; any implementer outside the diff gets a warning. A changed interface computes radius for all its methods (broader, never narrower). Struct-only changes are out of scope. `/api/radius` needs BaseSHA for patch sources (errors there for now).

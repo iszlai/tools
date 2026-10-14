@@ -216,14 +216,14 @@ issues:
     - id: FR-19
       title: Blast radius and signature changes
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: doing
+      status: done
       blocked_by:
         - FR-15
         - FR-14
       labels:
         - M2
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T09:31:01Z
+      updated_at: 2026-10-14T09:52:33Z
     - id: FR-20
       title: Co-change companions and hotspots
       description: See PLAN.md §5 for scope, acceptance criteria and size.
