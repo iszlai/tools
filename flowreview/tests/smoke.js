@@ -89,12 +89,41 @@ func TestCompute(t *testing.T) {
 }
 `;
 
+// chainSource/chainOtherSource is FR-18's own fixture, deliberately laid out
+// (unlike caller.go/fn_test.go above, which exist for FR-19's "unchanged
+// caller" case and keep every call site *outside* the hunk's context on
+// purpose) so one hop lands in-diff and the next lands outside it:
+// chainSource's one changed line is Branch's own call site, so the default
+// 3-line-context hunk covers lines 1-7 of the file -- Branch's declaration,
+// the changed call site, and Leaf's declaration are all rendered rows
+// without needing FR-8's expand first. chainOtherSource's Other, in a
+// different, wholly untouched file, calls Branch too -- the "a target
+// outside the diff" hop.
+const chainSource = (leafPlusN) => `package main
+
+func Branch() int {
+	return Leaf() + ${leafPlusN}
+}
+
+func Leaf() int {
+	return 1
+}
+`;
+
+const chainOtherSource = `package main
+
+func Other() int {
+	return Branch()
+}
+`;
+
 // buildRepo makes a repo with: a modified tracked file and a new untracked
 // one (so the file queue has more than one entry and WorktreeDiff exercises
 // both its tracked and untracked-synthesis paths), a 10k-line file with
 // changes scattered through it for the performance budget below, a small Go
 // file whose one hunk sits in the middle of a function for FR-8 (also
 // FR-17/19/21's changed-function fixture), a caller/test pair for FR-19/21,
+// a chain.go/chain_other.go pair for FR-18 (see chainSource's own comment),
 // and one very long line for the wrap toggle.
 function buildRepo() {
   const dir = mkdtempSync(path.join(tmpdir(), 'flowreview-smoke-'));
@@ -115,7 +144,9 @@ function buildRepo() {
   writeFileSync(path.join(dir, 'caller.go'), callerSource);
   writeFileSync(path.join(dir, 'fn_test.go'), testSource);
   writeFileSync(path.join(dir, 'long.txt'), 'short line\n');
-  git(dir, env, 'add', 'a.txt', 'big.js', 'fn.go', 'go.mod', 'caller.go', 'fn_test.go', 'long.txt');
+  writeFileSync(path.join(dir, 'chain.go'), chainSource(1));
+  writeFileSync(path.join(dir, 'chain_other.go'), chainOtherSource);
+  git(dir, env, 'add', 'a.txt', 'big.js', 'fn.go', 'go.mod', 'caller.go', 'fn_test.go', 'long.txt', 'chain.go', 'chain_other.go');
   git(dir, env, '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'init');
 
   writeFileSync(path.join(dir, 'a.txt'), 'line one\nline TWO\nline three\n');
@@ -123,6 +154,8 @@ function buildRepo() {
   writeFileSync(path.join(dir, 'fn.go'), goFnSource(100));
   // unrelated's body, not CallCompute -- see callerSource's own comment.
   writeFileSync(path.join(dir, 'caller.go'), callerSource.replace('return 1', 'return 2'));
+  // chain_other.go is never rewritten here -- see chainSource's own comment.
+  writeFileSync(path.join(dir, 'chain.go'), chainSource(2));
   // A 400-char line: no reasonable viewport shows all of it without wrap.
   writeFileSync(path.join(dir, 'long.txt'), 'x'.repeat(400) + '\n');
   // Scatter ~100 single-line edits through the big file -- enough hunks to
@@ -957,6 +990,156 @@ async function runWorktreeSmoke() {
       oldCodeCellsAfterToggleBack >= 1 && newCodeCellsAfterToggleBack >= 1,
       `old=${oldCodeCellsAfterToggleBack} new=${newCodeCellsAfterToggleBack}`);
     check('layout: the old/new split handle reappears in side-by-side', await page.isVisible('#diff-split-resizer'));
+
+    /* ======================== FR-18: call-chain explorer ======================== */
+    /* 34 -- chain.go's one hunk (see chainSource's own comment) renders
+       Branch's declaration, its changed call site, and Leaf's declaration
+       all as visible rows without needing FR-8's expand first. First: `g`
+       and the toolbar button both open the popover for whatever line is
+       focused, not just a declaration line. */
+    await selectFileAndMeasure(page, 'chain.go');
+    await page.waitForSelector('#diff-rows [data-hunk]');
+    await page.locator('.diff-row', { hasText: 'return Leaf()' }).locator('[data-side="new"].code').first().click();
+    await page.keyboard.press('g');
+    await waitForCondition(async () => {
+      if (await page.getAttribute('#callchain-overlay', 'hidden') !== null) return false;
+      return !/Computing/.test(await page.textContent('#callchain-overlay'));
+    }, 30000, 100);
+    const gPopoverText = await page.textContent('#callchain-overlay');
+    check('FR-18: `g` opens the popover for the line\'s enclosing function', /Branch/.test(gPopoverText), gPopoverText);
+    await page.click('.callchain-close');
+    await page.waitForFunction(() => document.getElementById('callchain-overlay').hidden);
+
+    await page.locator('.diff-row', { hasText: 'return Leaf()' }).locator('[data-side="new"].code').first().click();
+    await page.click('#tb-callchain');
+    await waitForCondition(async () => {
+      if (await page.getAttribute('#callchain-overlay', 'hidden') !== null) return false;
+      return !/Computing/.test(await page.textContent('#callchain-overlay'));
+    }, 30000, 100);
+    const tbPopoverText = await page.textContent('#callchain-overlay');
+    check('FR-18: the toolbar button opens the same popover', /Branch/.test(tbPopoverText), tbPopoverText);
+    await page.click('.callchain-close');
+    await page.waitForFunction(() => document.getElementById('callchain-overlay').hidden);
+
+    /* 35 -- the inline nav button on a function/method declaration row; the
+       original row/scroll `back` x3 below must return to. */
+    const originalScrollTop = await page.evaluate(() => document.getElementById('diff').scrollTop);
+    const originalSelected = await page.locator('.file-row.selected .path').first().textContent();
+
+    const leafRow = page.locator('.diff-row', { hasText: 'func Leaf' });
+    check('FR-18: a declaration row carries the inline nav button', (await leafRow.locator('.decl-nav-btn[data-side="new"]').count()) >= 1);
+    await leafRow.locator('.decl-nav-btn[data-side="new"]').first().click();
+    await waitForCondition(async () => {
+      if (await page.getAttribute('#callchain-overlay', 'hidden') !== null) return false;
+      return !/Computing/.test(await page.textContent('#callchain-overlay'));
+    }, 30000, 100);
+    const leafPopoverText = await page.textContent('#callchain-overlay');
+    check('FR-18: Leaf\'s popover names Leaf', /Leaf/.test(leafPopoverText), leafPopoverText);
+    check('FR-18: Leaf\'s popover lists its caller Branch', /Branch/.test(leafPopoverText), leafPopoverText);
+    check('FR-18: an entry shows a confidence badge', /static|heuristic|interface-dispatch/.test(leafPopoverText), leafPopoverText);
+    // .badge.in-diff/.badge.out-diff, not a text regex: "not in diff" itself
+    // contains the substring "in diff", so a plain /in diff/ test can't tell
+    // the two badges apart.
+    const branchEntryInDiff = page.locator('#callchain-overlay .nav-entry', { hasText: 'Branch' });
+    check('FR-18: Branch\'s call site is flagged in diff (it is the changed line)',
+      (await branchEntryInDiff.locator('.badge.in-diff').count()) >= 1, await branchEntryInDiff.textContent());
+
+    await page.screenshot({ path: path.join(tmpdir(), 'flowreview-fr18-popover-light.png') });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.screenshot({ path: path.join(tmpdir(), 'flowreview-fr18-popover-dark.png') });
+    await page.emulateMedia({ colorScheme: 'light' });
+    console.log('FR-18 screenshots written to', tmpdir());
+
+    /* HOP 1: click Branch (in-diff: its call site is the one changed line in
+       chain.go) -- jumps within the diff, no blob view. */
+    await page.locator('#callchain-overlay .nav-entry.clickable', { hasText: 'Branch' }).first().click();
+    await page.waitForFunction(() => document.getElementById('callchain-overlay').hidden);
+    await waitForCondition(async () => (await page.evaluate(() => document.getElementById('diff').scrollTop)) !== originalScrollTop, 3000, 50);
+    const afterHop1 = await page.evaluate(() => ({ view: state.view, selected: state.selectedPath, backLen: state.history.back.length }));
+    check('FR-18 hop 1: stays in the diff view (in-diff jump)', afterHop1.view === 'diff', JSON.stringify(afterHop1));
+    check('FR-18 hop 1: still on chain.go', afterHop1.selected === 'chain.go', JSON.stringify(afterHop1));
+    check('FR-18 hop 1: one entry pushed onto the back-history stack', afterHop1.backLen === 1, JSON.stringify(afterHop1));
+
+    /* HOP 2: open Branch's own popover, click its caller Other -- in
+       chain_other.go, never touched by this diff -- which must open the
+       read-only file view instead of a diff jump. */
+    const branchRow = page.locator('.diff-row', { hasText: 'func Branch' });
+    await branchRow.locator('.decl-nav-btn[data-side="new"]').first().click();
+    await waitForCondition(async () => {
+      if (await page.getAttribute('#callchain-overlay', 'hidden') !== null) return false;
+      return !/Computing/.test(await page.textContent('#callchain-overlay'));
+    }, 30000, 100);
+    const branchPopoverText = await page.textContent('#callchain-overlay');
+    check('FR-18: Branch\'s popover lists its caller Other', /Other/.test(branchPopoverText), branchPopoverText);
+    const otherEntry = page.locator('#callchain-overlay .nav-entry', { hasText: 'Other' });
+    check('FR-18: Other is flagged not in diff (chain_other.go is untouched)',
+      (await otherEntry.locator('.badge.out-diff').count()) >= 1, await otherEntry.textContent());
+
+    await page.locator('#callchain-overlay .nav-entry.clickable', { hasText: 'Other' }).first().click();
+    await page.waitForSelector('#blob-breadcrumb:not([hidden])', { timeout: 5000 });
+    const afterHop2 = await page.evaluate(() => ({ view: state.view, path: state.blob && state.blob.path, backLen: state.history.back.length }));
+    check('FR-18 hop 2: switches to the read-only file view', afterHop2.view === 'blob', JSON.stringify(afterHop2));
+    check('FR-18 hop 2: the blob is chain_other.go', afterHop2.path === 'chain_other.go', JSON.stringify(afterHop2));
+    check('FR-18 hop 2: two entries on the back-history stack', afterHop2.backLen === 2, JSON.stringify(afterHop2));
+    const breadcrumbText = await page.textContent('#blob-breadcrumb');
+    check('FR-18: the breadcrumb names the blob\'s path', /chain_other\.go/.test(breadcrumbText), breadcrumbText);
+    check('FR-18: the breadcrumb offers a "Back to diff" button', await page.isVisible('#blob-back-to-diff'));
+
+    await page.screenshot({ path: path.join(tmpdir(), 'flowreview-fr18-blob-light.png') });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.screenshot({ path: path.join(tmpdir(), 'flowreview-fr18-blob-dark.png') });
+    await page.emulateMedia({ colorScheme: 'light' });
+
+    /* HOP 3: from the blob view, the same inline nav button works -- open
+       Other's own popover and jump back to its callee Branch, which is
+       in-diff again. */
+    const otherRow = page.locator('.diff-row', { hasText: 'func Other' });
+    await otherRow.locator('.decl-nav-btn').first().click();
+    await waitForCondition(async () => {
+      if (await page.getAttribute('#callchain-overlay', 'hidden') !== null) return false;
+      return !/Computing/.test(await page.textContent('#callchain-overlay'));
+    }, 30000, 100);
+    const otherPopoverText = await page.textContent('#callchain-overlay');
+    check('FR-18: the decl-nav button works inside the read-only view too', /Branch/.test(otherPopoverText), otherPopoverText);
+
+    await page.locator('#callchain-overlay .nav-entry.clickable', { hasText: 'Branch' }).first().click();
+    await page.waitForFunction(() => document.getElementById('callchain-overlay').hidden);
+    await waitForCondition(async () => (await page.evaluate(() => state.view)) === 'diff', 5000, 50);
+    const afterHop3 = await page.evaluate(() => ({ view: state.view, selected: state.selectedPath, backLen: state.history.back.length }));
+    check('FR-18 hop 3: back in the diff view', afterHop3.view === 'diff', JSON.stringify(afterHop3));
+    check('FR-18 hop 3: on chain.go again', afterHop3.selected === 'chain.go', JSON.stringify(afterHop3));
+    check('FR-18 hop 3: three entries on the back-history stack', afterHop3.backLen === 3, JSON.stringify(afterHop3));
+
+    /* back x3 must return to the exact original row/scroll -- across both
+       views (blob and diff) and through every hop, not just the last one. */
+    await page.click('#tb-history-back');
+    await waitForCondition(async () => (await page.evaluate(() => state.view)) === 'blob', 5000, 50);
+    await page.click('#tb-history-back');
+    await waitForCondition(async () => (await page.evaluate(() => state.view)) === 'diff', 5000, 50);
+    await page.click('#tb-history-back');
+    await waitForCondition(async () => (await page.evaluate(() => state.history.back.length)) === 0, 5000, 50);
+
+    const afterBack3 = await page.evaluate(() => ({
+      view: state.view,
+      selected: state.selectedPath,
+      scrollTop: document.getElementById('diff').scrollTop,
+      backLen: state.history.back.length,
+      forwardLen: state.history.forward.length,
+    }));
+    check('FR-18: back x3 returns to the diff view', afterBack3.view === 'diff', JSON.stringify(afterBack3));
+    check('FR-18: back x3 returns to chain.go', afterBack3.selected === originalSelected, JSON.stringify(afterBack3));
+    check('FR-18: back x3 returns to the exact original scroll position', afterBack3.scrollTop === originalScrollTop, `${afterBack3.scrollTop} vs ${originalScrollTop}`);
+    check('FR-18: the back stack is empty and the forward stack holds all 3 hops', afterBack3.backLen === 0 && afterBack3.forwardLen === 3, JSON.stringify(afterBack3));
+    check('FR-18: the back button is now disabled', await page.isDisabled('#tb-history-back'));
+
+    /* forward x3 must redo the same three hops, landing back in the blob
+       view exactly where hop 3 left it. */
+    await page.click('#tb-history-forward');
+    await page.click('#tb-history-forward');
+    await page.click('#tb-history-forward');
+    await waitForCondition(async () => (await page.evaluate(() => state.history.forward.length)) === 0, 5000, 50);
+    const afterForward3 = await page.evaluate(() => ({ view: state.view, selected: state.selectedPath }));
+    check('FR-18: forward x3 redoes all three hops, ending on chain.go', afterForward3.view === 'diff' && afterForward3.selected === 'chain.go', JSON.stringify(afterForward3));
   } finally {
     await browser.close();
     proc.kill();
