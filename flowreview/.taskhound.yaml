@@ -153,13 +153,13 @@ issues:
     - id: FR-14
       title: Symbols and definitions
       description: See PLAN.md §5 for scope, acceptance criteria and size.
-      status: doing
+      status: done
       blocked_by:
         - FR-13
       labels:
         - M2
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T08:40:40Z
+      updated_at: 2026-10-14T09:05:46Z
     - id: FR-15
       title: 'Call graph: callers, callees, implementations'
       description: See PLAN.md §5 for scope, acceptance criteria and size.
@@ -169,7 +169,11 @@ issues:
       labels:
         - M2
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T07:26:52Z
+      updated_at: 2026-10-14T09:05:46Z
+      comments:
+        - at: 2026-10-14T09:05:46Z
+          author: lehel
+          body: 'FR-14 left two id tiers: exact pkgpath.(Recv).Name vs structural path#Name (FunctionAt/Outline, deleted files). Reconcile when attaching call-graph edges to diff symbols.'
     - id: FR-16
       title: Entry points
       description: See PLAN.md §5 for scope, acceptance criteria and size.

@@ -69,3 +69,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-40 merged; step link confidence rule
 
 **Decision (agent, accepted).** A step matching exactly one step definition is `static`; two or more matches are `heuristic` (ambiguity = several edges from one step). Patterns starting with `^` are regexes, anything else a cucumber expression. Outline placeholders use the first Examples row. Handlers named via a selector (`suite.Handler`) are left unresolved rather than guessed. The `flowreview order` acceptance moves to FR-17 (comment there).
+
+## 2026-10-14 — FR-14 merged; two id tiers for Go symbols
+
+**Decision (agent, accepted).** Type-checked symbols use `pkgpath.Name` / `pkgpath.(Recv).Name` (receiver bare, `*Recv` kept in Receiver); syntax-only paths (FunctionAt/Outline, wholly deleted files) use the structural `path#Name`. FR-15 must map between them when joining call-graph edges to diff symbols. Definition returns a Location (covers vars/params too). Signature changes are compared syntactically on both sides; renames are delete+add.
