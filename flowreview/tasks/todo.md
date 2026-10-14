@@ -11,7 +11,7 @@ Full plan: `../PLAN.md`. Board: `th next` in this folder (`.taskhound.yaml`, pre
 - [x] FR-3 Unified diff parser and position map
 - [x] FR-4 Session store
 - [x] FR-5 Server, native WKWebView window and UI shell
-- [ ] FR-6 Side-by-side diff renderer (strict perf budget in smoke)
+- [x] FR-6 Side-by-side diff renderer (strict perf budget in smoke)
 - [ ] FR-7 Review queue, reviewed state, progress
 - [ ] FR-8 Enclosing-function expansion
 - [ ] FR-9 Comment drafts

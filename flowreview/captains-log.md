@@ -81,3 +81,8 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-16 merged; framework detection by package+type name
 
 **Decision (agent, accepted).** gin/echo/fiber/chi/cobra are matched by package name + type name, not import path (works on vendored/forked copies; fixture uses stub packages). gRPC services are found by the generated `Register*Server` + `*Server` interface pair, with `Unimplemented*Server` embedding as a hint. Entry points may repeat under several kinds; FR-17 dedupes. `.flowreview.yaml` `entrypoints.patterns` take func_regex and/or a package-relative signature.
+
+## 2026-10-14 — FR-6 merged; side-by-side rows, budget met
+
+**Measured.** 10k-line file first paint 32 ms, file switch 41 ms, 0 long tasks while scrolling, session first paint 53 ms (budgets 1000/100/50/1000 ms).
+**Decision (agent, accepted).** Rows carry `old_position` and `new_position` (each side has its own GitHub position). Highlighting is per hunk side (the diff holds no text between hunks); per-cell horizontal scroll keeps virtualization simple (synchronized pane scroll is later polish). A stale-response guard fixes fast j/k showing the wrong file.
