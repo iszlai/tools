@@ -63,4 +63,9 @@ Full plan: `../PLAN.md`. Board: `th next` in this folder (`.taskhound.yaml`, pre
 All grill questions answered 2026-10-14; see PLAN.md §8. Revisit the UI-layer choice (web in WKWebView vs SwiftUI) at the M3 dogfood gate.
 
 ## Review
-(filled in as milestones land)
+2026-10-14 autonomous run (Opus coordinating, Sonnet agents per slice; decisions in `captains-log.md`).
+- M1 done in code: FR-1–FR-12, FR-39. Open: the dogfood gate (review one real PR).
+- M2 partly done: FR-13–FR-17, FR-19–FR-21, FR-32, FR-40. Left: FR-18, FR-22, FR-23, FR-24, FR-41.
+- M3: FR-25, FR-26 done; FR-27 harness and report done, waiting on the user to pick the recommended model per tier (Qwen3.5 needs a re-run with thinking off). Left: FR-28–FR-30.
+- M4: FR-31 done. Left: FR-33–FR-35. M5: FR-36 done (first tag is the user's). Left: FR-37, FR-38.
+- Scope stopped at MVP on 2026-10-14 by the user (credits).
