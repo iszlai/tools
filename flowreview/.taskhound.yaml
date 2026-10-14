@@ -314,7 +314,11 @@ issues:
         - M3
         - hitl
       created_at: 2026-10-14T07:26:52Z
-      updated_at: 2026-10-14T08:37:45Z
+      updated_at: 2026-10-14T09:46:49Z
+      comments:
+        - at: 2026-10-14T09:46:49Z
+          author: lehel
+          body: 'Eval report 2026-10-14 (43 cases from this repo): 7B score 0.739 / 7% hallucination / 3.1 s; 1.5B 0.701 / 11.5% / 0.9 s; 3B 0.673 / 16% / 1.5 s. Kind accuracy is weak (30–42%). Qwen3.5 0.8B/2B/4B/9B added to the catalog, not yet evaluated (llama.cpp b11609 support unconfirmed). Open: user picks Recommended per tier.'
     - id: FR-28
       title: Summary pipeline
       description: See PLAN.md §5 for scope, acceptance criteria and size.

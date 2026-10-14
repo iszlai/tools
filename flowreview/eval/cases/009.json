@@ -1,0 +1,19 @@
+{
+  "id": "009",
+  "repo_path": "taskhound",
+  "commit": "8f616a0f4c7ae5d49c929a4c947f1c94ed747cf7",
+  "path": "taskhound/Makefile",
+  "hunk": " install: ## build and install th + the agent skill\n \t./install.sh --prefix $(PREFIX)\n \n+update: ## rebuild and reinstall over an existing install\n+\t./install.sh --update --prefix $(PREFIX)\n+\n uninstall: ## remove th and the agent skill\n \t./install.sh --prefix $(PREFIX) --uninstall\n \n",
+  "expected": {
+    "kind": "config",
+    "symbols": [
+      "install.sh"
+    ],
+    "added_lines": 3,
+    "removed_lines": 0,
+    "facts": [
+      "Adds a new `update` Makefile target.",
+      "It runs `./install.sh --update --prefix $(PREFIX)`."
+    ]
+  }
+}

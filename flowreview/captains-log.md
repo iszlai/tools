@@ -95,3 +95,13 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-36 merged; release pipeline ready, first tag is the user's
 
 **Decision (agent, accepted).** `make release` depends on fetch-llama and writes a .sha256; `flowreview upgrade` verifies the published .sha256 before ever executing the download (absent checksum: proceeds, like taskhound). Workflow `.github/workflows/flowreview-release.yml` builds on macos-14 for `flowreview-v*` tags. Not done without the user: pushing the first tag (publishes a public release).
+
+## 2026-10-14 — Scope narrowed to MVP by the user
+
+**Context.** User is running low on credits (2026-10-14).
+**Decision (user).** Let the running agents finish (FR-7+9, FR-8, FR-17, FR-19, FR-21, FR-27), but start nothing new except what the usable MVP needs: FR-11 (publish) after FR-9 lands, then build/install for dogfooding. Everything else (FR-18, FR-22–24, FR-28–30, FR-33–35, FR-37–38, FR-41) waits.
+
+## 2026-10-14 — FR-27 harness merged; choosing the recommendation stays with the user
+
+**Measured (43 cases).** 7B: 0.739, 7% hallucinated symbols, 3.1 s/hunk, 5.6 GB. 1.5B: 0.701, 11.5%, 0.9 s, 1.9 GB. 3B: 0.673, 16%, 1.5 s, 3.0 GB (worse than 1.5B on every axis).
+**Decision (agent).** Grounding counts the file path as a valid symbol. Near-duplicate board-bump hunks dropped (71 → 43). No rename cases exist in this history (gap). FR-27 stays open (doing) until the user picks Recommended entries; Qwen3.5 entries need an eval run in a session where `go run` is permitted.

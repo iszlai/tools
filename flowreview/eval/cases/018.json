@@ -1,0 +1,18 @@
+{
+  "id": "018",
+  "repo_path": "taskhound",
+  "commit": "26ac7898185a51864e91d71d22b00b65deaa905a",
+  "path": "taskhound/main.go",
+  "hunk": " \t\"os\"\n \t\"os/user\"\n \t\"path/filepath\"\n-\t\"sort\"\n \t\"strconv\"\n \t\"strings\"\n \t\"text/tabwriter\"\n",
+  "expected": {
+    "kind": "refactor",
+    "symbols": [
+      "sort"
+    ],
+    "added_lines": 0,
+    "removed_lines": 1,
+    "facts": [
+      "Removes the unused \"sort\" import from main.go."
+    ]
+  }
+}

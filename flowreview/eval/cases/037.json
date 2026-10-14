@@ -1,0 +1,17 @@
+{
+  "id": "037",
+  "repo_path": "flowreview",
+  "commit": "94f1d22ef400dcbd062fbde9566111b260a2e27f",
+  "path": "flowreview/.taskhound.yaml",
+  "hunk": "     - id: FR-2\n       title: Git adapter\n       description: See PLAN.md §5 for scope, acceptance criteria and size.\n-      status: todo\n+      status: doing\n       priority: high\n       blocked_by:\n         - FR-1\n       labels:\n         - M1\n       created_at: 2026-10-14T07:26:52Z\n-      updated_at: 2026-10-14T07:26:52Z\n+      updated_at: 2026-10-14T07:57:04Z\n     - id: FR-3\n       title: Unified diff parser and position map\n       description: See PLAN.md §5 for scope, acceptance criteria and size.\n-      status: todo\n+      status: doing\n       priority: high\n       blocked_by:\n         - FR-1\n       labels:\n         - M1\n       created_at: 2026-10-14T07:26:52Z\n-      updated_at: 2026-10-14T07:26:52Z\n+      updated_at: 2026-10-14T07:57:04Z\n     - id: FR-4\n       title: Session store\n       description: See PLAN.md §5 for scope, acceptance criteria and size.\n-      status: todo\n+      status: doing\n       priority: high\n       blocked_by:\n         - FR-1\n       labels:\n         - M1\n       created_at: 2026-10-14T07:26:52Z\n-      updated_at: 2026-10-14T07:26:52Z\n+      updated_at: 2026-10-14T07:57:04Z\n     - id: FR-5\n       title: Server, native WKWebView window and UI shell\n       description: See PLAN.md §5 for scope, acceptance criteria and size.\n-      status: todo\n+      status: doing\n       priority: high\n       blocked_by:\n         - FR-3\n",
+  "expected": {
+    "kind": "config",
+    "symbols": [],
+    "added_lines": 7,
+    "removed_lines": 7,
+    "facts": [
+      "Flips the status of FR-2, FR-3, FR-4 (and the start of FR-5) from todo to doing in .taskhound.yaml.",
+      "Updates each entry's updated_at timestamp to the same value."
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "007",
+  "repo_path": "taskhound",
+  "commit": "0dd60455eb5c632022f97329f892a2cc2b296bd5",
+  "path": "taskhound/e2e_test.go",
+  "hunk": " \tif !bytes.Contains(page, []byte(`src=\"/md.js\"`)) {\n \t\tt.Error(\"ui.html does not load /md.js\")\n \t}\n+\tif !bytes.Contains(page, []byte(`id=\"close\"`)) {\n+\t\tt.Error(\"the drawer has no close control\")\n+\t}\n }\n \n // TestEmbeddedRendererMatchesMdlite catches the copy going stale. taskhound\n",
+  "enclosing_function": "func TestUIServesTheMarkdownRenderer(t *testing.T) {\n\tc := newCLI(t)\n\tsrv := startUI(t, c)\n\tdefer srv.stop()\n\n\tres, err := http.Get(srv.url + \"/md.js\")\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\tbody, _ := io.ReadAll(res.Body)\n\tres.Body.Close()\n\tif res.StatusCode != 200 {\n\t\tt.Fatalf(\"GET /md.js = %d\", res.StatusCode)\n\t}\n\tif ct := res.Header.Get(\"Content-Type\"); !strings.Contains(ct, \"javascript\") {\n\t\tt.Errorf(\"Content-Type = %q, want javascript\", ct)\n\t}\n\tif !bytes.Contains(body, []byte(\"function md(\")) {\n\t\tt.Error(\"what is served is not the renderer\")\n\t}\n\n\t// ...and the page actually asks for it.\n\tres, err = http.Get(srv.url + \"/\")\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\tpage, _ := io.ReadAll(res.Body)\n\tres.Body.Close()\n\tif !bytes.Contains(page, []byte(`src=\"/md.js\"`)) {\n\t\tt.Error(\"ui.html does not load /md.js\")\n\t}\n\tif !bytes.Contains(page, []byte(`id=\"close\"`)) {\n\t\tt.Error(\"the drawer has no close control\")\n\t}\n}",
+  "expected": {
+    "kind": "test",
+    "symbols": [
+      "TestUIServesTheMarkdownRenderer"
+    ],
+    "added_lines": 3,
+    "removed_lines": 0,
+    "facts": [
+      "Adds an assertion inside TestUIServesTheMarkdownRenderer checking the page contains id=\"close\".",
+      "Fails with \"the drawer has no close control\" if absent."
+    ]
+  }
+}

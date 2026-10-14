@@ -1,0 +1,21 @@
+{
+  "id": "028",
+  "repo_path": "taskhound",
+  "commit": "364f2189b254226593a8caf05d2eefbaf7a1e626",
+  "path": "taskhound/diagnose.go",
+  "hunk": " // something to do about it. Called with ready work available it still reports\n // cycles, because a loop that is not blocking you today is still corrupt.\n func (b *Board) Diagnose(anyReady bool) *Deadlock {\n-\td := \u0026Deadlock{Cycles: b.Cycles(), Dangling: b.Dangling()}\n+\td := \u0026Deadlock{Cycles: b.Cycles(), Dangling: b.Dangling(), Duplicates: b.Duplicates()}\n \tif anyReady {\n \t\tif d.empty() {\n \t\t\treturn nil\n",
+  "enclosing_function": "func (b *Board) Diagnose(anyReady bool) *Deadlock {\n\td := \u0026Deadlock{Cycles: b.Cycles(), Dangling: b.Dangling(), Duplicates: b.Duplicates()}\n\tif anyReady {\n\t\tif d.empty() {\n\t\t\treturn nil\n\t\t}\n\t\treturn d\n\t}\n\n\t// Nothing is ready. Force a pick: the issue whose blockers are the problem\n\t// is the one worth starting, since finishing it is what breaks the loop.\n\tvar candidates []*Issue\n\tfor _, is := range b.Issues {\n\t\tif is.Status != StatusDone {\n\t\t\tcandidates = append(candidates, is)\n\t\t}\n\t}\n\tif len(candidates) == 0 {\n\t\treturn nil\n\t}\n\t// Priority first, not leverage: inside a loop every member unblocks every\n\t// other, so the leverage that orders th next says nothing here.\n\tsort.SliceStable(candidates, func(i, j int) bool {\n\t\ta, c := candidates[i], candidates[j]\n\t\tif ra, rc := priorityRank(a.Priority), priorityRank(c.Priority); ra != rc {\n\t\t\treturn ra \u003c rc\n\t\t}\n\t\tif na, nc := len(b.Dependents(a.ID)), len(b.Dependents(c.ID)); na != nc {\n\t\t\treturn na \u003e nc\n\t\t}\n\t\tia, _ := idNum(a.ID)\n\t\tic, _ := idNum(c.ID)\n\t\treturn ia \u003c ic\n\t})\n\td.Forced = candidates[0]\n\n\tswitch {\n\tcase len(d.Cycles) \u003e 0:\n\t\td.Reason = fmt.Sprintf(\"every open issue is waiting on another, in a loop (%s)\",\n\t\t\tstrings.Join(d.Cycles[0], \" → \"))\n\tcase len(d.Dangling) \u003e 0:\n\t\td.Reason = \"open issues are blocked by ids that are not on the board\"\n\tdefault:\n\t\td.Reason = \"every open issue is waiting on a blocker that is not done\"\n\t}\n\treturn d\n}",
+  "expected": {
+    "kind": "behavior",
+    "symbols": [
+      "Diagnose",
+      "Deadlock",
+      "Duplicates"
+    ],
+    "added_lines": 1,
+    "removed_lines": 1,
+    "facts": [
+      "In Diagnose, adds Duplicates: b.Duplicates() to the constructed \u0026Deadlock{} literal."
+    ]
+  }
+}

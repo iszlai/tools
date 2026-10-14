@@ -1,0 +1,16 @@
+{
+  "id": "050",
+  "repo_path": "flowreview",
+  "commit": "9da973b71a1aa6fc14b12686d3cc7aae4351bd0c",
+  "path": "flowreview/Makefile",
+  "hunk": " clean: ## remove build output\n \trm -rf bin dist\n \n-.PHONY: help build test check fmt vet smoke install release clean\n+.PHONY: help build fetch-llama test check fmt vet smoke install release clean\n",
+  "expected": {
+    "kind": "config",
+    "symbols": [],
+    "added_lines": 1,
+    "removed_lines": 1,
+    "facts": [
+      "Adds `fetch-llama` to the .PHONY target list."
+    ]
+  }
+}

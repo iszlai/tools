@@ -1,0 +1,16 @@
+{
+  "id": "014",
+  "repo_path": "taskhound",
+  "commit": "adff2f3b1fcab157656faf8d3c5cf6cd988d44f1",
+  "path": "taskhound/Makefile",
+  "hunk": " clean: ## remove build output\n \trm -f bin/th dist/th_*\n \n-.PHONY: help build test check fmt vet install update uninstall ui release vendor clean\n+.PHONY: help build test check fmt vet install update uninstall ui smoke release vendor clean\n",
+  "expected": {
+    "kind": "config",
+    "symbols": [],
+    "added_lines": 1,
+    "removed_lines": 1,
+    "facts": [
+      "Adds `smoke` to the .PHONY target list."
+    ]
+  }
+}

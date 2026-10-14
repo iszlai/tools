@@ -1,0 +1,21 @@
+{
+  "id": "023",
+  "repo_path": "taskhound",
+  "commit": "767032c84221442f8c146616b0de5735502ae83a",
+  "path": "taskhound/e2e_test.go",
+  "hunk": " \t\tt.Errorf(\"the escalate block did not round-trip: %+v\", again.Escalate)\n \t}\n }\n+\n+// TestTheLogIsFoundAndReadThroughTheCLI covers what the library tests cannot:\n+// the walk up from a subdirectory, and that th log check fails the process when\n+// the log and the board disagree.\n+func TestTheLogIsFoundAndReadThroughTheCLI(t *testing.T) {\n+\tc := newCLI(t)\n+\tdone := c.add(\"A decision worth writing up\")\n+\tc.run(\"update\", done, \"--status\", \"done\")\n+\n+\tlogPath := filepath.Join(c.dir, LogName)\n+\tif err := os.WriteFile(logPath, []byte(\"# Captain's log\\n\"), 0o644); err != nil {\n+\t\tt.Fatal(err)\n+\t}\n+\n+\t// A log is found by walking up, the way the board is, so a command run deep\n+\t// in a tree reaches the one at the root.\n+\tdeep := filepath.Join(c.dir, \"game\", \"src\")\n+\tif err := os.MkdirAll(deep, 0o755); err != nil {\n+\t\tt.Fatal(err)\n+\t}\n+\tfrom := \u0026cli{t: t, dir: deep}\n+\tif _, err := from.try(\"log\", \"ls\"); err != nil {\n+\t\tt.Fatalf(\"the log was not found from a subdirectory: %v\", err)\n+\t}\n+\n+\t// A finished issue with no entry naming it is what check exists to catch,\n+\t// and it has to fail the process rather than only mention it.\n+\tif out, err := c.try(\"log\", \"check\"); err == nil {\n+\t\tt.Errorf(\"check passed with %s finished and unlogged:\\n%s\", done, out)\n+\t} else if !strings.Contains(err.Error(), \"problem\") {\n+\t\tt.Errorf(\"check failed for the wrong reason: %v\", err)\n+\t}\n+\n+\tfrom.run(\"log\", \"add\", \"Why \"+done+\" was done\", \"-d\", \"Because it needed doing.\")\n+\tout := c.run(\"log\", \"check\")\n+\tif strings.Contains(out, \"FAIL\") {\n+\t\tt.Errorf(\"check still fails once the decision is written up:\\n%s\", out)\n+\t}\n+\tif listed := c.run(\"log\", \"ls\"); !strings.Contains(listed, \"Why \"+done) {\n+\t\tt.Errorf(\"the appended entry is not in the list:\\n%s\", listed)\n+\t}\n+}\n",
+  "expected": {
+    "kind": "test",
+    "symbols": [
+      "TestTheLogIsFoundAndReadThroughTheCLI",
+      "LogName"
+    ],
+    "added_lines": 42,
+    "removed_lines": 0,
+    "facts": [
+      "Adds a new end-to-end test TestTheLogIsFoundAndReadThroughTheCLI.",
+      "It checks the log is found by walking up from a subdirectory.",
+      "It checks `th log check` fails when a done issue has no log entry, and passes once one is added."
+    ]
+  }
+}

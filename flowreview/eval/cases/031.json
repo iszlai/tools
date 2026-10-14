@@ -1,0 +1,17 @@
+{
+  "id": "031",
+  "repo_path": "taskhound",
+  "commit": "46263fd28fb234a1333b191a9fe614b0944b621c",
+  "path": "taskhound/main.go",
+  "hunk": "   sync                     push the board to GitHub Issues via the gh CLI\n   ui                       serve the kanban board on localhost\n   agent-guide              print the usage guide written for LLM agents\n+  upgrade                  replace th with the latest published release\n   version                  print the version\n \n Every command takes -f \u003cfile\u003e to point at a specific board; otherwise th walks\n",
+  "expected": {
+    "kind": "behavior",
+    "symbols": [],
+    "added_lines": 1,
+    "removed_lines": 0,
+    "facts": [
+      "Adds a line to the CLI usage text documenting a new `upgrade` command.",
+      "Describes it as replacing th with the latest published release."
+    ]
+  }
+}

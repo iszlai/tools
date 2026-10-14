@@ -43,6 +43,9 @@ vet: ## go vet
 smoke: build ## drive the UI in headless Chromium (see tests/smoke.js)
 	PLAYWRIGHT_BROWSERS_PATH=$${PLAYWRIGHT_BROWSERS_PATH:-../taskhound/pw-browsers} node tests/smoke.js
 
+eval: fetch-llama ## run the FR-27 model eval harness against the default tier models; see eval/reports/
+	go run ./cmd/flowreview-eval --models qwen2.5-coder-1.5b-instruct-q4_k_m,qwen2.5-coder-3b-instruct-q4_k_m,qwen2.5-coder-7b-instruct-q4_k_m
+
 install: ## build and install flowreview + the agent skill
 	./install.sh --prefix $(PREFIX)
 
@@ -64,4 +67,4 @@ release: fetch-llama ## build the darwin/arm64 release binary (with embedded lla
 clean: ## remove build output
 	rm -rf bin dist
 
-.PHONY: help build fetch-llama test check fmt vet smoke install update uninstall release clean
+.PHONY: help build fetch-llama test check fmt vet smoke eval install update uninstall release clean
