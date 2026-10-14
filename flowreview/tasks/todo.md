@@ -8,7 +8,7 @@ Full plan: `../PLAN.md`. Board: `th next` in this folder (`.taskhound.yaml`, pre
 ## M1 — daily-usable reviewer
 - [x] FR-1 Skeleton and frozen types
 - [x] FR-2 Git adapter
-- [ ] FR-3 Unified diff parser and position map
+- [x] FR-3 Unified diff parser and position map
 - [x] FR-4 Session store
 - [ ] FR-5 Server, native WKWebView window and UI shell
 - [ ] FR-6 Side-by-side diff renderer (strict perf budget in smoke)

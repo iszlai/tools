@@ -27,3 +27,7 @@ Why things are the way they are. Append-only; written with `th log add`.
 ## 2026-10-14 — FR-32 merged; x/mod pinned to stay on go 1.25
 
 **Decision (agent, accepted).** `golang.org/x/mod` pinned at v0.28.0 because latest requires go 1.26 and would bump the module's go directive. Scratch files under the toolchain root are dot-prefixed so `List` can ignore them. `flowreview toolchain list|rm` CLI wiring deferred to the CLI slice.
+
+## 2026-10-14 — FR-3 merged; GitHub position rule verified
+
+**Verified, not assumed.** Position 1 is the first line after a file's first @@; every later @@ line and every "\ No newline at end of file" marker also consumes a position. Header lines are kept verbatim so Emit never re-quotes a path; mode-only changes are FileModified (no separate status).
