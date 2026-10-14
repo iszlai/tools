@@ -1,0 +1,26 @@
+{
+  "id": "026",
+  "repo_path": "taskhound",
+  "commit": "72bfaef013f2aeb4cdae53aba8678d4fd8e4763a",
+  "path": "taskhound/log_test.go",
+  "hunk": " \t}\n \treturn re\n }\n+\n+// TestAPaddedIDIsTheSameIssueAsAnUnpaddedOne pins the case that made check\n+// useless on a real log: the log writes V6-01, the board writes V6-1, and\n+// comparing the spelling reported 124 finished issues as unlogged.\n+func TestAPaddedIDIsTheSameIssueAsAnUnpaddedOne(t *testing.T) {\n+\tfor _, c := range []struct{ id, want string }{\n+\t\t{\"V6-01\", \"V6-1\"},\n+\t\t{\"V6-1\", \"V6-1\"},\n+\t\t{\"v6-001\", \"V6-1\"},\n+\t\t{\"V5-00\", \"V5-0\"},\n+\t\t{\"WO-8a\", \"WO-8a\"},\n+\t\t{\"WO-08A\", \"WO-8a\"},\n+\t\t{\"UTF-8\", \"UTF-8\"},\n+\t\t{\"not-an-id\", \"NOT-AN-ID\"},\n+\t} {\n+\t\tif got := logIDKey(c.id); got != c.want {\n+\t\t\tt.Errorf(\"logIDKey(%q) = %q, want %q\", c.id, got, c.want)\n+\t\t}\n+\t}\n+\n+\t// And the search goes both ways, because either spelling is the same issue.\n+\tl := readLog(t, writeLog(t,\n+\t\t\"## 2026-09-01 — TH-01: written padded\\n\\nBody.\\n\"+\n+\t\t\t\"\\n## 2026-09-02 — TH-2: written plain\\n\\nProse naming TH-1 and TH-002.\\n\"))\n+\tfor _, ref := range []string{\"TH-1\", \"TH-01\", \"TH-0001\"} {\n+\t\tre, err := logIDRegexp(ref)\n+\t\tif err != nil {\n+\t\t\tt.Fatal(err)\n+\t\t}\n+\t\tif n := len(searchLog(l.Entries, re)); n != 2 {\n+\t\t\tt.Errorf(\"%s matched %d entries, want both spellings (2)\", ref, n)\n+\t\t}\n+\t}\n+\t// Tolerance stops at the number: TH-1 is not TH-2 and not TH-12.\n+\tre, err := logIDRegexp(\"TH-2\")\n+\tif err != nil {\n+\t\tt.Fatal(err)\n+\t}\n+\tmatches := searchLog(l.Entries, re)\n+\tif len(matches) != 1 || !strings.Contains(matches[0].Entry.Title, \"written plain\") {\n+\t\tt.Errorf(\"TH-2 matched %d entries, want only its own\", len(matches))\n+\t}\n+}\n",
+  "enclosing_function": "func mustPattern(t *testing.T, pattern string) *regexp.Regexp {\n\tt.Helper()\n\tre, err := logPattern(pattern, false, true)\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\treturn re\n}",
+  "candidate_symbols": [
+    "Contains",
+    "Entries",
+    "Entry",
+    "Errorf",
+    "Fatal",
+    "NOT",
+    "Regexp",
+    "TestAPaddedIDIsTheSameIssueAsAnUnpaddedOne",
+    "Title",
+    "Tolerance",
+    "UTF",
+    "because"
+  ],
+  "expected": {
+    "added_lines": 43,
+    "removed_lines": 0
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "051",
+  "repo_path": "flowreview",
+  "commit": "8b8f9503383a98f73679241eb14b63a5188aaae8",
+  "path": "flowreview/.taskhound.yaml",
+  "hunk": "     - id: FR-10\n       title: 'GitHub host: read'\n       description: See PLAN.md §5 for scope, acceptance criteria and size.\n-      status: todo\n+      status: doing\n       priority: high\n       blocked_by:\n         - FR-2\n",
+  "candidate_symbols": [
+    "doing",
+    "status",
+    "todo"
+  ],
+  "expected": {
+    "added_lines": 1,
+    "removed_lines": 1
+  }
+}

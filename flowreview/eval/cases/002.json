@@ -1,0 +1,14 @@
+{
+  "id": "002",
+  "repo_path": "taskhound",
+  "commit": "2015cfe716367ddf91141c2452e8540f4158a984",
+  "path": "taskhound/main.go",
+  "hunk": " \t\"os/user\"\n \t\"path/filepath\"\n \t\"sort\"\n+\t\"strconv\"\n \t\"strings\"\n \t\"text/tabwriter\"\n \t\"time\"\n",
+  "candidate_symbols": [
+    "strconv"
+  ],
+  "expected": {
+    "added_lines": 1,
+    "removed_lines": 0
+  }
+}

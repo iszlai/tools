@@ -1,0 +1,25 @@
+{
+  "id": "063",
+  "repo_path": "flowreview",
+  "commit": "c9c9685458cf83495535ec37e8aa4f50d6a37156",
+  "path": "flowreview/go.sum",
+  "hunk": "-golang.org/x/mod v0.28.0 h1:gQBtGhjxykdjY9YhZpSlZIsbnaE2+PgjfLWUQTnoZ1U=\n-golang.org/x/mod v0.28.0/go.mod h1:yfB/L0NOf/kmEbXjzCPOx1iK1fRutOydrCMsqRhEBxI=\n+github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=\n+github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=\n+golang.org/x/mod v0.39.0 h1:UF5zwQdCRRUpHfyPwr7d4UrGiVeldIsogtzWVnczL74=\n+golang.org/x/mod v0.39.0/go.mod h1:bvIbwjQ0HUFFf5AKukeeYQG4ZBUG9yxQbR9aEweIwYY=\n+golang.org/x/sync v0.22.0 h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=\n+golang.org/x/sync v0.22.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=\n+golang.org/x/tools v0.48.0 h1:3+hClM1aLL5mjMKm5ovokw9epgRXPuu2tILgismM6RE=\n+golang.org/x/tools v0.48.0/go.mod h1:08xX0orndb/F7jJxGDicx061tyd5pcMto75YMAXr6lk=\n",
+  "candidate_symbols": [
+    "DkrSSNjCkIjxS6bF9zb3elmeNGIjoY",
+    "F7jJxGDicx061tyd5pcMto75YMAXr6lk",
+    "L0NOf",
+    "PgjfLWUQTnoZ1U",
+    "SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI",
+    "UF5zwQdCRRUpHfyPwr7d4UrGiVeldIsogtzWVnczL74",
+    "XBFqE1GSq7atu8tAmTRI",
+    "bvIbwjQ0HUFFf5AKukeeYQG4ZBUG9yxQbR9aEweIwYY",
+    "cmp",
+    "com",
+    "gQBtGhjxykdjY9YhZpSlZIsbnaE2",
+    "gfScek"
+  ],
+  "expected": {
+    "added_lines": 8,
+    "removed_lines": 2
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "id": "070",
+  "repo_path": "flowreview",
+  "commit": "a2c02f7c3214fb4d0bcff98e4fcc7e26e47749c7",
+  "path": "flowreview/.taskhound.yaml",
+  "hunk": "     - id: FR-6\n       title: Side-by-side diff renderer\n       description: 'See PLAN.md §5. Strict budget tested in smoke: \u003c1 s first paint on 10k lines, \u003c100 ms file switch, no long tasks while scrolling.'\n-      status: todo\n+      status: doing\n       priority: high\n       blocked_by:\n         - FR-5\n       labels:\n         - M1\n       created_at: 2026-10-14T07:26:52Z\n-      updated_at: 2026-10-14T07:47:55Z\n+      updated_at: 2026-10-14T08:53:14Z\n     - id: FR-7\n       title: Review queue, reviewed state, progress\n       description: See PLAN.md §5 for scope, acceptance criteria and size.\n",
+  "candidate_symbols": [
+    "doing",
+    "status",
+    "todo",
+    "updated_at"
+  ],
+  "expected": {
+    "added_lines": 2,
+    "removed_lines": 2
+  }
+}

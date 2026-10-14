@@ -1,0 +1,17 @@
+{
+  "id": "042",
+  "repo_path": "flowreview",
+  "commit": "1c4c96fe48e0769e0559b8d6a42284c32e597e9d",
+  "path": "flowreview/go.mod",
+  "hunk": " module github.com/iszlai/tools/flowreview\n \n go 1.25\n+\n+require golang.org/x/mod v0.28.0\n",
+  "candidate_symbols": [
+    "golang",
+    "mod",
+    "org",
+    "require"
+  ],
+  "expected": {
+    "added_lines": 2,
+    "removed_lines": 0
+  }
+}

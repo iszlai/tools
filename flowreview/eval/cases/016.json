@@ -1,0 +1,26 @@
+{
+  "id": "016",
+  "repo_path": "taskhound",
+  "commit": "0904da858474fab17dbd147c07b80dec4086b27c",
+  "path": "taskhound/main.go",
+  "hunk": " \tif *limit \u003e 0 \u0026\u0026 len(ready) \u003e *limit {\n \t\tready = ready[:*limit]\n \t}\n+\tdiag := b.Diagnose(len(ready) \u003e 0)\n+\n+\t// The diagnosis goes to stderr in both modes: it keeps stdout a clean array\n+\t// for `jq`, and it is the kind of thing a human needs to see even when a\n+\t// script is reading the output.\n+\tif diag != nil {\n+\t\tdiag.report(os.Stderr)\n+\t}\n+\n \tif *asJSON {\n-\t\treturn printJSON(views(b, ready))\n+\t\t// Still a bare array, so `th next --json | jq -r '.[0].id'` keeps\n+\t\t// working. A forced pick takes the place of the empty queue and says so\n+\t\t// on the issue, which makes .[0].id give you something to start even on\n+\t\t// a jammed board.\n+\t\tout := views(b, ready)\n+\t\tif len(out) == 0 \u0026\u0026 diag != nil \u0026\u0026 diag.Forced != nil {\n+\t\t\tforced := view(b, diag.Forced)\n+\t\t\tforced.Forced = true\n+\t\t\tforced.ForcedReason = diag.Reason\n+\t\t\tout = []issueView{forced}\n+\t\t}\n+\t\treturn printJSON(out)\n \t}\n+\n \tif len(ready) == 0 {\n-\t\t// Two very different situations, and telling a finished board it is\n-\t\t// deadlocked is the kind of thing that makes a tool feel broken.\n+\t\t// A finished board and a jammed one look identical from an empty queue,\n+\t\t// and telling a finished board it is deadlocked makes the tool feel\n+\t\t// broken. Say which it is, and if it is jammed, break the tie.\n \t\topen := 0\n \t\tfor _, is := range b.Issues {\n \t\t\tif is.Status != StatusDone {\n",
+  "enclosing_function": "func cmdNext(args []string) error {\n\tfs, file := newFS(\"next\")\n\tasJSON := fs.Bool(\"json\", false, \"print JSON\")\n\tlimit := fs.Int(\"n\", 0, \"show at most n issues\")\n\tparse(fs, args)\n\n\ts, err := openStore(*file)\n\tif err != nil {\n\t\treturn err\n\t}\n\tb, err := s.Read()\n\tif err != nil {\n\t\treturn err\n\t}\n\n\tvar ready []*Issue\n\tfor _, is := range b.Issues {\n\t\tif b.Ready(is) {\n\t\t\tready = append(ready, is)\n\t\t}\n\t}\n\t// Priority first, and it is absolute: a \"must\" outranks work already in\n\t// flight, and a \"low\" is only ever reached once nothing else is ready.\n\t// Within one priority, work in flight comes first, then whatever unblocks\n\t// the most other issues.\n\tsort.SliceStable(ready, func(i, j int) bool {\n\t\ta, c := ready[i], ready[j]\n\t\tif ra, rc := priorityRank(a.Priority), priorityRank(c.Priority); ra != rc {\n\t\t\treturn ra \u003c rc\n\t\t}\n\t\tif (a.Status == StatusDoing) != (c.Status == StatusDoing) {\n\t\t\treturn a.Status == StatusDoing\n\t\t}\n\t\treturn len(b.Dependents(a.ID)) \u003e len(b.Dependents(c.ID))\n\t})\n\tif *limit \u003e 0 \u0026\u0026 len(ready) \u003e *limit {\n\t\tready = ready[:*limit]\n\t}\n\tdiag := b.Diagnose(len(ready) \u003e 0)\n\n\t// The diagnosis goes to stderr in both modes: it keeps stdout a clean array\n\t// for `jq`, and it is the kind of thing a human needs to see even when a\n\t// script is reading the output.\n\tif diag != nil {\n\t\tdiag.report(os.Stderr)\n\t}\n\n\tif *asJSON {\n\t\t// Still a bare array, so `th next --json | jq -r '.[0].id'` keeps\n\t\t// working. A forced pick takes the place of the empty queue and says so\n\t\t// on the issue, which makes .[0].id give you something to start even on\n\t\t// a jammed board.\n\t\tout := views(b, ready)\n\t\tif len(out) == 0 \u0026\u0026 diag != nil \u0026\u0026 diag.Forced != nil {\n\t\t\tforced := view(b, diag.Forced)\n\t\t\tforced.Forced = true\n\t\t\tforced.ForcedReason = diag.Reason\n\t\t\tout = []issueView{forced}\n\t\t}\n\t\treturn printJSON(out)\n\t}\n\n\tif len(ready) == 0 {\n\t\t// A finished board and a jammed one look identical from an empty queue,\n\t\t// and telling a finished board it is deadlocked makes the tool feel\n\t\t// broken. Say which it is, and if it is jammed, break the tie.\n\t\topen := 0\n\t\tfor _, is := range b.Issues {\n\t\t\tif is.Status != StatusDone {\n\t\t\t\topen++\n\t\t\t}\n\t\t}\n\t\tswitch {\n\t\tcase len(b.Issues) == 0:\n\t\t\tfmt.Println(\"the board is empty\")\n\t\tcase open == 0:\n\t\t\tfmt.Println(\"everything on the board is done\")\n\t\tdefault:\n\t\t\tdiag.forcedPick(os.Stdout)\n\t\t}\n\t\treturn nil\n\t}\n\tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)\n\tfmt.Fprintln(w, \"ID\\tPRI\\tSTATUS\\tUNBLOCKS\\tTITLE\")\n\tfor _, is := range ready {\n\t\tfmt.Fprintf(w, \"%s\\t%s\\t%s\\t%d\\t%s\\n\", is.ID, effectivePriority(is.Priority), is.Status, len(b.Dependents(is.ID)), is.Title)\n\t}\n\tw.Flush()\n\treturn nil\n}",
+  "candidate_symbols": [
+    "Diagnose",
+    "Forced",
+    "ForcedReason",
+    "Reason",
+    "Say",
+    "Stderr",
+    "Still",
+    "Two",
+    "args",
+    "array",
+    "bare",
+    "board"
+  ],
+  "expected": {
+    "added_lines": 25,
+    "removed_lines": 3
+  }
+}

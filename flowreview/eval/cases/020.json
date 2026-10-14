@@ -1,0 +1,20 @@
+{
+  "id": "020",
+  "repo_path": "taskhound",
+  "commit": "4027bada65f53d331448411e326f35656523c55b",
+  "path": "taskhound/Makefile",
+  "hunk": " \t@grep -hE '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\\t/' | expand -t22\n \n build: ## build bin/th\n-\tgo build -trimpath -o $(BIN) .\n+\tgo build -trimpath -ldflags \"-X main.version=$(VERSION)\" -o $(BIN) .\n \n test: ## run the unit and end-to-end tests\n \tgo test ./...\n",
+  "candidate_symbols": [
+    "BIN",
+    "VERSION",
+    "build",
+    "ldflags",
+    "main",
+    "trimpath",
+    "version"
+  ],
+  "expected": {
+    "added_lines": 1,
+    "removed_lines": 1
+  }
+}

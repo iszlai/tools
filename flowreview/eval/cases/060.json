@@ -1,0 +1,14 @@
+{
+  "id": "060",
+  "repo_path": "flowreview",
+  "commit": "c550723e83ba9f143ed2fb87555b1daaedefc3d6",
+  "path": "flowreview/.taskhound.yaml",
+  "hunk": "       labels:\n         - M1\n       created_at: 2026-10-14T07:26:52Z\n-      updated_at: 2026-10-14T08:22:33Z\n+      updated_at: 2026-10-14T08:36:40Z\n     - id: FR-11\n       title: 'GitHub host: publish'\n       description: See PLAN.md §5 for scope, acceptance criteria and size.\n",
+  "candidate_symbols": [
+    "updated_at"
+  ],
+  "expected": {
+    "added_lines": 1,
+    "removed_lines": 1
+  }
+}

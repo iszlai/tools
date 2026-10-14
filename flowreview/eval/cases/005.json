@@ -1,0 +1,25 @@
+{
+  "id": "005",
+  "repo_path": "taskhound",
+  "commit": "cf448691f2ef55f9d48483f86d39307a34ac58de",
+  "path": "taskhound/web.go",
+  "hunk": " //go:embed ui.html\n var uiHTML []byte\n \n+// mdJS is mdlite, copied in from mdlite/md.js. embed cannot reach outside this\n+// directory, so the copy is checked in; `make -C mdlite check` catches drift.\n+//\n+//go:embed md.js\n+var mdJS []byte\n+\n // cmdUI serves the kanban board. It binds the loopback interface only: the\n // board is a local file and the API can write to it, so it has no business\n // being reachable from the network.\n",
+  "candidate_symbols": [
+    "byte",
+    "cannot",
+    "catches",
+    "check",
+    "checked",
+    "copied",
+    "copy",
+    "directory",
+    "drift",
+    "embed",
+    "from",
+    "make"
+  ],
+  "expected": {
+    "added_lines": 6,
+    "removed_lines": 0
+  }
+}

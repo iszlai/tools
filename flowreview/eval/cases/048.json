@@ -1,0 +1,25 @@
+{
+  "id": "048",
+  "repo_path": "flowreview",
+  "commit": "243711f491f1804ffe5bbce036733c034bdd7688",
+  "path": "flowreview/internal/model/model.go",
+  "hunk": " type SymbolKind string\n \n const (\n-\tSymFunc      SymbolKind = \"func\"\n-\tSymMethod    SymbolKind = \"method\"\n-\tSymType      SymbolKind = \"type\"\n-\tSymInterface SymbolKind = \"interface\"\n-\tSymClass     SymbolKind = \"class\"\n-\tSymScenario  SymbolKind = \"scenario\"\n-\tSymStep      SymbolKind = \"step\"\n-\tSymStepDef   SymbolKind = \"stepdef\"\n+\tSymFunc       SymbolKind = \"func\"\n+\tSymMethod     SymbolKind = \"method\"\n+\tSymType       SymbolKind = \"type\"\n+\tSymInterface  SymbolKind = \"interface\"\n+\tSymClass      SymbolKind = \"class\"\n+\tSymFeature    SymbolKind = \"feature\"    // a Gherkin Feature\n+\tSymBackground SymbolKind = \"background\" // a Gherkin Background\n+\tSymRule       SymbolKind = \"rule\"       // a Gherkin Rule\n+\tSymScenario   SymbolKind = \"scenario\"\n+\tSymStep       SymbolKind = \"step\"\n+\tSymStepDef    SymbolKind = \"stepdef\"\n )\n \n // CodeSymbol is a named piece of code. ID is unique within a repo: for Go\n",
+  "candidate_symbols": [
+    "Background",
+    "Feature",
+    "Gherkin",
+    "Rule",
+    "SymBackground",
+    "SymClass",
+    "SymFeature",
+    "SymFunc",
+    "SymInterface",
+    "SymMethod",
+    "SymRule",
+    "SymScenario"
+  ],
+  "expected": {
+    "added_lines": 11,
+    "removed_lines": 8
+  }
+}

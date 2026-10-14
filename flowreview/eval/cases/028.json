@@ -1,0 +1,17 @@
+{
+  "id": "028",
+  "repo_path": "taskhound",
+  "commit": "364f2189b254226593a8caf05d2eefbaf7a1e626",
+  "path": "taskhound/diagnose.go",
+  "hunk": " // something to do about it. Called with ready work available it still reports\n // cycles, because a loop that is not blocking you today is still corrupt.\n func (b *Board) Diagnose(anyReady bool) *Deadlock {\n-\td := \u0026Deadlock{Cycles: b.Cycles(), Dangling: b.Dangling()}\n+\td := \u0026Deadlock{Cycles: b.Cycles(), Dangling: b.Dangling(), Duplicates: b.Duplicates()}\n \tif anyReady {\n \t\tif d.empty() {\n \t\t\treturn nil\n",
+  "candidate_symbols": [
+    "Cycles",
+    "Dangling",
+    "Deadlock",
+    "Duplicates"
+  ],
+  "expected": {
+    "added_lines": 1,
+    "removed_lines": 1
+  }
+}

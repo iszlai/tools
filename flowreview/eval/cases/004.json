@@ -1,0 +1,19 @@
+{
+  "id": "004",
+  "repo_path": "taskhound",
+  "commit": "41ad3acde106e098b97192d948cef72ce5d627cf",
+  "path": "taskhound/main.go",
+  "hunk": " \t\terr = cmdComment(args)\n \tcase \"archive\":\n \t\terr = cmdArchive(args)\n+\tcase \"sync\":\n+\t\terr = cmdSync(args)\n \tcase \"ui\":\n \t\terr = cmdUI(args)\n \tcase \"agent-guide\":\n",
+  "enclosing_function": "func main() {\n\tif len(os.Args) \u003c 2 {\n\t\tfmt.Fprint(os.Stderr, usageText)\n\t\tos.Exit(2)\n\t}\n\tcmd, args := os.Args[1], os.Args[2:]\n\n\tvar err error\n\tswitch cmd {\n\tcase \"init\":\n\t\terr = cmdInit(args)\n\tcase \"add\":\n\t\terr = cmdAdd(args)\n\tcase \"list\", \"ls\":\n\t\terr = cmdList(args)\n\tcase \"next\":\n\t\terr = cmdNext(args)\n\tcase \"show\":\n\t\terr = cmdShow(args)\n\tcase \"deps\":\n\t\terr = cmdEdges(args, \"deps\")\n\tcase \"dependents\":\n\t\terr = cmdEdges(args, \"dependents\")\n\tcase \"update\":\n\t\terr = cmdUpdate(args)\n\tcase \"comment\":\n\t\terr = cmdComment(args)\n\tcase \"archive\":\n\t\terr = cmdArchive(args)\n\tcase \"sync\":\n\t\terr = cmdSync(args)\n\tcase \"ui\":\n\t\terr = cmdUI(args)\n\tcase \"agent-guide\":\n\t\tfmt.Print(stripFrontMatter(skillDoc))\n\tcase \"version\", \"--version\":\n\t\tfmt.Println(\"taskhound \" + version)\n\tcase \"help\", \"-h\", \"--help\":\n\t\tfmt.Print(usageText)\n\tdefault:\n\t\terr = fmt.Errorf(\"unknown command %q (try `th help`)\", cmd)\n\t}\n\n\tif err != nil {\n\t\tfmt.Fprintln(os.Stderr, \"th: \"+err.Error())\n\t\tos.Exit(1)\n\t}\n}",
+  "candidate_symbols": [
+    "args",
+    "case",
+    "cmdSync",
+    "main",
+    "sync"
+  ],
+  "expected": {
+    "added_lines": 2,
+    "removed_lines": 0
+  }
+}

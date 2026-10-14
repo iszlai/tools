@@ -1,0 +1,16 @@
+{
+  "id": "064",
+  "repo_path": "flowreview",
+  "commit": "04fb37f14d49e291684975988fc2fb98392c858b",
+  "path": "flowreview/.taskhound.yaml",
+  "hunk": "     - id: FR-13\n       title: Go package loader with cache (spike first)\n       description: See PLAN.md §5 for scope, acceptance criteria and size.\n-      status: doing\n+      status: done\n       priority: high\n       blocked_by:\n         - FR-2\n",
+  "candidate_symbols": [
+    "doing",
+    "done",
+    "status"
+  ],
+  "expected": {
+    "added_lines": 1,
+    "removed_lines": 1
+  }
+}

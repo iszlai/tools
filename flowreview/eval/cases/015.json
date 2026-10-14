@@ -1,0 +1,25 @@
+{
+  "id": "015",
+  "repo_path": "taskhound",
+  "commit": "0904da858474fab17dbd147c07b80dec4086b27c",
+  "path": "taskhound/main.go",
+  "hunk": " \tBlocks       []string `json:\"blocks\"`\n \tOpenBlockers []string `json:\"open_blockers\"`\n \tReady        bool     `json:\"ready\"`\n+\t// Set only when this issue is being offered on a board where nothing is\n+\t// genuinely startable, so a caller can tell a pick from a free choice.\n+\tForced       bool   `json:\"forced,omitempty\"`\n+\tForcedReason string `json:\"forced_reason,omitempty\"`\n }\n \n func view(b *Board, is *Issue) issueView {\n",
+  "candidate_symbols": [
+    "Forced",
+    "ForcedReason",
+    "Set",
+    "being",
+    "board",
+    "caller",
+    "can",
+    "choice",
+    "forced",
+    "forced_reason",
+    "free",
+    "from"
+  ],
+  "expected": {
+    "added_lines": 4,
+    "removed_lines": 0
+  }
+}

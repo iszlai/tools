@@ -1,0 +1,17 @@
+{
+  "id": "057",
+  "repo_path": "flowreview",
+  "commit": "aa61e3d5431b4604f13f9b6fedc825dabe0ee905",
+  "path": "flowreview/.taskhound.yaml",
+  "hunk": "     - id: FR-20\n       title: Co-change companions and hotspots\n       description: See PLAN.md §5 for scope, acceptance criteria and size.\n-      status: doing\n+      status: done\n       blocked_by:\n         - FR-2\n       labels:\n         - M2\n       created_at: 2026-10-14T07:26:52Z\n-      updated_at: 2026-10-14T08:14:58Z\n+      updated_at: 2026-10-14T08:30:49Z\n     - id: FR-21\n       title: Test reach\n       description: See PLAN.md §5 for scope, acceptance criteria and size.\n",
+  "candidate_symbols": [
+    "doing",
+    "done",
+    "status",
+    "updated_at"
+  ],
+  "expected": {
+    "added_lines": 2,
+    "removed_lines": 2
+  }
+}

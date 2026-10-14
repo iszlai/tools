@@ -1,0 +1,26 @@
+{
+  "id": "029",
+  "repo_path": "taskhound",
+  "commit": "ddc2817f60b4bf448f03b81edb6fa9a05d207185",
+  "path": "taskhound/tests/smoke.js",
+  "hunk": "     const leverage = (await readyIds()).map(id =\u003e field(id, 'unblocks'));\n     check('sort: unblocks order runs down the counts',\n       leverage.every((n, i) =\u003e i === 0 || leverage[i - 1] \u003e= n), leverage.join(','));\n+\n+    /* 11 — search narrows the board to the issues that match */\n+    const shown = () =\u003e page.$$eval('.card', els =\u003e els.map(e =\u003e e.dataset.id));\n+    const total = (await shown()).length;\n+    await page.keyboard.press('/');\n+    check('search: / focuses the search box',\n+      await page.evaluate(() =\u003e document.activeElement.id === 'search'));\n+    await page.keyboard.type('renamed drawer');\n+    check('search: every word must match, and only TH-3 does',\n+      (await shown()).join() === 'TH-3', (await shown()).join());\n+    await page.fill('#search', 'left from the board');\n+    check('search: comment text is searched',\n+      (await shown()).join() === 'TH-3', (await shown()).join());\n+    await page.fill('#search', 'th-1');\n+    check('search: an id finds its issue', (await shown()).includes('TH-1'), (await shown()).join());\n+    await page.fill('#search', 'zzz-no-such-thing');\n+    check('search: no match empties the board and says so',\n+      (await shown()).length === 0 \u0026\u0026 (await page.locator('.empty', { hasText: 'no matches' }).count()) === 4);\n+    await page.waitForTimeout(2500);\n+    check('search: the poll keeps the filter', (await shown()).length === 0);\n+    await page.focus('#search');\n+    await page.keyboard.press('Escape');\n+    check('search: esc clears it and brings every card back',\n+      (await shown()).length === total \u0026\u0026 (await page.inputValue('#search')) === '');\n+\n+    /* 12 — a ticket can be opened full screen and brought back */\n+    await page.click('.card[data-id=\"TH-3\"]');\n+    await page.waitForSelector('#drawer.open');\n+    const width = () =\u003e page.$eval('#drawer', el =\u003e el.getBoundingClientRect().width);\n+    const narrow = await width();\n+    await page.click('#full');\n+    check('full: the button widens the drawer to the window', await width() === 1400, String(await width()));\n+    await page.click('#close');\n+    await page.click('.card[data-id=\"TH-1\"]');\n+    await page.waitForSelector('#drawer.open');\n+    check('full: the next ticket opens full screen too', await width() === 1400, String(await width()));\n+    await page.keyboard.press('f');\n+    check('full: f brings it back to the side drawer', await width() === narrow, String(await width()));\n+    await page.click('#close');\n   } finally {\n     await browser.close();\n     proc.kill();\n",
+  "enclosing_function": "    const leverage = (await readyIds()).map(id =\u003e field(id, 'unblocks'));",
+  "candidate_symbols": [
+    "Escape",
+    "activeElement",
+    "await",
+    "back",
+    "board",
+    "box",
+    "brings",
+    "brought",
+    "button",
+    "can",
+    "card",
+    "check"
+  ],
+  "expected": {
+    "added_lines": 39,
+    "removed_lines": 0
+  }
+}

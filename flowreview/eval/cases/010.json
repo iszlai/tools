@@ -1,0 +1,25 @@
+{
+  "id": "010",
+  "repo_path": "taskhound",
+  "commit": "8f616a0f4c7ae5d49c929a4c947f1c94ed747cf7",
+  "path": "taskhound/Makefile",
+  "hunk": " clean: ## remove build output\n \trm -f bin/th dist/th_*\n \n-.PHONY: help build test check fmt vet install uninstall ui release vendor clean\n+.PHONY: help build test check fmt vet install update uninstall ui release vendor clean\n",
+  "candidate_symbols": [
+    "PHONY",
+    "build",
+    "check",
+    "clean",
+    "fmt",
+    "help",
+    "install",
+    "release",
+    "test",
+    "uninstall",
+    "update",
+    "vendor"
+  ],
+  "expected": {
+    "added_lines": 1,
+    "removed_lines": 1
+  }
+}

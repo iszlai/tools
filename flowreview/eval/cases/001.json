@@ -1,0 +1,14 @@
+{
+  "id": "001",
+  "repo_path": "taskhound",
+  "commit": "2015cfe716367ddf91141c2452e8540f4158a984",
+  "path": "taskhound/e2e_test.go",
+  "hunk": " \t\"strings\"\n \t\"sync\"\n \t\"testing\"\n+\t\"time\"\n )\n \n // thBin is the compiled CLI. The end-to-end tests drive the real binary as a\n",
+  "candidate_symbols": [
+    "time"
+  ],
+  "expected": {
+    "added_lines": 1,
+    "removed_lines": 0
+  }
+}

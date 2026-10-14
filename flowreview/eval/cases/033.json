@@ -1,0 +1,17 @@
+{
+  "id": "033",
+  "repo_path": "flowreview",
+  "commit": "00f7b4f63669d7e930fac18af549a50f746291a3",
+  "path": "flowreview/.taskhound.yaml",
+  "hunk": "     - id: FR-1\n       title: Skeleton and frozen types\n       description: See PLAN.md §5 for scope, acceptance criteria and size.\n-      status: todo\n+      status: done\n       priority: must\n       labels:\n         - M1\n       created_at: 2026-10-14T07:26:52Z\n-      updated_at: 2026-10-14T07:26:52Z\n+      updated_at: 2026-10-14T07:55:08Z\n     - id: FR-2\n       title: Git adapter\n       description: See PLAN.md §5 for scope, acceptance criteria and size.\n",
+  "candidate_symbols": [
+    "done",
+    "status",
+    "todo",
+    "updated_at"
+  ],
+  "expected": {
+    "added_lines": 2,
+    "removed_lines": 2
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "011",
+  "repo_path": "taskhound",
+  "commit": "6697b7206340dead3c160eb1f3f823439f4c6359",
+  "path": "taskhound/main.go",
+  "hunk": " // consumers never have to recompute them.\n type issueView struct {\n \t*Issue\n+\t// Shadows Issue.Priority so JSON consumers always see a concrete value,\n+\t// even though the file leaves the default unwritten.\n+\tPriority     string   `json:\"priority\"`\n \tBlocks       []string `json:\"blocks\"`\n \tOpenBlockers []string `json:\"open_blockers\"`\n \tReady        bool     `json:\"ready\"`\n",
+  "candidate_symbols": [
+    "Issue",
+    "JSON",
+    "Priority",
+    "Shadows",
+    "always",
+    "concrete",
+    "consumers",
+    "default",
+    "even",
+    "file",
+    "json",
+    "leaves"
+  ],
+  "expected": {
+    "added_lines": 3,
+    "removed_lines": 0
+  }
+}

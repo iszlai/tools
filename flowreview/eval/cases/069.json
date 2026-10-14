@@ -1,0 +1,14 @@
+{
+  "id": "069",
+  "repo_path": "flowreview",
+  "commit": "98729b489e36a86cbea3c0b7d88c263b72ea4ce6",
+  "path": "flowreview/.taskhound.yaml",
+  "hunk": "       labels:\n         - M1\n       created_at: 2026-10-14T07:26:52Z\n-      updated_at: 2026-10-14T07:57:04Z\n+      updated_at: 2026-10-14T08:52:26Z\n     - id: FR-6\n       title: Side-by-side diff renderer\n       description: 'See PLAN.md §5. Strict budget tested in smoke: \u003c1 s first paint on 10k lines, \u003c100 ms file switch, no long tasks while scrolling.'\n",
+  "candidate_symbols": [
+    "updated_at"
+  ],
+  "expected": {
+    "added_lines": 1,
+    "removed_lines": 1
+  }
+}

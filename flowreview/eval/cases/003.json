@@ -1,0 +1,20 @@
+{
+  "id": "003",
+  "repo_path": "taskhound",
+  "commit": "41ad3acde106e098b97192d948cef72ce5d627cf",
+  "path": "taskhound/main.go",
+  "hunk": "   update \u003cid\u003e              change title, description, status, blockers, labels\n   comment \u003cid\u003e \u003cbody\u003e      append a comment\n   archive                  move long-finished issues into the done log\n+  sync                     push the board to GitHub Issues via the gh CLI\n   ui                       serve the kanban board on localhost\n   agent-guide              print the usage guide written for LLM agents\n   version                  print the version\n",
+  "candidate_symbols": [
+    "CLI",
+    "GitHub",
+    "Issues",
+    "board",
+    "push",
+    "sync",
+    "via"
+  ],
+  "expected": {
+    "added_lines": 1,
+    "removed_lines": 0
+  }
+}
