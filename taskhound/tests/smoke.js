@@ -100,7 +100,7 @@ const statusOf = id => JSON.parse(th('show', id, '--json')).status;
       await page.locator('#d-title').isVisible());
     await page.fill('#d-title', 'Renamed in the drawer');
     await page.click('#edit-desc');
-    await page.fill('#d-desc', '## Heading\n\n- [x] ticked\n- [ ] unticked');
+    await page.fill('#d-desc', '## Heading\n\n- [x] ticked\n- [ ] unticked\n\nSee [the spec](https://example.com/spec).');
     await page.fill('#d-blocked', 'TH-2');
     await page.click('#save');
     await page.waitForSelector('#drawer', { state: 'hidden' });
@@ -118,6 +118,14 @@ const statusOf = id => JSON.parse(th('show', id, '--json')).status;
       await page.locator('#d-desc-view li.task.done input:checked').count() === 1);
     check('markdown: unticked box rendered',
       await page.locator('#d-desc-view li.task:not(.done) input').count() === 1);
+    const specLink = page.locator('#d-desc-view a[href="https://example.com/spec"]');
+    check('links: description link opens in a new tab',
+      await specLink.getAttribute('target') === '_blank', await specLink.count());
+    // Block the real navigation; the popup is enough to prove the tab opened.
+    await page.context().route('https://example.com/**', r => r.fulfill({ body: 'ok' }));
+    const [popup] = await Promise.all([page.waitForEvent('popup'), specLink.click()]);
+    await popup.close();
+    check('links: clicking a link does not start editing', await page.locator('#d-desc').isHidden());
     check('markdown: source hidden until asked for', await page.locator('#d-desc').isHidden());
     await page.click('#edit-desc');
     check('markdown: pencil reveals the plain text', await page.locator('#d-desc').isVisible());
@@ -128,12 +136,18 @@ const statusOf = id => JSON.parse(th('show', id, '--json')).status;
     await page.click('#add-comment');
     await page.waitForFunction(() =>
       document.querySelectorAll('#comments .comment').length > 0);
+    await page.fill('#d-comment', 'logs at https://example.com/run/42.');
+    await page.click('#add-comment');
+    await page.waitForFunction(() => document.querySelectorAll('#comments .comment').length > 1);
+    const commentLink = page.locator('#comments a[href="https://example.com/run/42"]');
+    check('links: bare url in a comment is a new-tab link',
+      await commentLink.getAttribute('target') === '_blank', await page.locator('#comments').innerHTML());
     check('comment: written to the board',
       JSON.parse(th('show', 'TH-3', '--json')).comments.some(c => c.body === 'left from the board'));
     await page.click('#close');
     check('drawer: the close button closes it', await page.locator('#drawer.open').count() === 0);
     check('comment: the card shows a comment count',
-      (await page.locator('.card[data-id="TH-3"]').textContent()).includes('1'));
+      (await page.locator('.card[data-id="TH-3"]').textContent()).includes('2'));
 
     /* 6 — the poll notices an issue filed by the CLI while the page is open */
     const late = th('add', 'Filed from the CLI mid-session', '--priority', 'must');

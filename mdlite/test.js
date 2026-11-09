@@ -1,6 +1,6 @@
 // node test.js — no framework, no dependencies.
 const assert = require('assert');
-const { md } = require('./md.js');
+const { md, linkify } = require('./md.js');
 
 let ran = 0;
 const test = (name, fn) => {
@@ -101,6 +101,47 @@ test('a realistic ticket description', () => {
   assert.ok(out.includes('<code>th sync</code>'), 'inline code');
   assert.ok(out.includes('checked>dry run'), 'ticked box');
   assert.ok(out.includes('disabled>idempotent'), 'unticked box');
+});
+
+const A = (href, text) =>
+  `<a href="${href}" target="_blank" rel="noopener noreferrer">${text ?? href}</a>`;
+
+test('bare urls become links that open in a new tab', () => {
+  eq('see https://example.com/a?b=1&c=2 now',
+     `<p>see ${A('https://example.com/a?b=1&amp;c=2')} now</p>`);
+  eq('http://x.io', `<p>${A('http://x.io')}</p>`);
+});
+
+test('trailing punctuation is not part of the url', () => {
+  eq('go to https://x.io/a.', `<p>go to ${A('https://x.io/a')}.</p>`);
+  eq('(https://x.io/a)', `<p>(${A('https://x.io/a')})</p>`);
+  eq('https://en.wikipedia.org/wiki/Foo_(bar)',
+     `<p>${A('https://en.wikipedia.org/wiki/Foo_(bar)')}</p>`);
+});
+
+test('markdown links', () => {
+  eq('[the docs](https://x.io/docs)', `<p>${A('https://x.io/docs', 'the docs')}</p>`);
+  eq('- [x] read [spec](https://x.io)',
+     `<ul><li class="task done"><input type="checkbox" disabled checked>read ${A('https://x.io', 'spec')}</li></ul>`);
+});
+
+test('links cannot inject markup or scripts', () => {
+  eq('[x](javascript:alert(1))', '<p>[x](javascript:alert(1))</p>');
+  eq('https://x.io/"onmouseover="alert(1)',
+     `<p>${A('https://x.io/')}&quot;onmouseover=&quot;alert(1)</p>`);
+  eq('https://x.io/<script>', `<p>${A('https://x.io/')}&lt;script&gt;</p>`);
+});
+
+test('no links inside code, no emphasis inside urls', () => {
+  eq('`https://x.io`', '<p><code>https://x.io</code></p>');
+  eq('```\nhttps://x.io\n```', '<pre>https://x.io</pre>');
+  eq('https://x.io/*a*/b', `<p>${A('https://x.io/*a*/b')}</p>`);
+});
+
+test('linkify escapes and links, nothing else', () => {
+  assert.strictEqual(linkify('**not bold** <b> https://x.io'),
+    `**not bold** &lt;b&gt; ${A('https://x.io')}`);
+  assert.strictEqual(linkify(null), '');
 });
 
 if (!process.exitCode) console.log(`ok  ${ran} tests`);

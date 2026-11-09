@@ -7,10 +7,11 @@
 // because neither consumer can reach outside its own directory: Go's embed
 // refuses `..` and will not follow a symlink, and nginx only serves diagme/app.
 //
-// Exposes a single global, `md(src) -> html`, and also exports for node so the
-// tests can run without a browser.
+// Exposes two globals, `md(src) -> html` and `linkify(text) -> html` (escape
+// plus links only, for plain text such as comments), and also exports for node
+// so the tests can run without a browser.
 //
-// Deliberately not supported: links, images, tables, blockquotes, nested lists,
+// Deliberately not supported: images, tables, blockquotes, nested lists,
 // setext headings. Every one of those is easy to add and none of them has been
 // needed; add them when something actually wants them.
 
@@ -23,14 +24,57 @@
     });
   };
 
+  // Links run on already-escaped text, so a URL can never close the attribute
+  // (`"` is `&quot;` by now) and only http(s) is linked -- no `javascript:`.
+  // They open in a new tab: leaving the page would drop whatever is open.
+  // A URL stops at whitespace or an escaped < > ", and sheds trailing
+  // punctuation, keeping a `)` only when it closes one inside the URL.
+  var URL_RE = /https?:\/\/(?:(?!&lt;|&gt;|&quot;)[^\s])+/g;
+  var anchor = function (href, text) {
+    return '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
+  };
+  var trimUrl = function (u) {
+    var m;
+    while ((m = u.match(/[.,;:!?'\])]$/)) && !/&amp;$/.test(u)) {
+      if (m[0] === ')' && (u.match(/\(/g) || []).length >= (u.match(/\)/g) || []).length) break;
+      u = u.slice(0, -1);
+    }
+    return u;
+  };
+
+  // Finished spans (code, links) are parked behind a placeholder so later
+  // passes cannot reach into them: no emphasis inside a URL, no link in code.
+  var spans = function (escaped, withCode) {
+    var parked = [];
+    var park = function (html) { parked.push(html); return '\u0000' + (parked.length - 1) + '\u0000'; };
+    var t = escaped;
+    if (withCode) t = t.replace(/`([^`]+)`/g, function (_, c) { return park('<code>' + c + '</code>'); });
+    t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, function (_, text, href) {
+      return park(anchor(href, text));
+    });
+    t = t.replace(URL_RE, function (u) {
+      var url = trimUrl(u);
+      return park(anchor(url, url)) + u.slice(url.length);
+    });
+    return {
+      text: t,
+      restore: function (s) { return s.replace(/\u0000(\d+)\u0000/g, function (_, i) { return parked[i]; }); }
+    };
+  };
+
+  function linkify(text) {
+    var s = spans(esc(text), false);
+    return s.restore(s.text);
+  }
+
   // Everything is escaped before it is emitted, on every path, so source text
   // can never inject markup. That matters: descriptions arrive over HTTP.
   function md(src) {
     var inline = function (t) {
-      return esc(t)
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
+      var s = spans(esc(t), true);
+      return s.restore(s.text
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+        .replace(/\*([^*]+)\*/g, '<em>$1</em>'));
     };
 
     var out = '', list = null, inCode = false, codeBuf = [], para = [];
@@ -102,5 +146,6 @@
   }
 
   root.md = md;
-  if (typeof module !== 'undefined' && module.exports) module.exports = { md: md, esc: esc };
+  root.linkify = linkify;
+  if (typeof module !== 'undefined' && module.exports) module.exports = { md: md, esc: esc, linkify: linkify };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
